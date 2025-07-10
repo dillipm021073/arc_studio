@@ -143,8 +143,8 @@ function RoundedRectangleNode({ data, selected }: NodeProps<RoundedRectangleNode
             <Handle
               type="source"
               position={Position.Top}
-              id="top-source"
-              className="w-4 h-4 rounded-full border-2 border-gray-400 bg-gray-700 hover:bg-blue-500 hover:scale-125 transition-all cursor-crosshair opacity-0 group-hover:opacity-100"
+              id="top"
+              className="w-3 h-3 bg-blue-500 border-2 border-gray-700"
               style={{ 
                 top: '-8px', 
                 left: '50%', 
@@ -155,21 +155,21 @@ function RoundedRectangleNode({ data, selected }: NodeProps<RoundedRectangleNode
             <Handle
               type="target"
               position={Position.Top}
-              id="top-target"
-              className="w-4 h-4 rounded-full opacity-0"
+              id="top"
+              className="w-2 h-2 bg-transparent"
               style={{ 
-                top: '-8px', 
+                top: '-6px', 
                 left: '50%', 
                 transform: 'translateX(-50%)',
-                zIndex: 10
+                zIndex: 11
               }}
             />
             
             <Handle
               type="source"
               position={Position.Right}
-              id="right-source"
-              className="w-4 h-4 rounded-full border-2 border-gray-400 bg-gray-700 hover:bg-blue-500 hover:scale-125 transition-all cursor-crosshair opacity-0 group-hover:opacity-100"
+              id="right"
+              className="w-3 h-3 bg-blue-500 border-2 border-gray-700"
               style={{ 
                 right: '-8px', 
                 top: '50%', 
@@ -180,21 +180,21 @@ function RoundedRectangleNode({ data, selected }: NodeProps<RoundedRectangleNode
             <Handle
               type="target"
               position={Position.Right}
-              id="right-target"
-              className="w-4 h-4 rounded-full opacity-0"
+              id="right"
+              className="w-2 h-2 bg-transparent"
               style={{ 
-                right: '-8px', 
+                right: '-6px', 
                 top: '50%', 
                 transform: 'translateY(-50%)',
-                zIndex: 10
+                zIndex: 11
               }}
             />
             
             <Handle
               type="source"
               position={Position.Bottom}
-              id="bottom-source"
-              className="w-4 h-4 rounded-full border-2 border-gray-400 bg-gray-700 hover:bg-blue-500 hover:scale-125 transition-all cursor-crosshair opacity-0 group-hover:opacity-100"
+              id="bottom"
+              className="w-3 h-3 bg-blue-500 border-2 border-gray-700"
               style={{ 
                 bottom: '-8px', 
                 left: '50%', 
@@ -205,21 +205,21 @@ function RoundedRectangleNode({ data, selected }: NodeProps<RoundedRectangleNode
             <Handle
               type="target"
               position={Position.Bottom}
-              id="bottom-target"
-              className="w-4 h-4 rounded-full opacity-0"
+              id="bottom"
+              className="w-2 h-2 bg-transparent"
               style={{ 
-                bottom: '-8px', 
+                bottom: '-6px', 
                 left: '50%', 
                 transform: 'translateX(-50%)',
-                zIndex: 10
+                zIndex: 11
               }}
             />
             
             <Handle
               type="source"
               position={Position.Left}
-              id="left-source"
-              className="w-4 h-4 rounded-full border-2 border-gray-400 bg-gray-700 hover:bg-blue-500 hover:scale-125 transition-all cursor-crosshair opacity-0 group-hover:opacity-100"
+              id="left"
+              className="w-3 h-3 bg-blue-500 border-2 border-gray-700"
               style={{ 
                 left: '-8px', 
                 top: '50%', 
@@ -230,13 +230,13 @@ function RoundedRectangleNode({ data, selected }: NodeProps<RoundedRectangleNode
             <Handle
               type="target"
               position={Position.Left}
-              id="left-target"
-              className="w-4 h-4 rounded-full opacity-0"
+              id="left"
+              className="w-2 h-2 bg-transparent"
               style={{ 
-                left: '-8px', 
+                left: '-6px', 
                 top: '50%', 
                 transform: 'translateY(-50%)',
-                zIndex: 10
+                zIndex: 11
               }}
             />
           </>

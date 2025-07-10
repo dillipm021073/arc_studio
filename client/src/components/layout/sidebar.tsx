@@ -27,15 +27,17 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { InitiativeSwitcher } from "@/components/initiatives/initiative-switcher";
+import { InitiativeIndicator } from "@/components/initiatives/initiative-indicator";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: Home, section: "Overview" },
+  { name: "Initiatives", href: "/initiatives", icon: GitBranch, section: "Version Control" },
   { name: "Applications (AML)", href: "/applications", icon: Box, section: "Management" },
   { name: "Interfaces (IML)", href: "/interfaces", icon: Plug, section: "Management" },
   { name: "Business Processes", href: "/business-processes", icon: Workflow, section: "Management" },
   { name: "Internal Activities", href: "/internal-activities", icon: CheckCircle, section: "Management" },
   { name: "Technical Processes", href: "/technical-processes", icon: Cpu, section: "Management" },
-  { name: "Change Requests", href: "/change-requests", icon: GitBranch, section: "Management" },
   { name: "Communications", href: "/communications", icon: MessageSquare, section: "Management" },
   { name: "Impact Analysis", href: "/impact-analysis", icon: Network, section: "Analysis" },
   { name: "Enhanced Analysis", href: "/impact-analysis-enhanced", icon: Network, section: "Analysis" },
@@ -50,7 +52,7 @@ const navigation = [
   { name: "Activity Monitor", href: "/activity-monitor", icon: Activity, section: "System" },
 ];
 
-const sections = ["Overview", "Management", "Analysis", "System"];
+const sections = ["Overview", "Version Control", "Management", "Analysis", "System"];
 
 interface SidebarProps {
   isMinimized: boolean;
@@ -102,6 +104,15 @@ export default function Sidebar({ isMinimized, setIsMinimized }: SidebarProps) {
         >
           {isMinimized ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
+      </div>
+      
+      {/* Initiative Switcher */}
+      <div className={`${isMinimized ? 'px-2' : 'px-4'} pb-2`}>
+        {isMinimized ? (
+          <InitiativeIndicator showDetails={false} className="w-full" />
+        ) : (
+          <InitiativeSwitcher />
+        )}
       </div>
       
       <nav className={`flex-1 ${isMinimized ? 'p-2' : 'p-4'} space-y-2`}>

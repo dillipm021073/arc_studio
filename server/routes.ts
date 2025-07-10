@@ -36,6 +36,8 @@ import {
 } from "./export-utils";
 import { importBusinessProcessesFromExcel } from "./import-export-bp";
 import multer from "multer";
+import { initiativesRouter } from "./routes/initiatives";
+import { auditRouter } from "./routes/audit";
 
 // Configure multer for file uploads
 const upload = multer({ 
@@ -2031,6 +2033,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register Simple Capabilities test routes
   const simpleCapabilitiesRouter = await import("./routes/capabilities-simple");
   app.use("/api/capabilities-test", simpleCapabilitiesRouter.default);
+
+  // Register Initiatives routes (Version Control)
+  const { initiativesRouter } = await import("./routes/initiatives");
+  app.use("/api/initiatives", initiativesRouter);
+
+  // Register Audit routes
+  const { auditRouter } = await import("./routes/audit");
+  app.use("/api/audit", auditRouter);
 
   const httpServer = createServer(app);
   return httpServer;

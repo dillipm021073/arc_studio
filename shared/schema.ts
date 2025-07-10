@@ -1031,4 +1031,7 @@ export type PermissionAuditLog = typeof permissionAuditLog.$inferSelect;
 export type InsertPermissionAuditLog = z.infer<typeof insertPermissionAuditLogSchema>;
 
 export type UserActivityLog = typeof userActivityLog.$inferSelect;
+
+// Re-export version control schema
+export * from './schema-version-control';
 export type InsertUserActivityLog = z.infer<typeof insertUserActivityLogSchema>;

@@ -92,7 +92,8 @@ const defaultEdgeOptions = {
   animated: true,
   style: { 
     strokeWidth: 2,
-    stroke: '#64748b' // Default gray color
+    stroke: '#64748b', // Default gray color
+    zIndex: 999
   },
   markerEnd: {
     type: MarkerType.ArrowClosed,
@@ -836,7 +837,7 @@ function DragDropCanvasInner({
           type: component.type,
           position,
           style: {
-            zIndex: component.type === 'container' ? -10 : 0
+            zIndex: component.type === 'container' ? -1 : 0
           },
           data: {
             ...component,
@@ -844,7 +845,7 @@ function DragDropCanvasInner({
             label: component.name,
             isConfigured: false,
             connectionPoints: component.connectionPoints,
-            zIndex: component.type === 'container' ? -10 : 0,
+            zIndex: component.type === 'container' ? -1 : 0,
             onEdit: () => {
               setEditingNode(newNode);
               setNodeEditDialogOpen(true);
@@ -997,6 +998,7 @@ function DragDropCanvasInner({
           style: {
             stroke: isValidConnection.color || '#64748b',
             strokeWidth: 2,
+            zIndex: 999,
           },
           animated: true,
           markerEnd: {
@@ -1827,6 +1829,9 @@ function DragDropCanvasInner({
           connectionMode="loose"
           connectionRadius={50}
           edgeUpdaterRadius={50}
+          elevateEdgesOnSelect={true}
+          edgesFocusable={true}
+          edgesUpdatable={true}
         >
           <Background 
             variant={BackgroundVariant.Dots} 

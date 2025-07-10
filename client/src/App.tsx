@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, withAuth } from "@/contexts/auth-context";
+import { InitiativeProvider } from "@/components/initiatives/initiative-context";
 import Dashboard from "@/pages/dashboard";
 import Applications from "@/pages/applications";
 import Interfaces from "@/pages/interfaces";
@@ -39,6 +40,7 @@ import TestAlignmentFeatures from "@/pages/test-alignment-features";
 import TestVisioComplete from "@/pages/test-visio-complete";
 import TestImportDebug from "@/pages/test-import-debug";
 import TMFDomainView from "@/pages/tmf-domain-view";
+import Initiatives from "@/pages/initiatives";
 
 // Protected components
 const ProtectedDashboard = withAuth(Dashboard);
@@ -66,6 +68,7 @@ const ProtectedApiPermissions = withAuth(ApiPermissions);
 const ProtectedUserActivityMonitor = withAuth(UserActivityMonitor);
 const ProtectedSettings = withAuth(SettingsPage);
 const ProtectedTMFDomainView = withAuth(TMFDomainView);
+const ProtectedInitiatives = withAuth(Initiatives);
 
 function Router() {
   const [isSidebarMinimized, setIsSidebarMinimized] = useState(() => {
@@ -98,11 +101,13 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route>
         {() => (
-          <div className="flex h-screen bg-gray-900">
-            <Sidebar isMinimized={isSidebarMinimized} setIsMinimized={setIsSidebarMinimized} />
-            <main className="flex-1 flex flex-col overflow-hidden">
-              <Switch>
+          <InitiativeProvider>
+            <div className="flex h-screen bg-gray-900">
+              <Sidebar isMinimized={isSidebarMinimized} setIsMinimized={setIsSidebarMinimized} />
+              <main className="flex-1 flex flex-col overflow-hidden">
+                <Switch>
                 <Route path="/" component={ProtectedDashboard} />
+                <Route path="/initiatives" component={ProtectedInitiatives} />
                 <Route path="/applications" component={ProtectedApplications} />
                 <Route path="/interfaces" component={ProtectedInterfaces} />
                 <Route path="/change-requests" component={ProtectedChangeRequests} />
@@ -137,6 +142,7 @@ function Router() {
               </Switch>
             </main>
           </div>
+          </InitiativeProvider>
         )}
       </Route>
     </Switch>
