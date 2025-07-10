@@ -1,0 +1,29 @@
+/* Force edge visibility for debugging */
+.react-flow__edges {
+  z-index: 10 !important;
+}
+
+.react-flow__edge-path {
+  stroke-opacity: 1 !important;
+  opacity: 1 !important;
+}
+
+.react-flow__edge {
+  z-index: 10 !important;
+}
+
+/* Ensure SVG elements in nodes don't block edges */
+.react-flow__node svg {
+  pointer-events: none !important;
+}
+
+.react-flow__node svg rect,
+.react-flow__node svg text {
+  pointer-events: visiblePainted !important;
+}
+
+/* Debug: Make all edges bright red */
+.debug-edges .react-flow__edge-path {
+  stroke: #ff0000 !important;
+  stroke-width: 4px !important;
+}

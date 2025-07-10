@@ -1,0 +1,4 @@
+cd /home/abpwrk1/dk/arc_studio/server
+put server/storage.ts
+ls -la storage.ts
+bye

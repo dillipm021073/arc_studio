@@ -1,0 +1,34 @@
+MANUAL SFTP TRANSFER COMMAND
+============================
+
+Run this command from the ApplicationInterfaceTracker directory:
+
+sftp abpwrk1@inlnqw1502
+
+When prompted for password, enter: Unix11!
+
+Then run these commands in SFTP:
+
+cd /home/abpwrk1/dk/arc_studio/server
+put server/storage.ts
+ls -la storage.ts
+bye
+
+---OR--- 
+
+Use this one-liner with expect (if available):
+
+expect -c "
+spawn sftp abpwrk1@inlnqw1502
+expect \"password:\"
+send \"Unix11!\r\"
+expect \"sftp>\"
+send \"cd /home/abpwrk1/dk/arc_studio/server\r\"
+expect \"sftp>\"
+send \"put server/storage.ts\r\"
+expect \"sftp>\"
+send \"ls -la storage.ts\r\"
+expect \"sftp>\"
+send \"bye\r\"
+expect eof
+"

@@ -1,0 +1,32 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+.env
+.env.local
+.env.production
+
+# Test files
+*cookies.txt
+*_cookies.txt
+test_headers.txt
+test-*.js
+test-*.ts
+check-database.js
+
+# Logs
+*.log
+server.log
+migration.log
+
+# Test outputs
+*-extraction-*.json
+*-capabilities-*.json
+document-access-test.json
+pdf-capabilities-extraction.json
+
+# Uploads directory (except README)
+uploads/*
+!uploads/.gitkeep

@@ -1,0 +1,255 @@
+{
+  "id": "template-enterprise-integration",
+  "name": "Enterprise Integration",
+  "description": "Enterprise system integration with legacy systems, message queues, and modern APIs",
+  "category": "Template",
+  "nodes": [
+    {
+      "id": "web-portal",
+      "type": "application",
+      "position": { "x": 50, "y": 150 },
+      "data": {
+        "id": "web-portal",
+        "type": "application",
+        "category": "Frontend",
+        "name": "Enterprise Portal",
+        "description": "Web-based enterprise portal",
+        "color": "bg-blue-600",
+        "properties": {
+          "framework": "Angular",
+          "authentication": "SAML/SSO",
+          "authorization": "RBAC",
+          "responsive": true
+        },
+        "connectionPoints": {
+          "input": [{"id": "user-requests", "type": "http", "position": "bottom"}],
+          "output": [{"id": "portal-actions", "type": "event", "position": "top"}]
+        },
+        "label": "Enterprise Portal",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    },
+    {
+      "id": "esb",
+      "type": "application",
+      "position": { "x": 400, "y": 150 },
+      "data": {
+        "id": "esb",
+        "type": "application",
+        "category": "Integration",
+        "name": "Enterprise Service Bus",
+        "description": "Central integration hub for enterprise services",
+        "color": "bg-orange-600",
+        "properties": {
+          "platform": "WSO2/MuleSoft",
+          "protocols": "SOAP, REST, JMS",
+          "transformation": "XSLT, JSON",
+          "routing": "Content-based"
+        },
+        "connectionPoints": {
+          "input": [{"id": "service-requests", "type": "message", "position": "left"}],
+          "output": [{"id": "service-routing", "type": "message", "position": "right"}]
+        },
+        "label": "Enterprise Service Bus",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    },
+    {
+      "id": "legacy-mainframe",
+      "type": "application",
+      "position": { "x": 750, "y": 50 },
+      "data": {
+        "id": "legacy-mainframe",
+        "type": "application",
+        "category": "Legacy",
+        "name": "Mainframe System",
+        "description": "Core legacy business system",
+        "color": "bg-gray-700",
+        "properties": {
+          "platform": "IBM z/OS",
+          "language": "COBOL",
+          "database": "IMS/DB2",
+          "interface": "CICS/MQ"
+        },
+        "connectionPoints": {
+          "input": [{"id": "transaction-input", "type": "message", "position": "left"}],
+          "output": [{"id": "transaction-output", "type": "message", "position": "bottom"}]
+        },
+        "label": "Mainframe System",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    },
+    {
+      "id": "erp-system",
+      "type": "application",
+      "position": { "x": 750, "y": 300 },
+      "data": {
+        "id": "erp-system",
+        "type": "application",
+        "category": "Enterprise",
+        "name": "ERP System",
+        "description": "Enterprise Resource Planning system",
+        "color": "bg-indigo-600",
+        "properties": {
+          "platform": "SAP/Oracle",
+          "modules": "FI, CO, SD, MM",
+          "database": "Oracle/HANA",
+          "interface": "RFC/OData"
+        },
+        "connectionPoints": {
+          "input": [{"id": "business-requests", "type": "message", "position": "left"}],
+          "output": [{"id": "business-data", "type": "dataset", "position": "bottom"}]
+        },
+        "label": "ERP System",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    },
+    {
+      "id": "message-queue",
+      "type": "interface",
+      "position": { "x": 400, "y": 400 },
+      "data": {
+        "id": "message-queue",
+        "type": "interface",
+        "category": "Messaging",
+        "name": "Message Queue",
+        "description": "Asynchronous message processing",
+        "color": "bg-yellow-600",
+        "properties": {
+          "platform": "IBM MQ/RabbitMQ",
+          "durability": "Persistent",
+          "delivery": "At-least-once",
+          "ordering": "FIFO"
+        },
+        "connectionPoints": {
+          "input": [{"id": "message-input", "type": "message", "position": "top"}],
+          "output": [{"id": "message-output", "type": "message", "position": "bottom"}]
+        },
+        "label": "Message Queue",
+        "isConfigured": false
+      },
+      "width": 256,
+      "height": 150
+    },
+    {
+      "id": "data-warehouse",
+      "type": "application",
+      "position": { "x": 750, "y": 550 },
+      "data": {
+        "id": "data-warehouse",
+        "type": "application",
+        "category": "Analytics",
+        "name": "Data Warehouse",
+        "description": "Enterprise data warehouse for analytics",
+        "color": "bg-purple-600",
+        "properties": {
+          "platform": "Snowflake/Redshift",
+          "etl": "Talend/Informatica",
+          "cubes": "OLAP",
+          "reporting": "Tableau/PowerBI"
+        },
+        "connectionPoints": {
+          "input": [{"id": "data-ingestion", "type": "dataset", "position": "top"}],
+          "output": [{"id": "analytics-data", "type": "dataset", "position": "right"}]
+        },
+        "label": "Data Warehouse",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "type": "smart",
+      "source": "web-portal",
+      "sourceHandle": "portal-actions",
+      "target": "esb",
+      "targetHandle": "service-requests",
+      "animated": true,
+      "style": { "stroke": "#3b82f6", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "Service Request", "dataFlow": "bidirectional" }
+    },
+    {
+      "id": "edge-2",
+      "type": "smart",
+      "source": "esb",
+      "sourceHandle": "service-routing",
+      "target": "legacy-mainframe",
+      "targetHandle": "transaction-input",
+      "animated": true,
+      "style": { "stroke": "#f97316", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "Legacy Integration", "dataFlow": "bidirectional" }
+    },
+    {
+      "id": "edge-3",
+      "type": "smart",
+      "source": "esb",
+      "sourceHandle": "service-routing",
+      "target": "erp-system",
+      "targetHandle": "business-requests",
+      "animated": true,
+      "style": { "stroke": "#f97316", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "Enterprise Integration", "dataFlow": "bidirectional" }
+    },
+    {
+      "id": "edge-4",
+      "type": "smart",
+      "source": "esb",
+      "sourceHandle": "service-routing",
+      "target": "message-queue",
+      "targetHandle": "message-input",
+      "animated": true,
+      "style": { "stroke": "#eab308", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "Message Processing", "dataFlow": "bidirectional" }
+    },
+    {
+      "id": "edge-5",
+      "type": "smart",
+      "source": "legacy-mainframe",
+      "sourceHandle": "transaction-output",
+      "target": "data-warehouse",
+      "targetHandle": "data-ingestion",
+      "animated": true,
+      "style": { "stroke": "#8b5cf6", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "Data Integration", "dataFlow": "unidirectional" }
+    },
+    {
+      "id": "edge-6",
+      "type": "smart",
+      "source": "erp-system",
+      "sourceHandle": "business-data",
+      "target": "data-warehouse",
+      "targetHandle": "data-ingestion",
+      "animated": true,
+      "style": { "stroke": "#8b5cf6", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "Data Integration", "dataFlow": "unidirectional" }
+    }
+  ],
+  "metadata": {
+    "version": "1.0.0",
+    "author": "System",
+    "tags": ["template", "enterprise", "integration", "legacy"],
+    "nodeCount": 6,
+    "edgeCount": 6,
+    "complexity": "Complex",
+    "source": "template"
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z"
+}

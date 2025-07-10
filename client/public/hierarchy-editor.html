@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node Hierarchy Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background-color: #1f2937;
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 20px);
+        }
+        .editor {
+            flex: 1;
+            background-color: #374151;
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .output {
+            flex: 1;
+            background-color: #374151;
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        h2 {
+            margin-top: 0;
+            color: white;
+            border-bottom: 1px solid #4b5563;
+            padding-bottom: 10px;
+        }
+        .node {
+            margin-left: 20px;
+            border-left: 1px solid #6b7280;
+            padding-left: 15px;
+            position: relative;
+        }
+        .node-content {
+            margin-bottom: 10px;
+            background-color: #1f2937;
+            border-radius: 4px;
+            padding: 10px;
+            border: 1px solid #4b5563;
+        }
+        /* Level-based background colors */
+        .node-content.level-a {
+            background-color: #0f3a2a; /* Deep green for Level A */
+            border-color: #10b981;
+        }
+        .node-content.level-b {
+            background-color: #0c2e4a; /* Sea blue for Level B */
+            border-color: #0ea5e9;
+        }
+        .node-content.level-c {
+            background-color: #3d2817; /* Deep brown for Level C */
+            border-color: #a16207;
+        }
+        .node-content.level-d {
+            background-color: #2a2a2a; /* Dark grey for Level D+ */
+            border-color: #6b7280;
+        }
+        .node-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .node-name {
+            font-weight: bold;
+            flex-grow: 1;
+            background-color: #000000;
+            border: 1px solid #4b5563;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .node-name:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        }
+        .level-badge {
+            background-color: #6b7280;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: 8px;
+        }
+        /* Level-specific badge colors */
+        .level-a .level-badge {
+            background-color: #10b981; /* Green to match Level A */
+        }
+        .level-b .level-badge {
+            background-color: #0ea5e9; /* Blue to match Level B */
+        }
+        .level-c .level-badge {
+            background-color: #a16207; /* Brown to match Level C */
+        }
+        .level-d .level-badge {
+            background-color: #6b7280; /* Grey to match Level D+ */
+        }
+        .node-controls {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        button {
+            background-color: #1e40af; /* Deep blue */
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #1e3a8a;
+        }
+        button.delete {
+            background-color: #991b1b; /* Deep red */
+        }
+        button.delete:hover {
+            background-color: #7f1d1d;
+        }
+        button.expand {
+            background-color: #14532d; /* Deep green */
+        }
+        button.expand:hover {
+            background-color: #166534;
+        }
+        button.collapse {
+            background-color: #78350f; /* Deep amber */
+        }
+        button.collapse:hover {
+            background-color: #92400e;
+        }
+        button.sibling {
+            background-color: #5b21b6; /* Deep purple */
+        }
+        button.sibling:hover {
+            background-color: #4c1d95;
+        }
+        .description-input {
+            width: 100%;
+            margin-top: 8px;
+            background-color: #000000;
+            border: 1px solid #4b5563;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .description-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        }
+        textarea {
+            width: 100%;
+            flex: 1;
+            min-height: 300px;
+            padding: 10px;
+            font-family: monospace;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            resize: none;
+            background-color: #1f2937;
+            color: white;
+        }
+        .top-controls {
+            margin-bottom: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+        .info-bar {
+            background-color: #1e40af;
+            border-left: 6px solid #3b82f6;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .node-children-container {
+            display: block;
+        }
+        .editor-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            min-height: 0;
+        }
+        .output-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .save-controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #1f2937;
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        }
+        .save-input {
+            background-color: #000000;
+            border: 1px solid #4b5563;
+            color: white;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 5px;
+            min-width: 200px;
+        }
+        /* Tree view styles */
+        .tree-view-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        .tree-controls {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .tree-content {
+            flex: 1;
+            overflow-y: auto;
+            background-color: #111827;
+            border: 1px solid #4b5563;
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .tree-node {
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            color: white;
+        }
+        .tree-node:hover {
+            background-color: #374151;
+        }
+        .tree-node-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+        }
+        .tree-toggle {
+            width: 16px;
+            height: 16px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .tree-children {
+            margin-left: 24px;
+        }
+        .tree-level-badge {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin-left: 8px;
+        }
+        .tree-level-a { background-color: #10b981; }
+        .tree-level-b { background-color: #0ea5e9; }
+        .tree-level-c { background-color: #a16207; }
+        .tree-level-d { background-color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="editor">
+            <h2>Hierarchy Editor</h2>
+            <div class="top-controls">
+                <button onclick="addRootNode()">Add Root Node</button>
+                <button onclick="expandAll()">Expand All</button>
+                <button onclick="collapseAll()">Collapse All</button>
+                <button onclick="reset()">Reset</button>
+            </div>
+            <div class="editor-content">
+                <div id="root-container"></div>
+            </div>
+        </div>
+        
+        <div class="output" id="output-panel">
+            <h2 id="output-title">JSON Output & Save</h2>
+            
+            <div class="save-controls" id="save-controls">
+                <input type="text" id="design-name" class="save-input" placeholder="Design name" />
+                <input type="text" id="design-description" class="save-input" placeholder="Description" />
+                <input type="text" id="design-tags" class="save-input" placeholder="Tags (comma-separated)" />
+                <br>
+                <button onclick="saveDesign()">Save Design</button>
+                <button onclick="generateJSON()">Generate JSON</button>
+                <button onclick="copyJSON()">Copy to Clipboard</button>
+                <button onclick="showImportDialog()" style="background-color: #059669;">Generate from JSON</button>
+            </div>
+            
+            <div class="output-content" id="output-content">
+                <textarea id="json-output"></textarea>
+            </div>
+            
+            <!-- Tree view container (hidden by default, shown in read-only mode) -->
+            <div class="tree-view-container" id="tree-view-container" style="display: none;">
+                <div class="tree-controls">
+                    <button onclick="expandAllTree()" class="tree-control-btn">Expand All</button>
+                    <button onclick="collapseAllTree()" class="tree-control-btn">Collapse All</button>
+                </div>
+                <div class="tree-content" id="tree-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import JSON Dialog -->
+    <div id="import-dialog" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: #374151; border-radius: 8px; padding: 20px; width: 600px; max-width: 90%; max-height: 80vh; overflow-y: auto;">
+            <h3 style="margin-top: 0; color: white;">Import from JSON</h3>
+            <p style="color: #9ca3af; margin-bottom: 15px;">Paste your hierarchy JSON below to generate the visual hierarchy:</p>
+            <textarea id="import-json-input" style="width: 100%; height: 300px; background-color: #1f2937; color: white; border: 1px solid #4b5563; border-radius: 4px; padding: 10px; font-family: monospace; font-size: 12px;" placeholder='[
+  {
+    "id": "node-0",
+    "name": "Process A",
+    "characteristics": {
+      "description": "Main process",
+      "level": "A"
+    },
+    "children": [
+      {
+        "id": "node-1",
+        "name": "Sub Process B",
+        "characteristics": {
+          "description": "Child process",
+          "level": "B"
+        },
+        "children": []
+      }
+    ]
+  }
+]'></textarea>
+            <div style="margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="closeImportDialog()" style="background-color: #6b7280;">Cancel</button>
+                <button onclick="importFromJSON()" style="background-color: #059669;">Import</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let nodeCounter = 0;
+        
+        function calculateLevel(element) {
+            let level = 0;
+            let current = element.closest('.node');
+            while (current && current.parentElement.id !== 'root-container') {
+                current = current.parentElement.closest('.node');
+                level++;
+            }
+            return level;
+        }
+        
+        function getLevelLabel(level) {
+            return level === 0 ? 'A' : level === 1 ? 'B' : level === 2 ? 'C' : 'D+';
+        }
+        
+        function createNode(parentId = null, nodeName = "", description = "") {
+            const nodeId = `node-${nodeCounter++}`;
+            const node = document.createElement('div');
+            node.className = 'node';
+            node.id = nodeId;
+            node.dataset.parentId = parentId;
+            
+            const nodeContent = document.createElement('div');
+            nodeContent.className = 'node-content';
+            
+            const nodeHeader = document.createElement('div');
+            nodeHeader.className = 'node-header';
+            
+            const nameContainer = document.createElement('div');
+            nameContainer.style.display = 'flex';
+            nameContainer.style.alignItems = 'center';
+            nameContainer.style.flex = '1';
+            
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.placeholder = 'Process name';
+            nameInput.value = nodeName || `Process ${nodeCounter}`;
+            nameInput.className = 'node-name';
+            
+            const levelBadge = document.createElement('span');
+            levelBadge.className = 'level-badge';
+            levelBadge.textContent = 'Level A';
+            
+            nameContainer.appendChild(nameInput);
+            nameContainer.appendChild(levelBadge);
+            
+            const nodeControls = document.createElement('div');
+            nodeControls.className = 'node-controls';
+            
+            const addChildBtn = document.createElement('button');
+            addChildBtn.textContent = 'Add Child';
+            addChildBtn.onclick = function() { 
+                addChildNode(nodeId);
+                updateAllLevelBadges();
+                return false;
+            };
+            
+            const addSiblingBtn = document.createElement('button');
+            addSiblingBtn.textContent = 'Add Sibling';
+            addSiblingBtn.className = 'sibling';
+            addSiblingBtn.onclick = function() { 
+                addSiblingNode(nodeId);
+                updateAllLevelBadges();
+                return false;
+            };
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.className = 'delete';
+            deleteBtn.onclick = function() { 
+                deleteNode(nodeId);
+                updateAllLevelBadges();
+                return false;
+            };
+            
+            const expandBtn = document.createElement('button');
+            expandBtn.textContent = 'Expand';
+            expandBtn.className = 'expand';
+            expandBtn.onclick = function() { 
+                toggleNodeChildren(nodeId, true); 
+                return false;
+            };
+            
+            const collapseBtn = document.createElement('button');
+            collapseBtn.textContent = 'Collapse';
+            collapseBtn.className = 'collapse';
+            collapseBtn.onclick = function() { 
+                toggleNodeChildren(nodeId, false); 
+                return false;
+            };
+            
+            nodeControls.appendChild(addChildBtn);
+            nodeControls.appendChild(addSiblingBtn);
+            nodeControls.appendChild(deleteBtn);
+            nodeControls.appendChild(expandBtn);
+            nodeControls.appendChild(collapseBtn);
+            
+            nodeHeader.appendChild(nameContainer);
+            nodeHeader.appendChild(nodeControls);
+            
+            // Description input
+            const descInput = document.createElement('input');
+            descInput.type = 'text';
+            descInput.placeholder = 'Enter process description (optional)';
+            descInput.value = description;
+            descInput.className = 'description-input';
+            
+            nodeContent.appendChild(nodeHeader);
+            nodeContent.appendChild(descInput);
+            node.appendChild(nodeContent);
+            
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'node-children-container';
+            childrenContainer.id = `${nodeId}-children`;
+            node.appendChild(childrenContainer);
+            
+            // Set initial level class after node is added to DOM
+            setTimeout(() => {
+                const level = calculateLevel(node);
+                const levelClass = level === 0 ? 'level-a' : 
+                                 level === 1 ? 'level-b' : 
+                                 level === 2 ? 'level-c' : 'level-d';
+                nodeContent.classList.add(levelClass);
+            }, 0);
+            
+            return node;
+        }
+        
+        function updateAllLevelBadges() {
+            document.querySelectorAll('.node').forEach(node => {
+                const level = calculateLevel(node);
+                const badge = node.querySelector('.level-badge');
+                const nodeContent = node.querySelector('.node-content');
+                
+                if (badge) {
+                    badge.textContent = `Level ${getLevelLabel(level)}`;
+                }
+                
+                if (nodeContent) {
+                    // Remove all level classes
+                    nodeContent.classList.remove('level-a', 'level-b', 'level-c', 'level-d');
+                    
+                    // Add the appropriate level class
+                    const levelClass = level === 0 ? 'level-a' : 
+                                     level === 1 ? 'level-b' : 
+                                     level === 2 ? 'level-c' : 'level-d';
+                    nodeContent.classList.add(levelClass);
+                }
+            });
+        }
+        
+        function addRootNode() {
+            const rootContainer = document.getElementById('root-container');
+            const node = createNode();
+            rootContainer.appendChild(node);
+            updateAllLevelBadges();
+        }
+        
+        function addChildNode(parentId) {
+            const parentChildren = document.getElementById(`${parentId}-children`);
+            if (parentChildren) {
+                const node = createNode(parentId);
+                parentChildren.appendChild(node);
+                parentChildren.style.display = 'block';
+            }
+        }
+        
+        function addSiblingNode(nodeId) {
+            const node = document.getElementById(nodeId);
+            if (node) {
+                const parentId = node.dataset.parentId;
+                const siblingNode = createNode(parentId);
+                node.after(siblingNode);
+            }
+        }
+        
+        function deleteNode(nodeId) {
+            const node = document.getElementById(nodeId);
+            if (node) {
+                node.remove();
+            }
+        }
+        
+        function toggleNodeChildren(nodeId, expand) {
+            const childrenContainer = document.getElementById(`${nodeId}-children`);
+            if (childrenContainer) {
+                childrenContainer.style.display = expand ? 'block' : 'none';
+            }
+        }
+        
+        function expandAll() {
+            document.querySelectorAll('.node-children-container').forEach(container => {
+                container.style.display = 'block';
+            });
+        }
+        
+        function collapseAll() {
+            document.querySelectorAll('.node-children-container').forEach(container => {
+                container.style.display = 'none';
+            });
+        }
+        
+        function reset() {
+            document.getElementById('root-container').innerHTML = '';
+            nodeCounter = 0;
+            addRootNode();
+        }
+        
+        function generateJSON() {
+            const rootContainer = document.getElementById('root-container');
+            const rootNodes = rootContainer.children;
+            const result = [];
+            
+            for (let i = 0; i < rootNodes.length; i++) {
+                result.push(processNode(rootNodes[i]));
+            }
+            
+            document.getElementById('json-output').value = JSON.stringify(result, null, 2);
+        }
+        
+        function processNode(node) {
+            const nodeContent = node.querySelector('.node-content');
+            const nodeName = nodeContent.querySelector('.node-name').value;
+            const description = nodeContent.querySelector('.description-input').value;
+            const level = calculateLevel(node);
+            
+            const result = {
+                id: node.id,
+                name: nodeName,
+                characteristics: {
+                    description: description,
+                    level: getLevelLabel(level)
+                },
+                children: []
+            };
+            
+            const childrenContainer = node.querySelector('.node-children-container');
+            if (childrenContainer) {
+                const children = childrenContainer.children;
+                for (let i = 0; i < children.length; i++) {
+                    result.children.push(processNode(children[i]));
+                }
+            }
+            
+            return result;
+        }
+        
+        function copyJSON() {
+            const jsonOutput = document.getElementById('json-output');
+            generateJSON();
+            jsonOutput.select();
+            document.execCommand('copy');
+            alert('JSON copied to clipboard!');
+        }
+        
+        function saveDesign() {
+            // Always regenerate JSON to ensure we have the latest data
+            generateJSON();
+            
+            // Get the generated JSON
+            const jsonOutput = document.getElementById('json-output').value;
+            
+            // Validate the JSON before saving
+            try {
+                JSON.parse(jsonOutput); // This will throw if invalid
+            } catch (error) {
+                alert('Error: Invalid JSON structure. Please check your hierarchy.');
+                console.error('JSON validation error:', error);
+                return;
+            }
+            
+            const data = {
+                name: document.getElementById('design-name').value || 'Untitled Design',
+                description: document.getElementById('design-description').value || '',
+                tags: document.getElementById('design-tags').value || '',
+                hierarchyData: jsonOutput
+            };
+            
+            console.log('Saving hierarchy data:', jsonOutput); // Debug log
+            
+            // Post message to parent window
+            window.parent.postMessage({
+                type: 'SAVE_HIERARCHY_DESIGN',
+                data: data
+            }, '*');
+        }
+        
+        // Handle read-only mode
+        function setReadOnlyMode(readOnly) {
+            const controls = document.querySelectorAll('button, input');
+            controls.forEach(control => {
+                // Don't disable tree control buttons
+                if (control.classList.contains('tree-control-btn')) {
+                    return;
+                }
+                
+                if (readOnly) {
+                    control.disabled = true;
+                } else {
+                    // Only re-enable if it wasn't originally disabled
+                    if (!control.dataset.originallyDisabled) {
+                        control.disabled = false;
+                    }
+                }
+            });
+            
+            if (readOnly) {
+                document.querySelector('.save-controls').style.display = 'none';
+                document.querySelector('.top-controls').style.display = 'none';
+                document.getElementById('json-output').readOnly = true;
+                
+                // Show tree view in place of JSON output for read-only mode
+                document.getElementById('output-title').textContent = 'Process Tree View';
+                document.getElementById('save-controls').style.display = 'none';
+                document.getElementById('output-content').style.display = 'none';
+                document.getElementById('tree-view-container').style.display = 'flex';
+                
+                // Generate tree view
+                generateTreeView();
+            } else {
+                // Show JSON output for edit mode
+                document.getElementById('output-title').textContent = 'JSON Output & Save';
+                document.getElementById('save-controls').style.display = 'block';
+                document.getElementById('output-content').style.display = 'flex';
+                document.getElementById('tree-view-container').style.display = 'none';
+            }
+        }
+        
+        function loadDesign(hierarchyData) {
+            try {
+                // Handle both string and already parsed data
+                let data;
+                if (typeof hierarchyData === 'string') {
+                    console.log('Loading hierarchy from string:', hierarchyData);
+                    data = JSON.parse(hierarchyData);
+                } else {
+                    console.log('Loading hierarchy from object:', hierarchyData);
+                    data = hierarchyData;
+                }
+                
+                // Ensure data is an array
+                if (!Array.isArray(data)) {
+                    console.error('Hierarchy data is not an array:', data);
+                    throw new Error('Invalid hierarchy data format');
+                }
+                
+                const rootContainer = document.getElementById('root-container');
+                rootContainer.innerHTML = '';
+                nodeCounter = 0;
+                
+                data.forEach(rootNode => {
+                    loadNode(rootNode, null, rootContainer);
+                });
+                
+                updateAllLevelBadges();
+                
+                // Also generate JSON output to show what was loaded
+                setTimeout(() => {
+                    generateJSON();
+                }, 100);
+                
+                // If in read-only mode, regenerate the tree view
+                const jsonOutput = document.getElementById('json-output');
+                if (jsonOutput && jsonOutput.readOnly) {
+                    setTimeout(() => {
+                        generateTreeView();
+                    }, 200);
+                }
+            } catch (error) {
+                console.error('Error loading design:', error);
+                alert('Error loading hierarchy design. Please check the console for details.');
+            }
+        }
+        
+        function loadNode(nodeData, parentId, container) {
+            // Create node with preserved ID if available, or generate new one
+            const nodeId = nodeData.id || `node-${nodeCounter++}`;
+            const node = document.createElement('div');
+            node.className = 'node';
+            node.id = nodeId;
+            node.dataset.parentId = parentId;
+            
+            // Create node content
+            const nodeContent = document.createElement('div');
+            nodeContent.className = 'node-content';
+            
+            const nodeHeader = document.createElement('div');
+            nodeHeader.className = 'node-header';
+            
+            const nameContainer = document.createElement('div');
+            nameContainer.style.display = 'flex';
+            nameContainer.style.alignItems = 'center';
+            nameContainer.style.flex = '1';
+            
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.placeholder = 'Process name';
+            nameInput.value = nodeData.name || '';
+            nameInput.className = 'node-name';
+            
+            const levelBadge = document.createElement('span');
+            levelBadge.className = 'level-badge';
+            levelBadge.textContent = `Level ${nodeData.characteristics?.level || 'A'}`;
+            
+            nameContainer.appendChild(nameInput);
+            nameContainer.appendChild(levelBadge);
+            
+            // Add controls
+            const nodeControls = document.createElement('div');
+            nodeControls.className = 'node-controls';
+            
+            const addChildBtn = document.createElement('button');
+            addChildBtn.textContent = 'Add Child';
+            addChildBtn.onclick = function() { 
+                addChildNode(nodeId);
+                updateAllLevelBadges();
+                return false;
+            };
+            
+            const addSiblingBtn = document.createElement('button');
+            addSiblingBtn.textContent = 'Add Sibling';
+            addSiblingBtn.className = 'sibling';
+            addSiblingBtn.onclick = function() { 
+                addSiblingNode(nodeId);
+                updateAllLevelBadges();
+                return false;
+            };
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.className = 'delete';
+            deleteBtn.onclick = function() { 
+                deleteNode(nodeId);
+                updateAllLevelBadges();
+                return false;
+            };
+            
+            const expandBtn = document.createElement('button');
+            expandBtn.textContent = 'Expand';
+            expandBtn.className = 'expand';
+            expandBtn.onclick = function() { 
+                toggleNodeChildren(nodeId, true); 
+                return false;
+            };
+            
+            const collapseBtn = document.createElement('button');
+            collapseBtn.textContent = 'Collapse';
+            collapseBtn.className = 'collapse';
+            collapseBtn.onclick = function() { 
+                toggleNodeChildren(nodeId, false); 
+                return false;
+            };
+            
+            nodeControls.appendChild(addChildBtn);
+            nodeControls.appendChild(addSiblingBtn);
+            nodeControls.appendChild(deleteBtn);
+            nodeControls.appendChild(expandBtn);
+            nodeControls.appendChild(collapseBtn);
+            
+            nodeHeader.appendChild(nameContainer);
+            nodeHeader.appendChild(nodeControls);
+            
+            // Description input
+            const descInput = document.createElement('input');
+            descInput.type = 'text';
+            descInput.placeholder = 'Enter process description (optional)';
+            descInput.value = nodeData.characteristics?.description || '';
+            descInput.className = 'description-input';
+            
+            nodeContent.appendChild(nodeHeader);
+            nodeContent.appendChild(descInput);
+            node.appendChild(nodeContent);
+            
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'node-children-container';
+            childrenContainer.id = `${nodeId}-children`;
+            node.appendChild(childrenContainer);
+            
+            container.appendChild(node);
+            
+            // Load children if any
+            if (nodeData.children && nodeData.children.length > 0) {
+                nodeData.children.forEach(childNode => {
+                    loadNode(childNode, nodeId, childrenContainer);
+                });
+            }
+            
+            // Set level class after node is added to DOM
+            setTimeout(() => {
+                const level = calculateLevel(node);
+                const levelClass = level === 0 ? 'level-a' : 
+                                 level === 1 ? 'level-b' : 
+                                 level === 2 ? 'level-c' : 'level-d';
+                nodeContent.classList.add(levelClass);
+            }, 0);
+        }
+        
+        // Tree view state
+        let treeExpandedNodes = new Set();
+        
+        // Generate tree view from hierarchy data
+        function generateTreeView() {
+            const rootContainer = document.getElementById('root-container');
+            const rootNodes = rootContainer.children;
+            const hierarchyData = [];
+            
+            for (let i = 0; i < rootNodes.length; i++) {
+                hierarchyData.push(processNode(rootNodes[i]));
+            }
+            
+            renderTreeView(hierarchyData);
+        }
+        
+        // Render tree view
+        function renderTreeView(hierarchy) {
+            const treeContent = document.getElementById('tree-content');
+            treeContent.innerHTML = '';
+            
+            if (!hierarchy || hierarchy.length === 0) {
+                treeContent.innerHTML = '<div class="text-center text-gray-400 py-8">No hierarchy data available</div>';
+                return;
+            }
+            
+            // Update stats
+            const totalNodes = countNodes(hierarchy);
+            const maxDepth = calculateMaxDepth(hierarchy);
+            
+            // Add stats header
+            const statsDiv = document.createElement('div');
+            statsDiv.className = 'text-sm text-gray-400 mb-4 text-center';
+            statsDiv.textContent = `${totalNodes} processes • ${maxDepth} levels deep`;
+            treeContent.appendChild(statsDiv);
+            
+            // Render nodes
+            hierarchy.forEach(node => renderTreeNode(node, treeContent, 0));
+        }
+        
+        // Render individual tree node
+        function renderTreeNode(node, container, depth) {
+            const hasChildren = node.children && node.children.length > 0;
+            const isExpanded = treeExpandedNodes.has(node.id);
+            
+            const nodeWrapper = document.createElement('div');
+            
+            const nodeDiv = document.createElement('div');
+            nodeDiv.className = 'tree-node';
+            nodeDiv.style.paddingLeft = `${depth * 24 + 8}px`;
+            nodeDiv.onclick = () => {
+                if (hasChildren) {
+                    toggleTreeNode(node.id);
+                }
+            };
+            
+            const nodeContent = document.createElement('div');
+            nodeContent.className = 'tree-node-content';
+            
+            // Toggle button or file icon
+            if (hasChildren) {
+                const toggleBtn = document.createElement('span');
+                toggleBtn.className = 'tree-toggle';
+                toggleBtn.innerHTML = isExpanded ? '▼' : '▶';
+                toggleBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleTreeNode(node.id);
+                };
+                nodeContent.appendChild(toggleBtn);
+            } else {
+                const fileIcon = document.createElement('span');
+                fileIcon.className = 'tree-toggle';
+                fileIcon.innerHTML = '📄';
+                fileIcon.style.fontSize = '12px';
+                nodeContent.appendChild(fileIcon);
+            }
+            
+            // Node name
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = node.name;
+            nameSpan.style.flex = '1';
+            nodeContent.appendChild(nameSpan);
+            
+            // Level badge - use the level from node characteristics if available
+            const nodeLevel = node.characteristics?.level || getLevelLabel(depth);
+            const levelBadge = document.createElement('span');
+            levelBadge.className = `tree-level-badge tree-level-${nodeLevel.toLowerCase().replace('+', '')}`;
+            levelBadge.textContent = `Level ${nodeLevel}`;
+            nodeContent.appendChild(levelBadge);
+            
+            nodeDiv.appendChild(nodeContent);
+            nodeWrapper.appendChild(nodeDiv);
+            
+            // Render children if expanded
+            if (hasChildren && isExpanded) {
+                node.children.forEach(child => renderTreeNode(child, nodeWrapper, depth + 1));
+            }
+            
+            container.appendChild(nodeWrapper);
+        }
+        
+        // Toggle tree node expansion
+        function toggleTreeNode(nodeId) {
+            if (treeExpandedNodes.has(nodeId)) {
+                treeExpandedNodes.delete(nodeId);
+            } else {
+                treeExpandedNodes.add(nodeId);
+            }
+            generateTreeView();
+        }
+        
+        // Expand all tree nodes
+        function expandAllTree() {
+            // Clear existing expanded nodes
+            treeExpandedNodes.clear();
+            
+            // Collect all node IDs from the hierarchy
+            const collectNodeIds = (nodes) => {
+                nodes.forEach(node => {
+                    treeExpandedNodes.add(node.id);
+                    if (node.children && node.children.length > 0) {
+                        collectNodeIds(node.children);
+                    }
+                });
+            };
+            
+            // Get the current hierarchy data
+            const rootContainer = document.getElementById('root-container');
+            const rootNodes = rootContainer.children;
+            const hierarchyData = [];
+            
+            for (let i = 0; i < rootNodes.length; i++) {
+                hierarchyData.push(processNode(rootNodes[i]));
+            }
+            
+            // Add all node IDs to expanded set
+            collectNodeIds(hierarchyData);
+            
+            // Regenerate the tree view
+            generateTreeView();
+        }
+        
+        // Collapse all tree nodes
+        function collapseAllTree() {
+            treeExpandedNodes.clear();
+            generateTreeView();
+        }
+        
+        // Count total nodes
+        function countNodes(nodes) {
+            let count = 0;
+            nodes.forEach(node => {
+                count++;
+                if (node.children && node.children.length > 0) {
+                    count += countNodes(node.children);
+                }
+            });
+            return count;
+        }
+        
+        // Calculate max depth
+        function calculateMaxDepth(nodes, currentDepth = 0) {
+            if (!nodes || nodes.length === 0) return currentDepth;
+            let maxDepth = currentDepth + 1;
+            nodes.forEach(node => {
+                if (node.children && node.children.length > 0) {
+                    const childDepth = calculateMaxDepth(node.children, currentDepth + 1);
+                    maxDepth = Math.max(maxDepth, childDepth);
+                }
+            });
+            return maxDepth;
+        }
+        
+        // Set read-only mode
+        function setReadOnlyMode(isReadOnly) {
+            const editor = document.querySelector('.editor');
+            const buttons = document.querySelectorAll('button');
+            const inputs = document.querySelectorAll('input, textarea');
+            
+            if (isReadOnly) {
+                // Keep editor visible but disabled
+                editor.style.opacity = '0.7';
+                editor.style.pointerEvents = 'none';
+                
+                // Disable all inputs and buttons in the editor
+                inputs.forEach(input => {
+                    input.disabled = true;
+                    input.style.opacity = '0.6';
+                });
+                
+                buttons.forEach(button => {
+                    // Only disable buttons in the editor, not in tree view controls
+                    if (button.closest('.editor')) {
+                        button.disabled = true;
+                        button.style.opacity = '0.6';
+                        button.style.cursor = 'not-allowed';
+                    }
+                });
+                
+                // Update title and show tree view
+                document.getElementById('output-title').textContent = 'Hierarchy View';
+                document.getElementById('save-controls').style.display = 'none';
+                document.getElementById('output-content').style.display = 'none';
+                document.getElementById('tree-view-container').style.display = 'flex';
+                
+                // Generate tree view
+                generateTreeView();
+            } else {
+                // Restore editor to normal state
+                editor.style.opacity = '1';
+                editor.style.pointerEvents = 'auto';
+                
+                // Enable all inputs and buttons
+                inputs.forEach(input => {
+                    input.disabled = false;
+                    input.style.opacity = '1';
+                });
+                
+                buttons.forEach(button => {
+                    button.disabled = false;
+                    button.style.opacity = '1';
+                    button.style.cursor = 'pointer';
+                });
+                
+                // Show JSON output and hide tree view
+                document.getElementById('output-title').textContent = 'JSON Output & Save';
+                document.getElementById('save-controls').style.display = 'block';
+                document.getElementById('output-content').style.display = 'flex';
+                document.getElementById('tree-view-container').style.display = 'none';
+            }
+        }
+        
+        // Listen for messages from parent window
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'LOAD_HIERARCHY_DESIGN') {
+                loadDesign(event.data.hierarchyData);
+                // If readOnly is also passed with the load, set it
+                if (event.data.readOnly !== undefined) {
+                    setTimeout(() => {
+                        setReadOnlyMode(event.data.readOnly);
+                    }, 150);
+                }
+            } else if (event.data.type === 'SET_READ_ONLY') {
+                setReadOnlyMode(event.data.readOnly);
+            }
+        });
+        
+        // Import dialog functions
+        function showImportDialog() {
+            document.getElementById('import-dialog').style.display = 'block';
+            document.getElementById('import-json-input').value = '';
+            document.getElementById('import-json-input').focus();
+        }
+        
+        function closeImportDialog() {
+            document.getElementById('import-dialog').style.display = 'none';
+        }
+        
+        function importFromJSON() {
+            const jsonInput = document.getElementById('import-json-input').value.trim();
+            
+            if (!jsonInput) {
+                alert('Please paste JSON data to import');
+                return;
+            }
+            
+            try {
+                const data = JSON.parse(jsonInput);
+                
+                // Validate the JSON structure
+                if (!Array.isArray(data)) {
+                    throw new Error('JSON must be an array of nodes');
+                }
+                
+                // Clear existing hierarchy
+                document.getElementById('root-container').innerHTML = '';
+                nodeCounter = 0;
+                
+                // Load the imported data
+                data.forEach(rootNode => {
+                    loadNode(rootNode, null, document.getElementById('root-container'));
+                });
+                
+                updateAllLevelBadges();
+                generateJSON(); // Generate JSON output to show the imported structure
+                
+                closeImportDialog();
+                
+                // Show success message
+                const successMsg = document.createElement('div');
+                successMsg.style.cssText = 'position: fixed; top: 20px; right: 20px; background-color: #059669; color: white; padding: 10px 20px; border-radius: 4px; z-index: 1001;';
+                successMsg.textContent = 'Hierarchy imported successfully!';
+                document.body.appendChild(successMsg);
+                
+                setTimeout(() => {
+                    successMsg.remove();
+                }, 3000);
+                
+            } catch (error) {
+                alert('Error importing JSON: ' + error.message);
+                console.error('Import error:', error);
+            }
+        }
+        
+        // Close dialog on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && document.getElementById('import-dialog').style.display === 'block') {
+                closeImportDialog();
+            }
+        });
+        
+        // Initialize with one root node
+        document.addEventListener('DOMContentLoaded', () => {
+            addRootNode();
+        });
+    </script>
+</body>
+</html>

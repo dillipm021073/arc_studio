@@ -1,0 +1,58 @@
+REMOTE MACHINE DEBUG COMMANDS
+=============================
+
+SSH: ssh abpwrk1@inlnqw1502
+Password: Unix11!
+App Path: $HOME/dk/arc_studio
+
+QUICK CHECK (copy and paste after SSH):
+---------------------------------------
+cd $HOME/dk/arc_studio && \
+echo "=== Checking storage.ts for problematic syntax ===" && \
+grep -n 'sql<string | null>' server/storage.ts && \
+echo "=== Checking file dates ===" && \
+ls -la server/storage.ts && \
+echo "=== Checking updateUser method ===" && \
+grep -A 10 "async updateUser" server/storage.ts | head -15 && \
+echo "=== Checking recent errors ===" && \
+if command -v pm2 &> /dev/null; then pm2 logs --err --lines 20 | grep -E "(Failed to update user|500)"; else tail -20 nohup.out 2>/dev/null | grep -E "(Failed to update user|500)"; fi
+
+FIX COMMANDS (if problematic syntax found):
+------------------------------------------
+cd $HOME/dk/arc_studio && \
+cp server/storage.ts server/storage.ts.backup-$(date +%Y%m%d-%H%M%S) && \
+curl -o server/storage.ts https://raw.githubusercontent.com/dillipm021073/ApplicationInterfaceTracker/main/server/storage.ts && \
+npm run build && \
+pm2 restart all
+
+TEST DATABASE CONNECTION:
+------------------------
+cd $HOME/dk/arc_studio && \
+node -e "
+const pg = require('pg');
+const client = new pg.Client({
+  connectionString: process.env.DATABASE_URL || 'postgresql://env10o:OnlyForTest123@incetks154:5432/paaspg'
+});
+client.connect()
+  .then(() => {
+    console.log('✅ DB connected');
+    return client.query('SELECT id, username, role FROM users WHERE id = 5');
+  })
+  .then(res => {
+    console.log('User 5:', res.rows[0]);
+    return client.query('UPDATE users SET role = role WHERE id = 5 RETURNING id, username, role');
+  })
+  .then(res => {
+    console.log('Update test:', res.rows[0]);
+    client.end();
+  })
+  .catch(err => {
+    console.error('❌ Error:', err.message);
+    client.end();
+  });
+"
+
+CHECK APPLICATION STATUS:
+------------------------
+pm2 status
+pm2 logs --lines 50 --err

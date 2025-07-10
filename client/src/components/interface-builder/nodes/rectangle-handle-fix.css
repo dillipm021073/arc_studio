@@ -1,0 +1,81 @@
+/* Rectangle Node Handle Fixes */
+[data-nodeid] .react-flow__handle {
+  width: 16px !important;
+  height: 16px !important;
+  background: #6b7280 !important;
+  border: 2px solid #374151 !important;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  cursor: crosshair;
+  pointer-events: all !important;
+  z-index: 1000 !important;
+}
+
+/* Show handles on node hover */
+[data-nodeid]:hover .react-flow__handle {
+  opacity: 1;
+}
+
+/* Always show handles when connecting */
+.react-flow__handle-connecting,
+.react-flow__handle-valid {
+  opacity: 1 !important;
+  background: #10b981 !important;
+  border-color: #059669 !important;
+  transform: scale(1.2);
+}
+
+/* Source handles - visible and larger hit area */
+[data-nodeid] .react-flow__handle[id$="-source"] {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Target handles - smaller visual but same hit area */
+[data-nodeid] .react-flow__handle[id$="-target"] {
+  width: 20px !important;
+  height: 20px !important;
+  background: transparent !important;
+  border: 0 !important;
+}
+
+/* Hover effects */
+[data-nodeid] .react-flow__handle:hover {
+  opacity: 1 !important;
+  background: #3b82f6 !important;
+  border-color: #2563eb !important;
+  transform: scale(1.3);
+}
+
+/* Fix handle positions to not overlap */
+[data-nodeid] .react-flow__handle[id="top-source"] {
+  top: -10px !important;
+}
+
+[data-nodeid] .react-flow__handle[id="top-target"] {
+  top: -10px !important;
+}
+
+[data-nodeid] .react-flow__handle[id="right-source"] {
+  right: -10px !important;
+}
+
+[data-nodeid] .react-flow__handle[id="right-target"] {
+  right: -10px !important;
+}
+
+[data-nodeid] .react-flow__handle[id="bottom-source"] {
+  bottom: -10px !important;
+}
+
+[data-nodeid] .react-flow__handle[id="bottom-target"] {
+  bottom: -10px !important;
+}
+
+[data-nodeid] .react-flow__handle[id="left-source"] {
+  left: -10px !important;
+}
+
+[data-nodeid] .react-flow__handle[id="left-target"] {
+  left: -10px !important;
+}

@@ -1,0 +1,18 @@
+/* Ensure rectangle nodes don't block edges */
+.rectangle-node {
+  isolation: isolate;
+}
+
+/* Ensure handles are above the node content */
+.rectangle-node .react-flow__handle {
+  z-index: 10;
+}
+
+/* Ensure the node content doesn't block edge interaction */
+.rectangle-node > div {
+  pointer-events: none;
+}
+
+.rectangle-node > div > * {
+  pointer-events: auto;
+}

@@ -1,0 +1,3 @@
+put server/storage.ts /home/abpwrk1/dk/arc_studio/server/storage.ts
+ls -la /home/abpwrk1/dk/arc_studio/server/storage.ts
+bye

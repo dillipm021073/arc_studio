@@ -1,0 +1,911 @@
+import { useState } from "react";
+import { usePersistentFilters } from "@/hooks/use-persistent-filters";
+import { useCommunicationCounts } from "@/hooks/use-communication-counts";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useMultiSelect } from "@/hooks/use-multi-select";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { DataFilter, FilterCondition, FilterColumn, applyFilters } from "@/components/ui/data-filter";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { 
+  Plus, 
+  Search, 
+  Edit, 
+  Eye, 
+  Trash2,
+  Plug,
+  MessageSquare,
+  MoreVertical,
+  Info,
+  ArrowRight,
+  FileJson,
+  Copy,
+  AlertTriangle
+} from "lucide-react";
+import { Link } from "wouter";
+import InterfaceFormEnhanced from "@/components/interfaces/interface-form-enhanced";
+import InterfaceEditDialog from "@/components/interfaces/interface-edit-dialog-enhanced";
+import InterfaceBusinessProcesses from "@/components/interfaces/interface-business-processes";
+import { ImportExportDialog } from "@/components/import-export-dialog";
+import { MultiSelectTable } from "@/components/ui/multi-select-table";
+import { BulkActionBar } from "@/components/ui/bulk-action-bar";
+import { BulkEditDialog, type BulkEditField } from "@/components/bulk-edit-dialog";
+import CommunicationBadge from "@/components/communications/communication-badge";
+import InterfaceDecommissionModal from "@/components/modals/interface-decommission-modal";
+import { cn } from "@/lib/utils";
+
+interface Interface {
+  id: number;
+  imlNumber: string;
+  description?: string;
+  providerApplicationId: number;
+  consumerApplicationId: number;
+  interfaceType: string;
+  middleware?: string;
+  version: string;
+  lob: string;
+  lastChangeDate: string;
+  businessProcessName: string;
+  customerFocal: string;
+  providerOwner: string;
+  consumerOwner: string;
+  status: string;
+}
+
+export default function Interfaces() {
+  const {
+    searchTerm,
+    filters,
+    updateSearchTerm,
+    updateFilters,
+    clearAllFilters,
+    hasActiveFilters
+  } = usePersistentFilters('interfaces');
+  
+  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [editingInterface, setEditingInterface] = useState<Interface | null>(null);
+  const [viewingInterface, setViewingInterface] = useState<Interface | null>(null);
+  const [deletingInterface, setDeletingInterface] = useState<Interface | null>(null);
+  const [duplicatingInterface, setDuplicatingInterface] = useState<Interface | null>(null);
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [decommissioningInterface, setDecommissioningInterface] = useState<Interface | null>(null);
+  const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const { data: interfaces, isLoading } = useQuery<Interface[]>({
+    queryKey: ["/api/interfaces"],
+  });
+
+  const { data: businessProcesses } = useQuery({
+    queryKey: ["/api/business-processes"],
+  });
+
+  const { data: applications } = useQuery({
+    queryKey: ["/api/applications"],
+  });
+
+  // Fetch communication counts for all interfaces
+  const interfaceIds = interfaces?.map(iface => iface.id) || [];
+  const { data: communicationCounts } = useCommunicationCounts("interface", interfaceIds);
+
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const response = await fetch(`/api/interfaces/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete interface");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/interfaces"] });
+      toast({
+        title: "Success",
+        description: "Interface deleted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete interface",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDuplicateAndEdit = (interface_: Interface) => {
+    const duplicatedInterface = {
+      ...interface_,
+      id: 0, // New interface will get a new ID
+      imlNumber: `${interface_.imlNumber}-Copy`,
+      version: '1.0',
+      lastChangeDate: new Date().toISOString().split('T')[0]
+    };
+    setDuplicatingInterface(duplicatedInterface);
+  };
+
+  // Bulk operations mutations using the new API endpoints
+  const bulkUpdateMutation = useMutation({
+    mutationFn: async ({ ids, updates }: { ids: number[]; updates: Record<string, any> }) => {
+      const response = await fetch("/api/bulk/interfaces", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, updates }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update interfaces");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/interfaces"] });
+      toast({
+        title: "Success",
+        description: data.message,
+      });
+      multiSelect.clearSelection();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update interfaces",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const response = await fetch("/api/bulk/interfaces", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to delete interfaces");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/interfaces"] });
+      toast({
+        title: "Success",
+        description: data.message,
+      });
+      multiSelect.clearSelection();
+      setShowBulkDeleteConfirm(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete interfaces",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const bulkDuplicateMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const response = await fetch("/api/bulk/interfaces/duplicate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to duplicate interfaces");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/interfaces"] });
+      toast({
+        title: "Success",
+        description: data.message,
+      });
+      multiSelect.clearSelection();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to duplicate interfaces",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleBulkEdit = () => {
+    setShowBulkEditDialog(true);
+  };
+
+  const handleBulkDelete = () => {
+    setShowBulkDeleteConfirm(true);
+  };
+
+  const handleBulkDuplicate = () => {
+    const ids = multiSelect.selectedItems.map(iface => iface.id);
+    bulkDuplicateMutation.mutate(ids);
+  };
+
+  const handleBulkUpdate = (updates: Record<string, any>) => {
+    const ids = multiSelect.selectedItems.map(iface => iface.id);
+    bulkUpdateMutation.mutate({ ids, updates });
+  };
+
+
+  const getApplication = (id: number) => {
+    return applications?.find(app => app.id === id);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'new': return 'bg-purple-600 text-white';
+      case 'active': return 'bg-green-600 text-white';
+      case 'inactive': return 'bg-red-600 text-white';
+      case 'maintenance': return 'bg-orange-600 text-white';
+      case 'deprecated': return 'bg-orange-600 text-white';
+      case 'under_review': return 'bg-orange-600 text-white';
+      default: return 'bg-orange-600 text-white';
+    }
+  };
+
+  const getInterfaceTypeColor = (type: string) => {
+    switch (type.toLowerCase()) {
+      case 'rest': return 'bg-blue-600 text-white';
+      case 'soap': return 'bg-green-600 text-white';
+      case 'graphql': return 'bg-purple-600 text-white';
+      case 'messaging': return 'bg-orange-600 text-white';
+      case 'database': return 'bg-gray-600 text-white';
+      case 'file': return 'bg-yellow-600 text-white';
+      default: return 'bg-gray-600 text-white';
+    }
+  };
+
+  const filterColumns: FilterColumn[] = [
+    { key: "imlNumber", label: "IML Number" },
+    { key: "version", label: "Version" },
+    { key: "interfaceType", label: "Interface Type", type: "select", options: [
+      { value: "REST", label: "REST" },
+      { value: "SOAP", label: "SOAP" },
+      { value: "GraphQL", label: "GraphQL" },
+      { value: "Messaging", label: "Messaging" },
+      { value: "Database", label: "Database" },
+      { value: "File", label: "File" }
+    ]},
+    { key: "middleware", label: "Middleware", type: "select", options: [
+      { value: "None", label: "None" },
+      { value: "Apache Kafka", label: "Apache Kafka" },
+      { value: "RabbitMQ", label: "RabbitMQ" },
+      { value: "IBM MQ", label: "IBM MQ" },
+      { value: "Redis", label: "Redis" },
+      { value: "WSO2", label: "WSO2" },
+      { value: "PSB", label: "PSB" },
+      { value: "PCE", label: "PCE" },
+      { value: "Custom", label: "Custom" }
+    ]},
+    { key: "lob", label: "Line of Business" },
+    { key: "status", label: "Status", type: "select", options: [
+      { value: "new", label: "New" },
+      { value: "active", label: "Active" },
+      { value: "inactive", label: "Inactive" },
+      { value: "deprecated", label: "Deprecated" },
+      { value: "under_review", label: "Under Review" }
+    ]},
+    { key: "businessProcessName", label: "Business Process" },
+    { key: "customerFocal", label: "Customer Focal" },
+    { key: "providerOwner", label: "Provider Owner" },
+    { key: "consumerOwner", label: "Consumer Owner" },
+    { key: "hasCommunications", label: "Has Communications", type: "select", options: [
+      { value: "yes", label: "Yes" },
+      { value: "no", label: "No" }
+    ]}
+  ];
+
+  // Separate hasCommunications filters from other filters
+  const hasCommunicationsFilter = filters.find(f => f.column === 'hasCommunications');
+  const otherFilters = filters.filter(f => f.column !== 'hasCommunications');
+
+  // Apply standard filters first
+  let filteredByConditions = interfaces ? applyFilters(interfaces, otherFilters) : [];
+
+  // Then apply custom hasCommunications filter if present
+  if (hasCommunicationsFilter && communicationCounts) {
+    filteredByConditions = filteredByConditions.filter(interface_ => {
+      const communicationCount = communicationCounts.get(interface_.id) ?? 0;
+      if (hasCommunicationsFilter.value === 'yes') {
+        return communicationCount > 0;
+      } else if (hasCommunicationsFilter.value === 'no') {
+        return communicationCount === 0;
+      }
+      return true;
+    });
+  }
+
+  // Then apply search
+  const filteredInterfaces = filteredByConditions.filter(interface_ => {
+    if (!searchTerm) return true;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      interface_.imlNumber?.toLowerCase().includes(searchLower) ||
+      interface_.businessProcessName?.toLowerCase().includes(searchLower) ||
+      interface_.interfaceType?.toLowerCase().includes(searchLower) ||
+      interface_.middleware?.toLowerCase().includes(searchLower) ||
+      interface_.lob?.toLowerCase().includes(searchLower) ||
+      interface_.status?.toLowerCase().includes(searchLower) ||
+      interface_.description?.toLowerCase().includes(searchLower) ||
+      interface_.customerFocal?.toLowerCase().includes(searchLower) ||
+      interface_.providerOwner?.toLowerCase().includes(searchLower) ||
+      interface_.consumerOwner?.toLowerCase().includes(searchLower)
+    );
+  });
+
+  // Initialize multi-select hook
+  const multiSelect = useMultiSelect({
+    items: filteredInterfaces,
+    getItemId: (interface_) => interface_.id,
+  });
+
+  // Prepare bulk edit fields (must come after multiSelect hook)
+  const bulkEditFields: BulkEditField[] = [
+    {
+      key: "status",
+      label: "Status",
+      type: "select",
+      options: [
+        { value: "new", label: "New" },
+        { value: "active", label: "Active" },
+        { value: "inactive", label: "Inactive" },
+        { value: "deprecated", label: "Deprecated" },
+        { value: "under_review", label: "Under Review" },
+      ],
+      currentValues: new Set(multiSelect.selectedItems.map(iface => iface.status)),
+    },
+    {
+      key: "lob",
+      label: "Line of Business",
+      type: "text",
+      currentValues: new Set(multiSelect.selectedItems.map(iface => iface.lob)),
+    },
+    {
+      key: "middleware",
+      label: "Middleware",
+      type: "select",
+      options: [
+        { value: "None", label: "None" },
+        { value: "Apache Kafka", label: "Apache Kafka" },
+        { value: "RabbitMQ", label: "RabbitMQ" },
+        { value: "IBM MQ", label: "IBM MQ" },
+        { value: "Redis", label: "Redis" },
+        { value: "WSO2", label: "WSO2" },
+        { value: "PSB", label: "PSB" },
+        { value: "PCE", label: "PCE" },
+        { value: "Custom", label: "Custom" },
+      ],
+      currentValues: new Set(multiSelect.selectedItems.map(iface => iface.middleware)),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-900">
+      {/* Header */}
+      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <div>
+            <nav className="flex" aria-label="Breadcrumb">
+              <ol className="flex items-center space-x-2 text-sm text-gray-400">
+                <li><Link href="/" className="hover:text-gray-200">Home</Link></li>
+                <li className="flex items-center">
+                  <span className="mx-2">/</span>
+                  <span className="text-white font-medium">Interfaces</span>
+                </li>
+              </ol>
+            </nav>
+            <h1 className="text-2xl font-semibold text-white mt-1">Interfaces Management (IML)</h1>
+          </div>
+          <div className="flex items-center space-x-3">
+            <Button
+              onClick={() => setShowImportExport(true)}
+              className="bg-blue-600 text-white hover:bg-blue-700"
+            >
+              <FileJson className="mr-2" size={16} />
+              Import/Export
+            </Button>
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-blue-600 text-white hover:bg-blue-700">
+                  <Plus className="mr-2" size={16} />
+                  New Interface
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
+                <InterfaceFormEnhanced onSuccess={() => setIsCreateDialogOpen(false)} />
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto p-6">
+        {/* Search and Filter Bar */}
+        <div className="mb-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="Search interfaces..."
+                  value={searchTerm}
+                  onChange={(e) => updateSearchTerm(e.target.value)}
+                  className="w-80 pl-10 bg-gray-800 border-gray-700 text-white placeholder-gray-400"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Search className="text-gray-400" size={16} />
+                </div>
+              </div>
+              <DataFilter
+                columns={filterColumns}
+                filters={filters}
+                onFiltersChange={updateFilters}
+                onClearAllFilters={clearAllFilters}
+              />
+            </div>
+          </div>
+          {hasActiveFilters() && (
+            <div className="flex items-center gap-2 text-sm text-blue-400">
+              <Info className="h-4 w-4" />
+              <span>Filters are active - results are filtered. {searchTerm && `Search: "${searchTerm}"`}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Bulk Action Bar */}
+        {canUpdate('interfaces') && (
+          <BulkActionBar
+            selectedCount={multiSelect.selectedCount}
+            totalCount={filteredInterfaces.length}
+            onBulkEdit={handleBulkEdit}
+            onBulkDelete={canDelete('interfaces') ? handleBulkDelete : undefined}
+            onDuplicate={canCreate('interfaces') ? handleBulkDuplicate : undefined}
+            onClearSelection={multiSelect.clearSelection}
+            onSelectAll={multiSelect.selectAll}
+            onInvertSelection={multiSelect.invertSelection}
+          />
+        )}
+
+        {/* Interfaces Table */}
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="text-gray-400">Loading interfaces...</div>
+          </div>
+        ) : filteredInterfaces.length === 0 ? (
+          <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 text-center py-12">
+            <Plug className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+            <h3 className="text-lg font-medium text-white mb-2">No interfaces found</h3>
+            <p className="text-gray-400 mb-4">
+              {searchTerm ? "No interfaces match your search criteria." : "Get started by creating your first interface."}
+            </p>
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-blue-600 text-white hover:bg-blue-700">
+                  <Plus className="mr-2" size={16} />
+                  Create Interface
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
+                <InterfaceFormEnhanced onSuccess={() => setIsCreateDialogOpen(false)} />
+              </DialogContent>
+            </Dialog>
+          </div>
+        ) : (
+          <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
+            <MultiSelectTable
+              items={filteredInterfaces}
+              selectedIds={multiSelect.selectedIds}
+              getItemId={(iface) => iface.id}
+              onToggleSelection={multiSelect.toggleSelection}
+              onToggleAll={multiSelect.toggleAll}
+              onRangeSelect={multiSelect.selectRange}
+              isAllSelected={multiSelect.isAllSelected}
+              isSomeSelected={multiSelect.isSomeSelected}
+              onRowDoubleClick={(iface) => setViewingInterface(iface)}
+              renderContextMenu={(interface_, rowContent) => (
+                <ContextMenu>
+                  <ContextMenuTrigger asChild>
+                    {rowContent}
+                  </ContextMenuTrigger>
+                  <ContextMenuContent className="bg-gray-800 border-gray-700">
+                    <ContextMenuItem 
+                      onClick={() => setViewingInterface(interface_)}
+                      className="text-gray-300 hover:bg-gray-700"
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Details
+                    </ContextMenuItem>
+                    {canUpdate && (
+                      <ContextMenuItem 
+                        onClick={() => setEditingInterface(interface_)}
+                        className="text-gray-300 hover:bg-gray-700"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Interface
+                      </ContextMenuItem>
+                    )}
+                    {canCreate && (
+                      <ContextMenuItem 
+                        onClick={() => handleDuplicateAndEdit(interface_)}
+                        className="text-gray-300 hover:bg-gray-700"
+                      >
+                        <Copy className="h-4 w-4 mr-2" />
+                        Duplicate Interface
+                      </ContextMenuItem>
+                    )}
+                    <ContextMenuItem 
+                      onClick={() => navigator.clipboard.writeText(interface_.imlNumber)}
+                      className="text-gray-300 hover:bg-gray-700"
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy IML Number
+                    </ContextMenuItem>
+                    <ContextMenuSeparator className="bg-gray-700" />
+                    <ContextMenuItem 
+                      onClick={() => setDecommissioningInterface(interface_)}
+                      className="text-yellow-400 hover:bg-yellow-900/20"
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      Decommission
+                    </ContextMenuItem>
+                    {canDelete && (
+                      <ContextMenuItem 
+                        onClick={() => setDeletingInterface(interface_)}
+                        className="text-red-400 hover:bg-red-900/20"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Interface
+                      </ContextMenuItem>
+                    )}
+                  </ContextMenuContent>
+                </ContextMenu>
+              )}
+              headers={
+                <>
+                  <TableHead className="w-[120px] text-gray-300">IML Number</TableHead>
+                  <TableHead className="w-[250px] text-gray-300">Description</TableHead>
+                  <TableHead className="w-[120px] text-gray-300">Type</TableHead>
+                  <TableHead className="w-[120px] text-gray-300">Middleware</TableHead>
+                  <TableHead className="w-[150px] text-gray-300">LOB</TableHead>
+                  <TableHead className="w-[200px] text-gray-300">Provider → Consumer</TableHead>
+                  <TableHead className="w-[150px] text-gray-300">Business Process</TableHead>
+                  <TableHead className="w-[100px] text-gray-300">Status</TableHead>
+                  <TableHead className="w-[120px] text-gray-300">Customer Focal</TableHead>
+                  <TableHead className="w-[100px] text-gray-300">Communications</TableHead>
+                </>
+              }
+            >
+              {(interface_) => {
+                  const provider = getApplication(interface_.providerApplicationId);
+                  const consumer = getApplication(interface_.consumerApplicationId);
+                  
+                  return (
+                    <>
+                      <TableCell className="font-medium text-white">
+                        <div className="flex items-center space-x-2">
+                          <Plug className="h-4 w-4 text-green-600" />
+                          <span>{interface_.imlNumber}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-gray-300">
+                        <div className="max-w-[250px] break-words whitespace-pre-wrap">
+                          {interface_.description || '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={`status-badge ${getInterfaceTypeColor(interface_.interfaceType)}`}>
+                          {interface_.interfaceType.toUpperCase()}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-gray-300">{interface_.middleware || 'None'}</TableCell>
+                      <TableCell className="text-gray-300">{interface_.lob || '-'}</TableCell>
+                      <TableCell>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger className="flex items-center space-x-1 cursor-help text-gray-300">
+                              <span className="truncate max-w-[80px]">{provider?.name || 'Unknown'}</span>
+                              <ArrowRight className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate max-w-[80px]">{consumer?.name || 'Unknown'}</span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div>
+                                <p className="font-semibold">Provider: {provider?.name || 'Unknown'}</p>
+                                <p className="text-xs">Owner: {interface_.providerOwner}</p>
+                                <p className="font-semibold mt-2">Consumer: {consumer?.name || 'Unknown'}</p>
+                                <p className="text-xs">Owner: {interface_.consumerOwner}</p>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
+                      <TableCell>
+                        <InterfaceBusinessProcesses interfaceId={interface_.id} />
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(interface_.status)}>
+                          {interface_.status.replace('_', ' ')}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-gray-300">{interface_.customerFocal}</TableCell>
+                      <TableCell>
+                        <CommunicationBadge 
+                          entityType="interface" 
+                          entityId={interface_.id} 
+                          entityName={interface_.imlNumber}
+                        />
+                      </TableCell>
+                    </>
+                  );
+                }}
+            </MultiSelectTable>
+          </div>
+        )}
+
+        {/* Pagination */}
+        {filteredInterfaces.length > 0 && (
+          <div className="mt-8 text-center text-sm text-gray-400">
+            Showing {filteredInterfaces.length} interface{filteredInterfaces.length !== 1 ? 's' : ''}
+          </div>
+        )}
+      </div>
+
+      {/* Edit Interface Dialog */}
+      <Dialog open={!!editingInterface} onOpenChange={(open) => !open && setEditingInterface(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
+          {editingInterface && (
+            <InterfaceFormEnhanced 
+              initialData={editingInterface} 
+              interfaceId={editingInterface.id}
+              isEditing={true}
+              onSuccess={() => {
+                setEditingInterface(null);
+                queryClient.invalidateQueries({ queryKey: ["/api/interfaces"] });
+              }} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* View Interface Details Dialog */}
+      <Dialog open={!!viewingInterface} onOpenChange={(open) => !open && setViewingInterface(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-gray-800 border-gray-700">
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <h2 className="text-2xl font-semibold text-white">{viewingInterface?.imlNumber}</h2>
+              <p className="text-gray-400">Version {viewingInterface?.version}</p>
+              {viewingInterface?.description && (
+                <p className="text-gray-300 mt-2">{viewingInterface.description}</p>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-300 mb-1">Interface Information</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-400">Type:</span>
+                      <Badge className={getInterfaceTypeColor(viewingInterface?.interfaceType || '')}>
+                        {viewingInterface?.interfaceType.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-400">Status:</span>
+                      <Badge className={getStatusColor(viewingInterface?.status || '')}>
+                        {viewingInterface?.status.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-400">Last Changed:</span>
+                      <span className="text-sm font-medium text-white">
+                        {viewingInterface?.lastChangeDate ? new Date(viewingInterface.lastChangeDate).toLocaleDateString() : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-300 mb-1">Provider Information</h3>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-sm text-gray-400">Application:</span>
+                      <p className="text-sm font-medium text-white">
+                        {getApplication(viewingInterface?.providerApplicationId || 0)?.name || 'Unknown'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-400">Owner:</span>
+                      <p className="text-sm font-medium text-white">{viewingInterface?.providerOwner}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-300 mb-1">Consumer Information</h3>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-sm text-gray-400">Application:</span>
+                      <p className="text-sm font-medium text-white">
+                        {getApplication(viewingInterface?.consumerApplicationId || 0)?.name || 'Unknown'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-400">Owner:</span>
+                      <p className="text-sm font-medium text-white">{viewingInterface?.consumerOwner}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-300 mb-1">Business Information</h3>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-sm text-gray-400">Customer Focal:</span>
+                      <p className="text-sm font-medium text-white">{viewingInterface?.customerFocal}</p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-400">Business Processes:</span>
+                      <div className="mt-1">
+                        {viewingInterface && <InterfaceBusinessProcesses interfaceId={viewingInterface.id} />}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingInterface} onOpenChange={(open) => !open && setDeletingInterface(null)}>
+        <AlertDialogContent className="bg-gray-800 border-gray-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-400">
+              This will permanently delete the interface "{deletingInterface?.imlNumber}". This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deletingInterface) {
+                  deleteMutation.mutate(deletingInterface.id);
+                  setDeletingInterface(null);
+                }
+              }}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Interface Dialog */}
+      <InterfaceEditDialog
+        interface={editingInterface}
+        open={!!editingInterface}
+        onOpenChange={(open) => !open && setEditingInterface(null)}
+      />
+
+      {/* Duplicate and Edit Interface Dialog */}
+      <Dialog open={!!duplicatingInterface} onOpenChange={(open) => !open && setDuplicatingInterface(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
+          {duplicatingInterface && (
+            <InterfaceFormEnhanced 
+              initialData={duplicatingInterface} 
+              isEditing={false}
+              onSuccess={() => {
+                setDuplicatingInterface(null);
+                queryClient.invalidateQueries({ queryKey: ["/api/interfaces"] });
+              }} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Decommission Interface Modal */}
+      <InterfaceDecommissionModal
+        interface_={decommissioningInterface}
+        open={!!decommissioningInterface}
+        onOpenChange={(open) => !open && setDecommissioningInterface(null)}
+      />
+
+      {/* Import/Export Dialog */}
+      <ImportExportDialog
+        open={showImportExport}
+        onOpenChange={setShowImportExport}
+        entity="interfaces"
+        entityName="Interfaces"
+        onImportSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/interfaces"] });
+        }}
+      />
+
+      {/* Bulk Edit Dialog */}
+      <BulkEditDialog
+        open={showBulkEditDialog}
+        onOpenChange={setShowBulkEditDialog}
+        selectedCount={multiSelect.selectedCount}
+        fields={bulkEditFields}
+        onSubmit={handleBulkUpdate}
+        entityName="Interfaces"
+      />
+
+      {/* Bulk Delete Confirmation */}
+      <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <AlertDialogContent className="bg-gray-800 border-gray-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Delete {multiSelect.selectedCount} Interfaces?</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-400">
+              This will permanently delete {multiSelect.selectedCount} selected interfaces. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const ids = multiSelect.selectedItems.map(iface => iface.id);
+                bulkDeleteMutation.mutate(ids);
+              }}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Delete All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

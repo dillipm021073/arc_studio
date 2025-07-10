@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Process Tree View - Mock Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #0a0a0a;
+            color: #e5e5e5;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #1a1a1a;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+
+        .tree-container {
+            background-color: #0f0f0f;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #333;
+        }
+
+        .tree-node {
+            margin-bottom: 2px;
+        }
+
+        .node-content {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background-color: #1a1a1a;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+
+        .node-content:hover {
+            background-color: #252525;
+            border-color: #3b82f6;
+        }
+
+        .node-content.selected {
+            background-color: #1e293b;
+            border-color: #3b82f6;
+        }
+
+        .expand-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            transition: transform 0.2s ease;
+        }
+
+        .expand-icon.expanded {
+            transform: rotate(90deg);
+        }
+
+        .expand-icon.no-children {
+            visibility: hidden;
+        }
+
+        .sequence-number {
+            background-color: #374151;
+            color: #9ca3af;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            margin-right: 12px;
+            font-weight: 500;
+        }
+
+        .process-name {
+            flex: 1;
+            font-weight: 500;
+            color: #e5e5e5;
+        }
+
+        .process-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .status-active {
+            background-color: #10b981;
+            color: #fff;
+        }
+
+        .status-pending {
+            background-color: #f59e0b;
+            color: #fff;
+        }
+
+        .status-deprecated {
+            background-color: #ef4444;
+            color: #fff;
+        }
+
+        .status-draft {
+            background-color: #6366f1;
+            color: #fff;
+        }
+
+        .owner-tag {
+            color: #888;
+            font-size: 0.85em;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .lob-tag {
+            background-color: #4b5563;
+            color: #d1d5db;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+        }
+
+        .iml-count {
+            background-color: #1e3a8a;
+            color: #93bbfc;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .children {
+            margin-left: 40px;
+            margin-top: 2px;
+            display: none;
+        }
+
+        .children.expanded {
+            display: block;
+        }
+
+        /* Level-specific styling */
+        .level-a .node-content {
+            background-color: #1e1e1e;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .level-b .node-content {
+            background-color: #181818;
+            border-left: 4px solid #8b5cf6;
+        }
+
+        .level-c .node-content {
+            background-color: #141414;
+            border-left: 4px solid #ec4899;
+        }
+
+        .level-a .process-name {
+            font-size: 1.1em;
+            font-weight: 600;
+        }
+
+        .level-b .process-name {
+            font-size: 1em;
+        }
+
+        .level-c .process-name {
+            font-size: 0.95em;
+        }
+
+        .stats-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background-color: #1f2937;
+            padding: 15px 20px;
+            border-radius: 8px;
+            flex: 1;
+            text-align: center;
+            border: 1px solid #374151;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 600;
+            color: #3b82f6;
+        }
+
+        .stat-label {
+            color: #9ca3af;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .search-bar {
+            margin-bottom: 20px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 20px 12px 45px;
+            background-color: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            color: #e5e5e5;
+            font-size: 1em;
+            transition: all 0.2s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background-color: #262b38;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6b7280;
+        }
+
+        .legend {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #1f2937;
+            border-radius: 8px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            color: #9ca3af;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 4px;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Business Process Hierarchy</h1>
+        <p class="subtitle">Interactive tree view of organizational business processes</p>
+
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-value">24</div>
+                <div class="stat-label">Total Processes</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">87</div>
+                <div class="stat-label">Active IMLs</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">6</div>
+                <div class="stat-label">Pending Changes</div>
+            </div>
+        </div>
+
+        <div class="search-bar">
+            <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="search-input" placeholder="Search business processes...">
+        </div>
+
+        <div class="tree-container">
+            <!-- Level A: Core Business Functions -->
+            <div class="tree-node level-a">
+                <div class="node-content" onclick="toggleNode(this)">
+                    <span class="expand-icon expanded">▶</span>
+                    <span class="sequence-number">1.0</span>
+                    <span class="process-name">Customer Relationship Management</span>
+                    <div class="process-info">
+                        <span class="status-badge status-active">Active</span>
+                        <span class="lob-tag">Sales & Marketing</span>
+                        <span class="iml-count">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                                <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                            </svg>
+                            15 IMLs
+                        </span>
+                        <span class="owner-tag">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                            John Smith
+                        </span>
+                    </div>
+                </div>
+                <div class="children expanded">
+                    <!-- Level B -->
+                    <div class="tree-node level-b">
+                        <div class="node-content" onclick="toggleNode(this)">
+                            <span class="expand-icon expanded">▶</span>
+                            <span class="sequence-number">1.1</span>
+                            <span class="process-name">Lead Management</span>
+                            <div class="process-info">
+                                <span class="status-badge status-active">Active</span>
+                                <span class="iml-count">8 IMLs</span>
+                            </div>
+                        </div>
+                        <div class="children expanded">
+                            <!-- Level C -->
+                            <div class="tree-node level-c">
+                                <div class="node-content">
+                                    <span class="expand-icon no-children">▶</span>
+                                    <span class="sequence-number">1.1.1</span>
+                                    <span class="process-name">Lead Capture & Qualification</span>
+                                    <div class="process-info">
+                                        <span class="status-badge status-active">Active</span>
+                                        <span class="iml-count">3 IMLs</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tree-node level-c">
+                                <div class="node-content">
+                                    <span class="expand-icon no-children">▶</span>
+                                    <span class="sequence-number">1.1.2</span>
+                                    <span class="process-name">Lead Scoring & Distribution</span>
+                                    <div class="process-info">
+                                        <span class="status-badge status-pending">Pending</span>
+                                        <span class="iml-count">5 IMLs</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tree-node level-b">
+                        <div class="node-content" onclick="toggleNode(this)">
+                            <span class="expand-icon">▶</span>
+                            <span class="sequence-number">1.2</span>
+                            <span class="process-name">Customer Onboarding</span>
+                            <div class="process-info">
+                                <span class="status-badge status-active">Active</span>
+                                <span class="iml-count">7 IMLs</span>
+                            </div>
+                        </div>
+                        <div class="children">
+                            <div class="tree-node level-c">
+                                <div class="node-content">
+                                    <span class="expand-icon no-children">▶</span>
+                                    <span class="sequence-number">1.2.1</span>
+                                    <span class="process-name">Account Setup</span>
+                                    <div class="process-info">
+                                        <span class="status-badge status-active">Active</span>
+                                        <span class="iml-count">4 IMLs</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tree-node level-c">
+                                <div class="node-content">
+                                    <span class="expand-icon no-children">▶</span>
+                                    <span class="sequence-number">1.2.2</span>
+                                    <span class="process-name">KYC Verification</span>
+                                    <div class="process-info">
+                                        <span class="status-badge status-active">Active</span>
+                                        <span class="iml-count">3 IMLs</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Level A: Order Management -->
+            <div class="tree-node level-a">
+                <div class="node-content" onclick="toggleNode(this)">
+                    <span class="expand-icon">▶</span>
+                    <span class="sequence-number">2.0</span>
+                    <span class="process-name">Order Management & Fulfillment</span>
+                    <div class="process-info">
+                        <span class="status-badge status-active">Active</span>
+                        <span class="lob-tag">Operations</span>
+                        <span class="iml-count">22 IMLs</span>
+                        <span class="owner-tag">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                            Sarah Johnson
+                        </span>
+                    </div>
+                </div>
+                <div class="children">
+                    <div class="tree-node level-b">
+                        <div class="node-content" onclick="toggleNode(this)">
+                            <span class="expand-icon">▶</span>
+                            <span class="sequence-number">2.1</span>
+                            <span class="process-name">Order Processing</span>
+                            <div class="process-info">
+                                <span class="status-badge status-active">Active</span>
+                                <span class="iml-count">12 IMLs</span>
+                            </div>
+                        </div>
+                        <div class="children">
+                            <div class="tree-node level-c">
+                                <div class="node-content">
+                                    <span class="expand-icon no-children">▶</span>
+                                    <span class="sequence-number">2.1.1</span>
+                                    <span class="process-name">Order Validation</span>
+                                    <div class="process-info">
+                                        <span class="status-badge status-active">Active</span>
+                                        <span class="iml-count">4 IMLs</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tree-node level-c">
+                                <div class="node-content">
+                                    <span class="expand-icon no-children">▶</span>
+                                    <span class="sequence-number">2.1.2</span>
+                                    <span class="process-name">Payment Processing</span>
+                                    <div class="process-info">
+                                        <span class="status-badge status-active">Active</span>
+                                        <span class="iml-count">5 IMLs</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tree-node level-c">
+                                <div class="node-content">
+                                    <span class="expand-icon no-children">▶</span>
+                                    <span class="sequence-number">2.1.3</span>
+                                    <span class="process-name">Inventory Allocation</span>
+                                    <div class="process-info">
+                                        <span class="status-badge status-draft">Draft</span>
+                                        <span class="iml-count">3 IMLs</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tree-node level-b">
+                        <div class="node-content" onclick="toggleNode(this)">
+                            <span class="expand-icon">▶</span>
+                            <span class="sequence-number">2.2</span>
+                            <span class="process-name">Shipping & Logistics</span>
+                            <div class="process-info">
+                                <span class="status-badge status-active">Active</span>
+                                <span class="iml-count">10 IMLs</span>
+                            </div>
+                        </div>
+                        <div class="children">
+                            <div class="tree-node level-c">
+                                <div class="node-content">
+                                    <span class="expand-icon no-children">▶</span>
+                                    <span class="sequence-number">2.2.1</span>
+                                    <span class="process-name">Carrier Selection</span>
+                                    <div class="process-info">
+                                        <span class="status-badge status-active">Active</span>
+                                        <span class="iml-count">6 IMLs</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tree-node level-c">
+                                <div class="node-content">
+                                    <span class="expand-icon no-children">▶</span>
+                                    <span class="sequence-number">2.2.2</span>
+                                    <span class="process-name">Shipment Tracking</span>
+                                    <div class="process-info">
+                                        <span class="status-badge status-active">Active</span>
+                                        <span class="iml-count">4 IMLs</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Level A: Financial Services -->
+            <div class="tree-node level-a">
+                <div class="node-content" onclick="toggleNode(this)">
+                    <span class="expand-icon">▶</span>
+                    <span class="sequence-number">3.0</span>
+                    <span class="process-name">Financial Services & Reporting</span>
+                    <div class="process-info">
+                        <span class="status-badge status-active">Active</span>
+                        <span class="lob-tag">Finance</span>
+                        <span class="iml-count">18 IMLs</span>
+                        <span class="owner-tag">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                            Michael Chen
+                        </span>
+                    </div>
+                </div>
+                <div class="children">
+                    <div class="tree-node level-b">
+                        <div class="node-content">
+                            <span class="expand-icon no-children">▶</span>
+                            <span class="sequence-number">3.1</span>
+                            <span class="process-name">Revenue Recognition</span>
+                            <div class="process-info">
+                                <span class="status-badge status-active">Active</span>
+                                <span class="iml-count">8 IMLs</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tree-node level-b">
+                        <div class="node-content">
+                            <span class="expand-icon no-children">▶</span>
+                            <span class="sequence-number">3.2</span>
+                            <span class="process-name">Financial Reporting</span>
+                            <div class="process-info">
+                                <span class="status-badge status-active">Active</span>
+                                <span class="iml-count">10 IMLs</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Level A: IT Infrastructure -->
+            <div class="tree-node level-a">
+                <div class="node-content" onclick="toggleNode(this)">
+                    <span class="expand-icon">▶</span>
+                    <span class="sequence-number">4.0</span>
+                    <span class="process-name">IT Infrastructure & Security</span>
+                    <div class="process-info">
+                        <span class="status-badge status-deprecated">Deprecated</span>
+                        <span class="lob-tag">Technology</span>
+                        <span class="iml-count">32 IMLs</span>
+                        <span class="owner-tag">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                            David Williams
+                        </span>
+                    </div>
+                </div>
+                <div class="children">
+                    <div class="tree-node level-b">
+                        <div class="node-content">
+                            <span class="expand-icon no-children">▶</span>
+                            <span class="sequence-number">4.1</span>
+                            <span class="process-name">Access Management</span>
+                            <div class="process-info">
+                                <span class="status-badge status-deprecated">Deprecated</span>
+                                <span class="iml-count">12 IMLs</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tree-node level-b">
+                        <div class="node-content">
+                            <span class="expand-icon no-children">▶</span>
+                            <span class="sequence-number">4.2</span>
+                            <span class="process-name">Monitoring & Alerting</span>
+                            <div class="process-info">
+                                <span class="status-badge status-deprecated">Deprecated</span>
+                                <span class="iml-count">20 IMLs</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #3b82f6;"></div>
+                <span>Level A - Core Business Functions</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #8b5cf6;"></div>
+                <span>Level B - Business Processes</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: #ec4899;"></div>
+                <span>Level C - Sub-Processes</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleNode(element) {
+            const expandIcon = element.querySelector('.expand-icon');
+            const children = element.parentElement.querySelector('.children');
+            
+            if (children) {
+                expandIcon.classList.toggle('expanded');
+                children.classList.toggle('expanded');
+            }
+        }
+
+        // Search functionality
+        const searchInput = document.querySelector('.search-input');
+        searchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const allNodes = document.querySelectorAll('.tree-node');
+            
+            allNodes.forEach(node => {
+                const processName = node.querySelector('.process-name').textContent.toLowerCase();
+                const nodeContent = node.querySelector('.node-content');
+                
+                if (processName.includes(searchTerm)) {
+                    node.style.display = 'block';
+                    nodeContent.style.opacity = '1';
+                    
+                    // Expand parent nodes
+                    let parent = node.parentElement;
+                    while (parent && parent.classList.contains('children')) {
+                        parent.classList.add('expanded');
+                        const parentNode = parent.previousElementSibling;
+                        if (parentNode) {
+                            const parentExpandIcon = parentNode.querySelector('.expand-icon');
+                            if (parentExpandIcon) {
+                                parentExpandIcon.classList.add('expanded');
+                            }
+                        }
+                        parent = parent.parentElement.parentElement;
+                    }
+                } else {
+                    if (searchTerm === '') {
+                        node.style.display = 'block';
+                        nodeContent.style.opacity = '1';
+                    } else {
+                        nodeContent.style.opacity = '0.3';
+                    }
+                }
+            });
+        });
+
+        // Click to select functionality
+        document.querySelectorAll('.node-content').forEach(node => {
+            node.addEventListener('click', function(e) {
+                // Don't select if clicking on expand icon
+                if (e.target.closest('.expand-icon')) return;
+                
+                // Remove previous selection
+                document.querySelectorAll('.node-content.selected').forEach(selected => {
+                    selected.classList.remove('selected');
+                });
+                
+                // Add selection to clicked node
+                this.classList.add('selected');
+            });
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                searchInput.value = '';
+                searchInput.dispatchEvent(new Event('input'));
+            }
+        });
+    </script>
+</body>
+</html>

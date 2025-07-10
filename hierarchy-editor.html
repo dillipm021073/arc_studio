@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Node Hierarchy Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .editor {
+            flex: 1;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .output {
+            flex: 1;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        .node {
+            margin-left: 20px;
+            border-left: 1px solid #ddd;
+            padding-left: 15px;
+            position: relative;
+        }
+        .node-content {
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            padding: 10px;
+            border: 1px solid #eee;
+        }
+        .node-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .node-name {
+            font-weight: bold;
+            flex-grow: 1;
+        }
+        .node-controls {
+            display: flex;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.delete {
+            background-color: #f44336;
+        }
+        button.delete:hover {
+            background-color: #d32f2f;
+        }
+        button.expand {
+            background-color: #2196F3;
+        }
+        button.expand:hover {
+            background-color: #0b7dda;
+        }
+        button.collapse {
+            background-color: #ff9800;
+        }
+        button.collapse:hover {
+            background-color: #e68a00;
+        }
+        button.sibling {
+            background-color: #9C27B0;
+        }
+        button.sibling:hover {
+            background-color: #7B1FA2;
+        }
+        button.promote {
+            background-color: #00BCD4;
+        }
+        button.promote:hover {
+            background-color: #0097A7;
+        }
+        button.demote {
+            background-color: #FF5722;
+        }
+        button.demote:hover {
+            background-color: #E64A19;
+        }
+        .characterstics {
+            margin-top: 10px;
+        }
+        .characterstic {
+            display: flex;
+            margin-bottom: 5px;
+        }
+        .characterstic input {
+            flex: 1;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .characterstic button {
+            margin-left: 5px;
+        }
+        .add-characterstic {
+            margin-top: 10px;
+        }
+        textarea {
+            width: 100%;
+            height: 400px;
+            padding: 10px;
+            font-family: monospace;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: vertical;
+        }
+        .top-controls {
+            margin-bottom: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+        .info-bar {
+            background-color: #e7f3fe;
+            border-left: 6px solid #2196F3;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+        .node-children-container {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>Node Hierarchy Editor</h1>
+    
+    <div class="info-bar">
+        This tool allows you to build a hierarchical node structure with characterstics. Each node can have child nodes and multiple characterstics. You can expand/collapse nodes, add siblings, promote nodes to siblings of their parent, demote nodes to children of their previous sibling, and generate a JSON representation of your hierarchy.
+    </div>
+    
+    <div class="container">
+        <div class="editor">
+            <h2>Hierarchy Editor</h2>
+            <div class="top-controls">
+                <button onclick="addRootNode()">Add Root Node</button>
+                <button onclick="expandAll()">Expand All</button>
+                <button onclick="collapseAll()">Collapse All</button>
+            </div>
+            <div id="root-container"></div>
+        </div>
+        
+        <div class="output">
+            <h2>JSON Output</h2>
+            <button onclick="generateJSON()">Generate JSON</button>
+            <button onclick="copyJSON()">Copy to Clipboard</button>
+            <textarea id="json-output" readonly></textarea>
+        </div>
+    </div>
+
+    <script>
+        // Counter for generating unique IDs
+        let nodeCounter = 0;
+        
+        // Function to create a new node
+        function createNode(parentId = null, nodeName = "") {
+            const nodeId = `node-${nodeCounter++}`;
+            const node = document.createElement('div');
+            node.className = 'node';
+            node.id = nodeId;
+            node.dataset.parentId = parentId;
+            
+            // Create the node content
+            const nodeContent = document.createElement('div');
+            nodeContent.className = 'node-content';
+            
+            // Node header with name and controls
+            const nodeHeader = document.createElement('div');
+            nodeHeader.className = 'node-header';
+            
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.placeholder = 'Node Name';
+            nameInput.value = nodeName || `Node ${nodeCounter}`;
+            nameInput.className = 'node-name';
+            
+            const nodeControls = document.createElement('div');
+            nodeControls.className = 'node-controls';
+            
+            const addChildBtn = document.createElement('button');
+            addChildBtn.textContent = 'Add Child';
+            addChildBtn.onclick = function() { 
+                addChildNode(nodeId); 
+                return false;
+            };
+            
+            const addSiblingBtn = document.createElement('button');
+            addSiblingBtn.textContent = 'Add Sibling';
+            addSiblingBtn.className = 'sibling';
+            addSiblingBtn.onclick = function() { 
+                addSiblingNode(nodeId); 
+                return false;
+            };
+            
+            const promoteBtn = document.createElement('button');
+            promoteBtn.textContent = 'To Sibling';
+            promoteBtn.className = 'promote';
+            promoteBtn.onclick = function() { 
+                promoteToSibling(nodeId); 
+                return false;
+            };
+            
+            const demoteBtn = document.createElement('button');
+            demoteBtn.textContent = 'To Child';
+            demoteBtn.className = 'demote';
+            demoteBtn.onclick = function() { 
+                demoteToPreviousSiblingChild(nodeId); 
+                return false;
+            };
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.className = 'delete';
+            deleteBtn.onclick = function() { 
+                deleteNode(nodeId); 
+                return false;
+            };
+            
+            const expandBtn = document.createElement('button');
+            expandBtn.textContent = 'Expand';
+            expandBtn.className = 'expand';
+            expandBtn.onclick = function() { 
+                toggleNodeChildren(nodeId, true); 
+                return false;
+            };
+            
+            const collapseBtn = document.createElement('button');
+            collapseBtn.textContent = 'Collapse';
+            collapseBtn.className = 'collapse';
+            collapseBtn.onclick = function() { 
+                toggleNodeChildren(nodeId, false); 
+                return false;
+            };
+            
+            nodeControls.appendChild(addChildBtn);
+            nodeControls.appendChild(addSiblingBtn);
+            nodeControls.appendChild(promoteBtn);
+            nodeControls.appendChild(demoteBtn);
+            nodeControls.appendChild(deleteBtn);
+            nodeControls.appendChild(expandBtn);
+            nodeControls.appendChild(collapseBtn);
+            
+            nodeHeader.appendChild(nameInput);
+            nodeHeader.appendChild(nodeControls);
+            
+            // Node characterstics container
+            const characterstics = document.createElement('div');
+            characterstics.className = 'characterstics';
+            characterstics.id = `${nodeId}-characterstics`;
+            
+            // Add characterstic button
+            const addcharactersticBtn = document.createElement('button');
+            addcharactersticBtn.textContent = 'Add characterstic';
+            addcharactersticBtn.className = 'add-characterstic';
+            addcharactersticBtn.onclick = function() { 
+                addcharacterstic(nodeId); 
+                return false;
+            };
+            
+            // Add everything to the node content
+            nodeContent.appendChild(nodeHeader);
+            nodeContent.appendChild(characterstics);
+            nodeContent.appendChild(addcharactersticBtn);
+            node.appendChild(nodeContent);
+            
+            // Create children container
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'node-children-container';
+            childrenContainer.id = `${nodeId}-children`;
+            node.appendChild(childrenContainer);
+            
+            return node;
+        }
+        
+        // Function to add a root node
+        function addRootNode() {
+            const rootContainer = document.getElementById('root-container');
+            const node = createNode();
+            rootContainer.appendChild(node);
+        }
+        
+        // Function to add a child node
+        function addChildNode(parentId) {
+            const parentChildren = document.getElementById(`${parentId}-children`);
+            if (parentChildren) {
+                const node = createNode(parentId);
+                parentChildren.appendChild(node);
+                // Make sure the children container is visible
+                parentChildren.style.display = 'block';
+            } else {
+                console.error(`Children container for ${parentId} not found`);
+            }
+        }
+        
+        // Function to add a sibling node
+        function addSiblingNode(nodeId) {
+            const node = document.getElementById(nodeId);
+            if (node) {
+                const parentId = node.dataset.parentId;
+                if (parentId) {
+                    // If the node has a parent, add a sibling to that parent
+                    const parentChildren = document.getElementById(`${parentId}-children`);
+                    if (parentChildren) {
+                        const siblingNode = createNode(parentId);
+                        // Insert after the current node
+                        node.after(siblingNode);
+                    }
+                } else {
+                    // If it's a root node, add another root node
+                    const rootContainer = document.getElementById('root-container');
+                    const siblingNode = createNode();
+                    // Insert after the current node
+                    node.after(siblingNode);
+                }
+            }
+        }
+        
+        // Function to promote a node to be a sibling of its parent
+        function promoteToSibling(nodeId) {
+            const node = document.getElementById(nodeId);
+            if (node) {
+                const parentId = node.dataset.parentId;
+                if (parentId) {
+                    const parentNode = document.getElementById(parentId);
+                    if (parentNode) {
+                        const grandparentId = parentNode.dataset.parentId;
+                        
+                        // Clone the node to preserve its structure
+                        const clonedNode = node.cloneNode(true);
+                        
+                        // Update the parentId to be the grandparent
+                        clonedNode.dataset.parentId = grandparentId;
+                        
+                        if (grandparentId) {
+                            // If there's a grandparent, add as its child (sibling to parent)
+                            const grandparentChildren = document.getElementById(`${grandparentId}-children`);
+                            if (grandparentChildren) {
+                                // Place after the parent node
+                                parentNode.after(clonedNode);
+                                // Remove the original node
+                                node.remove();
+                                
+                                // Reassign all event handlers for the cloned node
+                                reassignEventHandlers(clonedNode);
+                            }
+                        } else {
+                            // If no grandparent, it means parent is a root node
+                            const rootContainer = document.getElementById('root-container');
+                            // Place after the parent node in the root container
+                            parentNode.after(clonedNode);
+                            // Remove the original node
+                            node.remove();
+                            
+                            // Reassign all event handlers for the cloned node
+                            reassignEventHandlers(clonedNode);
+                        }
+                    }
+                } else {
+                    alert("This node is already at the root level.");
+                }
+            }
+        }
+        
+        // Function to demote a node to be a child of its previous sibling
+        function demoteToPreviousSiblingChild(nodeId) {
+            const node = document.getElementById(nodeId);
+            if (node) {
+                const prevSibling = node.previousElementSibling;
+                if (prevSibling && prevSibling.classList.contains('node')) {
+                    // Clone the node to preserve its structure
+                    const clonedNode = node.cloneNode(true);
+                    
+                    // Update the parentId to be the previous sibling
+                    clonedNode.dataset.parentId = prevSibling.id;
+                    
+                    // Get the children container of the previous sibling
+                    const prevSiblingChildren = document.getElementById(`${prevSibling.id}-children`);
+                    if (prevSiblingChildren) {
+                        // Add as child to previous sibling
+                        prevSiblingChildren.appendChild(clonedNode);
+                        // Make sure the children container is visible
+                        prevSiblingChildren.style.display = 'block';
+                        // Remove the original node
+                        node.remove();
+                        
+                        // Reassign all event handlers for the cloned node
+                        reassignEventHandlers(clonedNode);
+                    }
+                } else {
+                    alert("No previous sibling found. Cannot demote this node.");
+                }
+            }
+        }
+        
+        // Helper function to reassign all event handlers for cloned nodes
+        function reassignEventHandlers(node) {
+            // Get the node ID
+            const nodeId = node.id;
+            
+            // Reassign button event handlers in node controls
+            const addChildBtn = node.querySelector('button:nth-child(1)');
+            if (addChildBtn) {
+                addChildBtn.onclick = function() { 
+                    addChildNode(nodeId); 
+                    return false;
+                };
+            }
+            
+            const addSiblingBtn = node.querySelector('button:nth-child(2)');
+            if (addSiblingBtn) {
+                addSiblingBtn.onclick = function() { 
+                    addSiblingNode(nodeId); 
+                    return false;
+                };
+            }
+            
+            const promoteBtn = node.querySelector('button:nth-child(3)');
+            if (promoteBtn) {
+                promoteBtn.onclick = function() { 
+                    promoteToSibling(nodeId); 
+                    return false;
+                };
+            }
+            
+            const demoteBtn = node.querySelector('button:nth-child(4)');
+            if (demoteBtn) {
+                demoteBtn.onclick = function() { 
+                    demoteToPreviousSiblingChild(nodeId); 
+                    return false;
+                };
+            }
+            
+            const deleteBtn = node.querySelector('button:nth-child(5)');
+            if (deleteBtn) {
+                deleteBtn.onclick = function() { 
+                    deleteNode(nodeId); 
+                    return false;
+                };
+            }
+            
+            const expandBtn = node.querySelector('button:nth-child(6)');
+            if (expandBtn) {
+                expandBtn.onclick = function() { 
+                    toggleNodeChildren(nodeId, true); 
+                    return false;
+                };
+            }
+            
+            const collapseBtn = node.querySelector('button:nth-child(7)');
+            if (collapseBtn) {
+                collapseBtn.onclick = function() { 
+                    toggleNodeChildren(nodeId, false); 
+                    return false;
+                };
+            }
+            
+            // Reassign add characterstic button event handler
+            const addcharactersticBtn = node.querySelector('.add-characterstic');
+            if (addcharactersticBtn) {
+                addcharactersticBtn.onclick = function() { 
+                    addcharacterstic(nodeId); 
+                    return false;
+                };
+            }
+            
+            // Reassign characterstic delete buttons
+            const charactersticDivs = node.querySelectorAll('.characterstic');
+            charactersticDivs.forEach(attr => {
+                const deleteBtn = attr.querySelector('button');
+                if (deleteBtn) {
+                    deleteBtn.onclick = function() { 
+                        attr.remove(); 
+                        return false;
+                    };
+                }
+            });
+            
+            // If the node has children, recursively reassign event handlers
+            const childrenContainer = node.querySelector('.node-children-container');
+            if (childrenContainer) {
+                const children = childrenContainer.children;
+                for (let i = 0; i < children.length; i++) {
+                    reassignEventHandlers(children[i]);
+                }
+            }
+        }
+        
+        // Function to delete a node
+        function deleteNode(nodeId) {
+            const node = document.getElementById(nodeId);
+            if (node) {
+                node.remove();
+            }
+        }
+        
+        // Function to toggle node children visibility
+        function toggleNodeChildren(nodeId, expand) {
+            const childrenContainer = document.getElementById(`${nodeId}-children`);
+            if (childrenContainer) {
+                childrenContainer.style.display = expand ? 'block' : 'none';
+            }
+        }
+        
+        // Function to expand all nodes
+        function expandAll() {
+            document.querySelectorAll('.node-children-container').forEach(container => {
+                container.style.display = 'block';
+            });
+        }
+        
+        // Function to collapse all nodes
+        function collapseAll() {
+            document.querySelectorAll('.node-children-container').forEach(container => {
+                container.style.display = 'none';
+            });
+        }
+        
+        // Function to add an characterstic to a node
+        function addcharacterstic(nodeId) {
+            const charactersticsContainer = document.getElementById(`${nodeId}-characterstics`);
+            
+            const charactersticDiv = document.createElement('div');
+            charactersticDiv.className = 'characterstic';
+            
+            const keyInput = document.createElement('input');
+            keyInput.type = 'text';
+            keyInput.placeholder = 'Key';
+            
+            const valueInput = document.createElement('input');
+            valueInput.type = 'text';
+            valueInput.placeholder = 'Value';
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.className = 'delete';
+            deleteBtn.onclick = function() { 
+                charactersticDiv.remove(); 
+                return false;
+            };
+            
+            charactersticDiv.appendChild(keyInput);
+            charactersticDiv.appendChild(valueInput);
+            charactersticDiv.appendChild(deleteBtn);
+            
+            charactersticsContainer.appendChild(charactersticDiv);
+        }
+        
+        // Function to generate JSON from the hierarchy
+        function generateJSON() {
+            const rootContainer = document.getElementById('root-container');
+            const rootNodes = rootContainer.children;
+            const result = [];
+            
+            for (let i = 0; i < rootNodes.length; i++) {
+                result.push(processNode(rootNodes[i]));
+            }
+            
+            document.getElementById('json-output').value = JSON.stringify(result, null, 2);
+        }
+        
+        // Function to process a node and its children
+        function processNode(node) {
+            const nodeContent = node.querySelector('.node-content');
+            const nodeName = nodeContent.querySelector('.node-name').value;
+            
+            // Process characterstics - each node has its own characterstics
+            const characterstics = {};
+            const charactersticDivs = node.querySelector('.characterstics').querySelectorAll('.characterstic');
+            charactersticDivs.forEach(attr => {
+                const inputs = attr.querySelectorAll('input');
+                const key = inputs[0].value.trim();
+                const value = inputs[1].value.trim();
+                if (key) {
+                    characterstics[key] = value;
+                }
+            });
+            
+            // Process child nodes
+            const childNodes = [];
+            const childrenContainer = node.querySelector('.node-children-container');
+            if (childrenContainer) {
+                const children = childrenContainer.children;
+                for (let i = 0; i < children.length; i++) {
+                    childNodes.push(processNode(children[i]));
+                }
+            }
+            
+            // Create the result object
+            const result = {
+                name: nodeName,
+                characterstics: characterstics
+            };
+            
+            // Add child nodes if any exist
+            if (childNodes.length > 0) {
+                result.nodes = childNodes;
+            }
+            
+            return result;
+        }
+        
+        // Function to copy JSON to clipboard
+        function copyJSON() {
+            const jsonOutput = document.getElementById('json-output');
+            jsonOutput.select();
+            document.execCommand('copy');
+            alert('JSON copied to clipboard!');
+        }
+        
+        // Initialize with one root node
+        document.addEventListener('DOMContentLoaded', () => {
+            addRootNode();
+        });
+    </script>
+</body>
+</html>

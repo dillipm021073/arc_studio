@@ -1,0 +1,228 @@
+{
+  "id": "template-microservices",
+  "name": "Microservices Architecture",
+  "description": "Scalable microservices architecture with API gateway, multiple services, and shared database",
+  "category": "Template",
+  "nodes": [
+    {
+      "id": "api-gateway",
+      "type": "application",
+      "position": { "x": 100, "y": 200 },
+      "data": {
+        "id": "api-gateway",
+        "type": "application",
+        "category": "Gateway",
+        "name": "API Gateway",
+        "description": "Central entry point for all API requests",
+        "color": "bg-purple-600",
+        "properties": {
+          "routing": "Dynamic",
+          "authentication": "JWT",
+          "rateLimit": "1000/min",
+          "loadBalancing": "Round Robin"
+        },
+        "connectionPoints": {
+          "input": [{"id": "external-requests", "type": "http", "position": "left"}],
+          "output": [{"id": "internal-routing", "type": "http", "position": "right"}]
+        },
+        "label": "API Gateway",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    },
+    {
+      "id": "user-service",
+      "type": "application",
+      "position": { "x": 500, "y": 100 },
+      "data": {
+        "id": "user-service",
+        "type": "application",
+        "category": "Microservice",
+        "name": "User Service",
+        "description": "Handles user management and authentication",
+        "color": "bg-green-600",
+        "properties": {
+          "runtime": "Node.js",
+          "framework": "Express",
+          "database": "PostgreSQL",
+          "port": "3001"
+        },
+        "connectionPoints": {
+          "input": [{"id": "api-requests", "type": "http", "position": "left"}],
+          "output": [{"id": "database-conn", "type": "sql", "position": "bottom"}]
+        },
+        "label": "User Service",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    },
+    {
+      "id": "product-service",
+      "type": "application",
+      "position": { "x": 500, "y": 350 },
+      "data": {
+        "id": "product-service",
+        "type": "application",
+        "category": "Microservice",
+        "name": "Product Service",
+        "description": "Manages product catalog and inventory",
+        "color": "bg-green-600",
+        "properties": {
+          "runtime": "Java",
+          "framework": "Spring Boot",
+          "database": "PostgreSQL",
+          "port": "3002"
+        },
+        "connectionPoints": {
+          "input": [{"id": "api-requests", "type": "http", "position": "left"}],
+          "output": [{"id": "database-conn", "type": "sql", "position": "bottom"}]
+        },
+        "label": "Product Service",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    },
+    {
+      "id": "order-service",
+      "type": "application",
+      "position": { "x": 500, "y": 600 },
+      "data": {
+        "id": "order-service",
+        "type": "application",
+        "category": "Microservice",
+        "name": "Order Service",
+        "description": "Processes orders and payments",
+        "color": "bg-green-600",
+        "properties": {
+          "runtime": "Python",
+          "framework": "FastAPI",
+          "database": "PostgreSQL",
+          "port": "3003"
+        },
+        "connectionPoints": {
+          "input": [{"id": "api-requests", "type": "http", "position": "left"}],
+          "output": [{"id": "database-conn", "type": "sql", "position": "bottom"}]
+        },
+        "label": "Order Service",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    },
+    {
+      "id": "shared-database",
+      "type": "application",
+      "position": { "x": 900, "y": 350 },
+      "data": {
+        "id": "shared-database",
+        "type": "PostgreSQL",
+        "category": "Data",
+        "name": "Shared Database",
+        "description": "Centralized data storage for all services",
+        "color": "bg-gray-600",
+        "properties": {
+          "type": "PostgreSQL",
+          "version": "15",
+          "clustering": "Multi-Master",
+          "backup": "Continuous"
+        },
+        "connectionPoints": {
+          "input": [{"id": "connections", "type": "sql", "position": "left"}],
+          "output": [{"id": "data", "type": "dataset", "position": "right"}]
+        },
+        "label": "Shared Database",
+        "isConfigured": false
+      },
+      "width": 288,
+      "height": 200
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "type": "smart",
+      "source": "api-gateway",
+      "sourceHandle": "internal-routing",
+      "target": "user-service",
+      "targetHandle": "api-requests",
+      "animated": true,
+      "style": { "stroke": "#8b5cf6", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "API Gateway Routing", "dataFlow": "bidirectional" }
+    },
+    {
+      "id": "edge-2",
+      "type": "smart",
+      "source": "api-gateway",
+      "sourceHandle": "internal-routing",
+      "target": "product-service",
+      "targetHandle": "api-requests",
+      "animated": true,
+      "style": { "stroke": "#8b5cf6", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "API Gateway Routing", "dataFlow": "bidirectional" }
+    },
+    {
+      "id": "edge-3",
+      "type": "smart",
+      "source": "api-gateway",
+      "sourceHandle": "internal-routing",
+      "target": "order-service",
+      "targetHandle": "api-requests",
+      "animated": true,
+      "style": { "stroke": "#8b5cf6", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "API Gateway Routing", "dataFlow": "bidirectional" }
+    },
+    {
+      "id": "edge-4",
+      "type": "smart",
+      "source": "user-service",
+      "sourceHandle": "database-conn",
+      "target": "shared-database",
+      "targetHandle": "connections",
+      "animated": true,
+      "style": { "stroke": "#10b981", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "Database Connection", "dataFlow": "bidirectional" }
+    },
+    {
+      "id": "edge-5",
+      "type": "smart",
+      "source": "product-service",
+      "sourceHandle": "database-conn",
+      "target": "shared-database",
+      "targetHandle": "connections",
+      "animated": true,
+      "style": { "stroke": "#10b981", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "Database Connection", "dataFlow": "bidirectional" }
+    },
+    {
+      "id": "edge-6",
+      "type": "smart",
+      "source": "order-service",
+      "sourceHandle": "database-conn",
+      "target": "shared-database",
+      "targetHandle": "connections",
+      "animated": true,
+      "style": { "stroke": "#10b981", "strokeWidth": 2 },
+      "markerEnd": { "type": "arrowclosed" },
+      "data": { "connectionType": "Database Connection", "dataFlow": "bidirectional" }
+    }
+  ],
+  "metadata": {
+    "version": "1.0.0",
+    "author": "System",
+    "tags": ["template", "microservices", "scalable", "gateway"],
+    "nodeCount": 5,
+    "edgeCount": 6,
+    "complexity": "Complex",
+    "source": "template"
+  },
+  "createdAt": "2024-01-01T00:00:00.000Z",
+  "updatedAt": "2024-01-01T00:00:00.000Z"
+}
