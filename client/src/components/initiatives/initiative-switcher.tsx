@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, Plus, GitBranch, Globe, Users, Package } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, GitBranch, Globe, Users, Package, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,12 @@ import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { useInitiative } from "./initiative-context";
 import { CreateInitiativeDialog } from "./create-initiative-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function InitiativeSwitcher() {
   const [open, setOpen] = useState(false);
@@ -28,7 +34,8 @@ export function InitiativeSwitcher() {
     initiatives, 
     isLoading, 
     switchInitiative,
-    isProductionView 
+    isProductionView,
+    toggleView 
   } = useInitiative();
 
   const activeInitiatives = initiatives.filter(i => i.status === 'active');
@@ -56,7 +63,35 @@ export function InitiativeSwitcher() {
   };
 
   return (
-    <>
+    <div className="flex items-center gap-2">
+      {currentInitiative && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleView}
+                className="h-10 w-10"
+              >
+                {isProductionView ? (
+                  <Eye className="h-4 w-4" />
+                ) : (
+                  <EyeOff className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-sm">
+                {isProductionView 
+                  ? "Currently viewing production. Click to switch to initiative view." 
+                  : "Currently viewing initiative. Click to switch to production view."}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+      
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -232,6 +267,6 @@ export function InitiativeSwitcher() {
         open={showCreateDialog} 
         onOpenChange={setShowCreateDialog} 
       />
-    </>
+    </div>
   );
 }

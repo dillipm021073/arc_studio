@@ -5,7 +5,9 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useMultiSelect } from "@/hooks/use-multi-select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Plus, Search, Edit, Trash2, Network, MoreVertical, Info, FileJson, Copy, Eye, TableIcon, UserPlus, FileDown, ChevronDown, Layers, GitBranch } from "lucide-react";
+import { useInitiative } from "@/components/initiatives/initiative-context";
+import { api } from "@/lib/api";
+import { Plus, Search, Edit, Trash2, Network, MoreVertical, Info, FileJson, Copy, Eye, TableIcon, UserPlus, FileDown, ChevronDown, Layers, GitBranch, Lock, Unlock, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,6 +68,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ImportExportDialog } from "@/components/import-export-dialog";
+import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
 
 export default function BusinessProcesses() {
   const {
@@ -95,6 +98,9 @@ export default function BusinessProcesses() {
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
 
+  // Initiative context
+  const { currentInitiative, isProductionView } = useInitiative();
+
   const { data: businessProcesses = [], isLoading } = useQuery({
     queryKey: ["business-processes"],
     queryFn: async () => {
@@ -102,6 +108,17 @@ export default function BusinessProcesses() {
       if (!response.ok) throw new Error("Failed to fetch business processes");
       return response.json();
     },
+  });
+
+  // Fetch locks for version control
+  const { data: locks } = useQuery({
+    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryFn: async () => {
+      if (!currentInitiative) return [];
+      const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
+      return response.data;
+    },
+    enabled: !!currentInitiative && !isProductionView
   });
 
   // Fetch business process relationships for tree view
@@ -190,6 +207,70 @@ export default function BusinessProcesses() {
       });
     },
   });
+
+  // Version Control mutations
+  const checkoutMutation = useMutation({
+    mutationFn: async (bp: any) => {
+      const response = await api.post('/api/version-control/checkout', {
+        artifactType: 'business_process',
+        artifactId: bp.id,
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: (data, bp) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      toast({
+        title: "Business process checked out",
+        description: `${bp.businessProcess} is now locked for editing in ${currentInitiative?.name}`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Checkout failed",
+        description: error.response?.data?.error || "Failed to checkout business process",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const checkinMutation = useMutation({
+    mutationFn: async ({ bp, changes }: { bp: any; changes: any }) => {
+      const response = await api.post('/api/version-control/checkin', {
+        artifactType: 'business_process',
+        artifactId: bp.id,
+        initiativeId: currentInitiative?.initiativeId,
+        changes,
+        changeDescription: `Updated ${bp.businessProcess} via UI`
+      });
+      return response.data;
+    },
+    onSuccess: (data, { bp }) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['business-processes'] });
+      toast({
+        title: "Changes checked in",
+        description: `${bp.businessProcess} has been updated in ${currentInitiative?.name}`
+      });
+      setEditingBP(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Checkin failed",
+        description: error.response?.data?.error || "Failed to checkin changes",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Helper to check if a business process is locked
+  const isBusinessProcessLocked = (bpId: number) => {
+    if (!locks) return null;
+    return locks.find((l: any) => 
+      l.lock.artifactType === 'business_process' && 
+      l.lock.artifactId === bpId
+    );
+  };
 
   // Export functions
   const handleExportFlat = async () => {
@@ -522,17 +603,36 @@ export default function BusinessProcesses() {
             </DropdownMenu>
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-blue-600 text-white hover:bg-blue-700">
+                <Button 
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                  disabled={isProductionView && currentInitiative}
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Add Business Process
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-2xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
+                {currentInitiative && !isProductionView ? (
+                  <div className="mb-4 p-3 bg-blue-900/20 border border-blue-700 rounded">
+                    <p className="text-sm text-blue-300">
+                      <GitBranch className="inline h-4 w-4 mr-1" />
+                      Creating in initiative: <strong>{currentInitiative.name}</strong>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-700 rounded">
+                    <p className="text-sm text-yellow-300">
+                      <AlertTriangle className="inline h-4 w-4 mr-1" />
+                      Creating directly in production. Switch to an initiative to track changes.
+                    </p>
+                  </div>
+                )}
                 <BusinessProcessForm 
                   onSuccess={() => {
                     setIsCreateOpen(false);
                     queryClient.invalidateQueries({ queryKey: ["business-processes"] });
                   }} 
+                  initiativeId={currentInitiative?.initiativeId}
                 />
               </DialogContent>
             </Dialog>
@@ -542,8 +642,11 @@ export default function BusinessProcesses() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-6">
+        {/* View Mode Indicator */}
+        <ViewModeIndicator />
+        
         {/* Search and Filter Bar */}
-        <div className="mb-6 space-y-4">
+        <div className="mb-6 space-y-4 mt-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Search className="w-4 h-4 text-gray-400" />
@@ -682,7 +785,35 @@ export default function BusinessProcesses() {
                           aria-label={`Select business process ${bp.businessProcess}`}
                         />
                       </TableCell>
-                      <TableCell className="font-medium text-white">{bp.businessProcess}</TableCell>
+                      <TableCell className="font-medium text-white">
+                        <div className="flex items-center space-x-2">
+                          <span>{bp.businessProcess}</span>
+                          {(() => {
+                            const lock = isBusinessProcessLocked(bp.id);
+                            if (!lock) return null;
+                            const isLockedByMe = lock.lock.lockedBy === lock.user?.id;
+                            return (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    {isLockedByMe ? (
+                                      <GitBranch className="h-4 w-4 text-green-500" />
+                                    ) : (
+                                      <Lock className="h-4 w-4 text-yellow-500" />
+                                    )}
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {isLockedByMe 
+                                      ? `Checked out by you in ${currentInitiative?.name}`
+                                      : `Locked by ${lock.user?.username} in ${currentInitiative?.name}`
+                                    }
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          })()}
+                        </div>
+                      </TableCell>
                   <TableCell className="text-gray-300">{bp.lob}</TableCell>
                   <TableCell className="text-gray-300">{bp.product}</TableCell>
                   <TableCell className="text-gray-300">{bp.version}</TableCell>
@@ -716,10 +847,58 @@ export default function BusinessProcesses() {
                     </TableRow>
                   </ContextMenuTrigger>
                   <ContextMenuContent>
-                    <ContextMenuItem onClick={() => setEditingBP(bp)}>
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit
-                    </ContextMenuItem>
+                    {/* Version Control Options */}
+                    {currentInitiative && !isProductionView && (
+                      <>
+                        {(() => {
+                          const lock = isBusinessProcessLocked(bp.id);
+                          const isLockedByMe = lock?.lock.lockedBy === lock?.user?.id;
+                          const isLockedByOther = lock && !isLockedByMe;
+                          
+                          return (
+                            <>
+                              {!lock && (
+                                <ContextMenuItem 
+                                  onClick={() => checkoutMutation.mutate(bp)}
+                                  disabled={checkoutMutation.isPending}
+                                >
+                                  <GitBranch className="mr-2 h-4 w-4" />
+                                  Checkout
+                                </ContextMenuItem>
+                              )}
+                              {isLockedByMe && (
+                                <>
+                                  <ContextMenuItem onClick={() => setEditingBP(bp)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </ContextMenuItem>
+                                  <ContextMenuItem 
+                                    onClick={() => checkinMutation.mutate({ bp, changes: {} })}
+                                    disabled={checkinMutation.isPending}
+                                  >
+                                    <Unlock className="mr-2 h-4 w-4" />
+                                    Checkin
+                                  </ContextMenuItem>
+                                </>
+                              )}
+                              {isLockedByOther && (
+                                <ContextMenuItem disabled>
+                                  <Lock className="mr-2 h-4 w-4" />
+                                  Locked by {lock.user?.username}
+                                </ContextMenuItem>
+                              )}
+                            </>
+                          );
+                        })()}
+                        <ContextMenuSeparator />
+                      </>
+                    )}
+                    {canUpdate && (!currentInitiative || isProductionView) && (
+                      <ContextMenuItem onClick={() => setEditingBP(bp)}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit
+                      </ContextMenuItem>
+                    )}
                     <ContextMenuItem onClick={() => setViewingBP(bp)}>
                       <Eye className="mr-2 h-4 w-4" />
                       View Details
@@ -863,7 +1042,24 @@ export default function BusinessProcesses() {
         <DialogContent className="max-w-3xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
           <BusinessProcessForm
             businessProcess={editingBP}
-            onSuccess={() => {
+            onSuccess={async () => {
+              try {
+                // If in an initiative and BP is checked out, do checkin
+                if (currentInitiative && !isProductionView) {
+                  const lock = isBusinessProcessLocked(editingBP.id);
+                  if (lock?.lock.lockedBy === lock?.user?.id) {
+                    // BP is checked out by current user, do checkin
+                    // Note: The form has already saved the changes to the server
+                    await checkinMutation.mutateAsync({ 
+                      bp: editingBP, 
+                      changes: {} // Changes already saved 
+                    });
+                  }
+                }
+              } catch (error) {
+                console.error('Checkin failed after edit:', error);
+                // Don't block the UI close even if checkin fails
+              }
               setEditingBP(null);
               queryClient.invalidateQueries({ queryKey: ["business-processes"] });
             }}

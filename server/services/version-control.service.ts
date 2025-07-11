@@ -6,11 +6,14 @@ import {
   artifactLocks,
   baselineHistory,
   initiativeParticipants,
+  applications,
+  interfaces,
+  businessProcesses,
   ArtifactVersion,
   Initiative,
   VersionConflict
 } from "@db/schema";
-import { eq, and, desc, isNull, or, sql } from "drizzle-orm";
+import { eq, and, desc, isNull, or, sql, gt } from "drizzle-orm";
 import { ConflictDetectionService, ConflictAnalysis } from "./conflict-detection.service";
 import { MergeStrategiesService, MergeContext } from "./merge-strategies.service";
 
@@ -63,6 +66,44 @@ export class VersionControlService {
     });
 
     return initiative;
+  }
+
+  /**
+   * Create baseline version from production data
+   */
+  static async createBaselineFromProduction(type: ArtifactType, artifactId: number, userId: number): Promise<ArtifactVersion | null> {
+    // Fetch the current production data
+    let productionData: any = null;
+    
+    if (type === 'application') {
+      const [app] = await db.select().from(applications).where(eq(applications.id, artifactId));
+      productionData = app;
+    } else if (type === 'interface') {
+      const [iface] = await db.select().from(interfaces).where(eq(interfaces.id, artifactId));
+      productionData = iface;
+    } else if (type === 'business_process') {
+      const [bp] = await db.select().from(businessProcesses).where(eq(businessProcesses.id, artifactId));
+      productionData = bp;
+    }
+    
+    if (!productionData) {
+      return null;
+    }
+    
+    // Create baseline version
+    const [baseline] = await db.insert(artifactVersions).values({
+      artifactType: type,
+      artifactId,
+      versionNumber: 1,
+      isBaseline: true,
+      artifactData: productionData,
+      changeType: 'create',
+      createdBy: userId,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }).returning();
+    
+    return baseline;
   }
 
   /**
@@ -131,7 +172,7 @@ export class VersionControlService {
           eq(artifactLocks.artifactId, artifactId),
           or(
             isNull(artifactLocks.lockExpiry),
-            sql`${artifactLocks.lockExpiry} > NOW()`
+            gt(artifactLocks.lockExpiry, new Date())
           )
         )
       );
@@ -141,9 +182,13 @@ export class VersionControlService {
     }
 
     // Get baseline version
-    const baseline = await this.getBaselineVersion(type, artifactId);
+    let baseline = await this.getBaselineVersion(type, artifactId);
     if (!baseline) {
-      throw new Error(`No baseline version found for ${type} ${artifactId}`);
+      // Create baseline version from current production data
+      baseline = await this.createBaselineFromProduction(type, artifactId, userId);
+      if (!baseline) {
+        throw new Error(`No baseline version found for ${type} ${artifactId}`);
+      }
     }
 
     // Create new version
@@ -159,20 +204,24 @@ export class VersionControlService {
       createdBy: userId
     }).returning();
 
-    // Create lock
+    // Create or update lock
+    // First delete any existing lock for this artifact in this initiative
+    await db.delete(artifactLocks)
+      .where(
+        and(
+          eq(artifactLocks.artifactType, type),
+          eq(artifactLocks.artifactId, artifactId),
+          eq(artifactLocks.initiativeId, initiativeId)
+        )
+      );
+    
+    // Then create new lock
     await db.insert(artifactLocks).values({
       artifactType: type,
       artifactId,
       initiativeId,
       lockedBy: userId,
-      lockExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hour lock
-    }).onConflictDoUpdate({
-      target: [artifactLocks.artifactType, artifactLocks.artifactId, artifactLocks.initiativeId],
-      set: {
-        lockedBy: userId,
-        lockedAt: new Date(),
-        lockExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
-      }
+      lockExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
     });
 
     return newVersion;
@@ -209,6 +258,16 @@ export class VersionControlService {
       })
       .where(eq(artifactVersions.id, currentVersion.id))
       .returning();
+
+    // Release the lock
+    await db.delete(artifactLocks)
+      .where(
+        and(
+          eq(artifactLocks.artifactType, type),
+          eq(artifactLocks.artifactId, artifactId),
+          eq(artifactLocks.initiativeId, initiativeId)
+        )
+      );
 
     return updatedVersion;
   }
@@ -353,6 +412,57 @@ export class VersionControlService {
         })
         .where(eq(artifactVersions.id, conflict.initiativeVersionId));
     }
+  }
+
+  /**
+   * Check in changes to an artifact
+   */
+  static async checkinArtifact(
+    type: ArtifactType,
+    artifactId: number,
+    initiativeId: string,
+    userId: number,
+    updatedData: any,
+    changeReason: string
+  ): Promise<ArtifactVersion> {
+    // Get current version
+    const currentVersion = await this.getInitiativeVersion(type, artifactId, initiativeId);
+    if (!currentVersion) {
+      throw new Error("No checked out version found");
+    }
+
+    // Detect changed fields
+    const changedFields = Object.keys(updatedData).filter(
+      key => JSON.stringify(currentVersion.artifactData[key]) !== JSON.stringify(updatedData[key])
+    );
+
+    // Update the version with new data
+    const [updated] = await db.update(artifactVersions)
+      .set({
+        artifactData: updatedData,
+        changedFields,
+        changeReason,
+        updatedBy: userId,
+        updatedAt: new Date(),
+        versionNumber: currentVersion.versionNumber + 1
+      })
+      .where(eq(artifactVersions.id, currentVersion.id))
+      .returning();
+
+    // Release the lock
+    await db.delete(artifactLocks)
+      .where(
+        and(
+          eq(artifactLocks.artifactType, type),
+          eq(artifactLocks.artifactId, artifactId),
+          eq(artifactLocks.lockedBy, userId)
+        )
+      );
+
+    // Check for conflicts with current baseline
+    await this.detectConflicts(initiativeId);
+
+    return updated;
   }
 
   /**

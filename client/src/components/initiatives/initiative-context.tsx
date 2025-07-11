@@ -56,25 +56,37 @@ export function InitiativeProvider({ children }: InitiativeProviderProps) {
     
     if (savedInitiativeId && savedInitiativeId !== 'null') {
       setCurrentInitiativeId(savedInitiativeId);
-      setIsProductionView(false);
-    }
-    
-    if (savedView !== null) {
-      setIsProductionView(savedView === 'true');
+      // If we have an initiative selected, default to initiative view unless explicitly set to production
+      if (savedView !== null) {
+        setIsProductionView(savedView === 'true');
+      } else {
+        setIsProductionView(false);
+      }
+    } else {
+      // No initiative selected, default to production view
+      setIsProductionView(true);
     }
   }, []);
 
   // Fetch all initiatives
-  const { data: initiatives = [], isLoading } = useQuery({
+  const { data: initiativesData = [], isLoading } = useQuery({
     queryKey: ['initiatives', user?.id],
     queryFn: async () => {
       const response = await api.get('/api/initiatives');
-      return response.data;
+      // Transform the nested data structure to flat structure
+      return response.data.map((item: any) => ({
+        ...item.initiative,
+        participantCount: item.participantCount,
+        artifactCount: item.artifactCount,
+        isParticipant: item.isParticipant
+      }));
     },
     retry: false,
     enabled: !!user, // Only fetch when user is authenticated
     staleTime: 30000, // Cache for 30 seconds
   });
+
+  const initiatives = initiativesData as Initiative[];
 
   // Find current initiative
   const currentInitiative = initiatives.find(
@@ -87,7 +99,8 @@ export function InitiativeProvider({ children }: InitiativeProviderProps) {
       const response = await api.post('/api/initiatives', data);
       return response.data;
     },
-    onSuccess: (newInitiative) => {
+    onSuccess: (response) => {
+      const newInitiative = response.initiative || response;
       queryClient.invalidateQueries({ queryKey: ['initiatives'] });
       setCurrentInitiativeId(newInitiative.initiativeId);
       setIsProductionView(false);

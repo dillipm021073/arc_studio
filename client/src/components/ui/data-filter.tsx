@@ -307,8 +307,8 @@ export function applyFilters<T extends Record<string, any>>(
 
       if (value === null || value === undefined) return false;
 
-      const stringValue = String(value).toLowerCase();
-      const stringFilterValue = filterValue.toLowerCase();
+      const stringValue = String(value || '').toLowerCase();
+      const stringFilterValue = String(filterValue || '').toLowerCase();
 
       switch (filter.operator) {
         case "equals":

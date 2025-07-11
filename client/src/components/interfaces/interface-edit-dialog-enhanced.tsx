@@ -19,6 +19,7 @@ interface InterfaceEditDialogProps {
   interface: Interface | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: (updatedInterface: any) => void;
 }
 
 interface BusinessProcessAssignment {
@@ -29,7 +30,7 @@ interface BusinessProcessAssignment {
   businessProcess?: BusinessProcess;
 }
 
-export default function InterfaceEditDialog({ interface: initialInterface, open, onOpenChange }: InterfaceEditDialogProps) {
+export default function InterfaceEditDialog({ interface: initialInterface, open, onOpenChange, onSuccess }: InterfaceEditDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showActivationWarning, setShowActivationWarning] = useState(false);
@@ -158,7 +159,7 @@ export default function InterfaceEditDialog({ interface: initialInterface, open,
 
       return interfaceData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/interfaces"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/metrics"] });
       if (initialInterface?.id) {
@@ -168,6 +169,7 @@ export default function InterfaceEditDialog({ interface: initialInterface, open,
         title: "Interface updated",
         description: "The interface has been successfully updated.",
       });
+      onSuccess?.(data);
       onOpenChange(false);
     },
     onError: (error: any) => {

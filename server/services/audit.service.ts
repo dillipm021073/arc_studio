@@ -5,7 +5,9 @@ import {
   users,
   applications,
   interfaces,
-  businessProcesses
+  businessProcesses,
+  technicalProcesses,
+  internalActivities
 } from "@db/schema";
 import { eq, and, desc, or, sql, gte, lte, inArray } from "drizzle-orm";
 import { ArtifactType } from "./version-control.service";
@@ -131,7 +133,11 @@ export class AuditService {
           WHEN ${artifactVersions.artifactType} = 'interface' THEN 
             (SELECT iml_number FROM interfaces WHERE id = ${artifactVersions.artifactId})
           WHEN ${artifactVersions.artifactType} = 'business_process' THEN 
-            (SELECT name FROM business_processes WHERE id = ${artifactVersions.artifactId})
+            (SELECT business_process FROM business_processes WHERE id = ${artifactVersions.artifactId})
+          WHEN ${artifactVersions.artifactType} = 'technical_process' THEN 
+            (SELECT name FROM technical_processes WHERE id = ${artifactVersions.artifactId})
+          WHEN ${artifactVersions.artifactType} = 'internal_process' THEN 
+            (SELECT activity_name FROM internal_activities WHERE id = ${artifactVersions.artifactId})
           ELSE 'Unknown'
         END
       `

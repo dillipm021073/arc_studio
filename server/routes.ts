@@ -127,6 +127,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertApplicationSchema.parse(req.body);
       const application = await storage.createApplication(validatedData);
+      
+      // Create baseline version for version control
+      const { artifactVersions } = await import("@db/schema");
+      await db.insert(artifactVersions).values({
+        artifactType: 'application',
+        artifactId: application.id,
+        versionNumber: 1,
+        isBaseline: true,
+        artifactData: application,
+        changeType: 'create',
+        createdBy: req.user!.id,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
       res.status(201).json(application);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -316,6 +331,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertInterfaceSchema.parse(req.body);
       const interface_ = await storage.createInterface(validatedData);
+      
+      // Create baseline version for version control
+      const { artifactVersions } = await import("@db/schema");
+      await db.insert(artifactVersions).values({
+        artifactType: 'interface',
+        artifactId: interface_.id,
+        versionNumber: 1,
+        isBaseline: true,
+        artifactData: interface_,
+        changeType: 'create',
+        createdBy: req.user!.id,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
       res.status(201).json(interface_);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -1040,6 +1070,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertBusinessProcessSchema.parse(req.body);
       const businessProcess = await storage.createBusinessProcess(validatedData);
+      
+      // Create baseline version for version control
+      const { artifactVersions } = await import("@db/schema");
+      await db.insert(artifactVersions).values({
+        artifactType: 'business_process',
+        artifactId: businessProcess.id,
+        versionNumber: 1,
+        isBaseline: true,
+        artifactData: businessProcess,
+        changeType: 'create',
+        createdBy: req.user!.id,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      
       res.status(201).json(businessProcess);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -2037,6 +2082,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register Initiatives routes (Version Control)
   const { initiativesRouter } = await import("./routes/initiatives");
   app.use("/api/initiatives", initiativesRouter);
+
+  // Register Version Control routes
+  const { versionControlRouter } = await import("./routes/version-control");
+  app.use("/api/version-control", versionControlRouter);
 
   // Register Audit routes
   const { auditRouter } = await import("./routes/audit");

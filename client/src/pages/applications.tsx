@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePersistentFilters } from "@/hooks/use-persistent-filters";
 import { useCommunicationCounts } from "@/hooks/use-communication-counts";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useMultiSelect } from "@/hooks/use-multi-select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInitiative } from "@/components/initiatives/initiative-context";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -33,7 +35,10 @@ import {
   AlertTriangle,
   Calendar,
   Upload,
-  FileText
+  FileText,
+  GitBranch,
+  Lock,
+  Unlock
 } from "lucide-react";
 import { Link } from "wouter";
 import ApplicationForm from "@/components/applications/application-form";
@@ -75,6 +80,7 @@ import { MultiSelectTable } from "@/components/ui/multi-select-table";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { BulkEditDialog, type BulkEditField } from "@/components/bulk-edit-dialog";
 import { cn } from "@/lib/utils";
+import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -127,9 +133,35 @@ export default function Applications() {
   const [showCapabilitiesUpload, setShowCapabilitiesUpload] = useState<Application | null>(null);
   const [showCapabilitiesView, setShowCapabilitiesView] = useState<Application | null>(null);
 
+  // Initiative context
+  const { currentInitiative, isProductionView } = useInitiative();
+
   const { data: applications, isLoading } = useQuery<Application[]>({
     queryKey: ["/api/applications"],
   });
+
+  // Fetch locks for version control
+  const { data: locks, error: locksError } = useQuery({
+    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryFn: async () => {
+      if (!currentInitiative) return [];
+      try {
+        const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
+        return response.data;
+      } catch (error) {
+        console.error('Error fetching locks:', error);
+        return [];
+      }
+    },
+    enabled: !!currentInitiative && !isProductionView
+  });
+
+  // Log any errors for debugging
+  useEffect(() => {
+    if (locksError) {
+      console.error('Locks query error:', locksError);
+    }
+  }, [locksError]);
 
   // Fetch communication counts for all applications
   const applicationIds = applications?.map(app => app.id) || [];
@@ -327,17 +359,86 @@ export default function Applications() {
   };
 
   const confirmBulkDuplicate = () => {
-    const ids = multiSelect.selectedItems.map(app => app.id);
-    bulkDuplicateMutation.mutate(ids);
+    const ids = multiSelect.selectedItems?.map(app => app.id) || [];
+    if (ids.length > 0) {
+      bulkDuplicateMutation.mutate(ids);
+    }
     setShowBulkDuplicateConfirm(false);
   };
 
   const handleBulkUpdate = (updates: Record<string, any>) => {
-    const ids = multiSelect.selectedItems.map(app => app.id);
-    bulkUpdateMutation.mutate({ ids, updates });
+    const ids = multiSelect.selectedItems?.map(app => app.id) || [];
+    if (ids.length > 0) {
+      bulkUpdateMutation.mutate({ ids, updates });
+    }
+  };
+
+  // Version Control mutations
+  const checkoutMutation = useMutation({
+    mutationFn: async (app: Application) => {
+      const response = await api.post('/api/version-control/checkout', {
+        artifactType: 'application',
+        artifactId: app.id,
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: (data, app) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      toast({
+        title: "Application checked out",
+        description: `${app.name} is now locked for editing in ${currentInitiative?.name}`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Checkout failed",
+        description: error.response?.data?.error || "Failed to checkout application",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const checkinMutation = useMutation({
+    mutationFn: async ({ app, changes }: { app: Application; changes: any }) => {
+      const response = await api.post('/api/version-control/checkin', {
+        artifactType: 'application',
+        artifactId: app.id,
+        initiativeId: currentInitiative?.initiativeId,
+        changes,
+        changeDescription: `Updated ${app.name} via UI`
+      });
+      return response.data;
+    },
+    onSuccess: (data, { app }) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/applications'] });
+      toast({
+        title: "Changes checked in",
+        description: `${app.name} has been updated in ${currentInitiative?.name}`
+      });
+      setEditingApp(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Checkin failed",
+        description: error.response?.data?.error || "Failed to checkin changes",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Helper to check if an application is locked
+  const isApplicationLocked = (appId: number) => {
+    if (!locks) return null;
+    return locks.find((l: any) => 
+      l.lock.artifactType === 'application' && 
+      l.lock.artifactId === appId
+    );
   };
 
   const getStatusColor = (status: string) => {
+    if (!status) return 'bg-orange-600 text-white';
     switch (status.toLowerCase()) {
       case 'new': return 'bg-purple-600 text-white';
       case 'active': return 'bg-green-600 text-white';
@@ -350,6 +451,7 @@ export default function Applications() {
   };
 
   const getDeploymentColor = (deployment: string) => {
+    if (!deployment) return 'bg-orange-600 text-white';
     switch (deployment.toLowerCase()) {
       case 'cloud': return 'bg-blue-600 text-white';
       case 'on-premise': return 'bg-orange-600 text-white';
@@ -395,42 +497,53 @@ export default function Applications() {
   const hasCommunicationsFilter = filters.find(f => f.column === 'hasCommunications');
   const otherFilters = filters.filter(f => f.column !== 'hasCommunications');
 
-  // Apply standard filters first
-  let filteredByConditions = applications ? applyFilters(applications, otherFilters) : [];
+  // Apply standard filters first - ensure no null applications
+  const validApplications = (applications || []).filter(app => app != null);
+  let filteredByConditions = validApplications ? applyFilters(validApplications, otherFilters) : [];
 
   // Then apply custom hasCommunications filter if present
   if (hasCommunicationsFilter && communicationCounts) {
-    filteredByConditions = filteredByConditions.filter(app => {
-      const communicationCount = communicationCounts.get(app.id) ?? 0;
-      if (hasCommunicationsFilter.value === 'yes') {
-        return communicationCount > 0;
-      } else if (hasCommunicationsFilter.value === 'no') {
-        return communicationCount === 0;
-      }
-      return true;
-    });
+    try {
+      filteredByConditions = filteredByConditions.filter(app => {
+        const communicationCount = communicationCounts.get(app.id) ?? 0;
+        const filterValue = hasCommunicationsFilter.value?.toLowerCase?.() || '';
+        if (filterValue === 'yes') {
+          return communicationCount > 0;
+        } else if (filterValue === 'no') {
+          return communicationCount === 0;
+        }
+        return true;
+      });
+    } catch (e) {
+      console.error('Error in communications filter:', e);
+    }
   }
 
   // Then apply search
-  const filteredApplications = filteredByConditions.filter(app => {
+  const filteredApplications = filteredByConditions?.filter(app => {
     if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      app.amlNumber?.toLowerCase().includes(searchLower) ||
-      app.name?.toLowerCase().includes(searchLower) ||
-      app.description?.toLowerCase().includes(searchLower) ||
-      app.lob?.toLowerCase().includes(searchLower) ||
-      app.os?.toLowerCase().includes(searchLower) ||
-      app.deployment?.toLowerCase().includes(searchLower) ||
-      app.status?.toLowerCase().includes(searchLower) ||
-      app.purpose?.toLowerCase().includes(searchLower)
-    );
-  });
+    try {
+      const searchLower = (searchTerm || '').toLowerCase();
+      return (
+        ((app.amlNumber || '').toLowerCase()).includes(searchLower) ||
+        ((app.name || '').toLowerCase()).includes(searchLower) ||
+        ((app.description || '').toLowerCase()).includes(searchLower) ||
+        ((app.lob || '').toLowerCase()).includes(searchLower) ||
+        ((app.os || '').toLowerCase()).includes(searchLower) ||
+        ((app.deployment || '').toLowerCase()).includes(searchLower) ||
+        ((app.status || '').toLowerCase()).includes(searchLower) ||
+        ((app.purpose || '').toLowerCase()).includes(searchLower)
+      );
+    } catch (e) {
+      console.error('Error in search filter:', e, 'app:', app);
+      return true;
+    }
+  }) || [];
 
-  // Initialize multi-select hook
+  // Initialize multi-select hook - ensure no null items
   const multiSelect = useMultiSelect({
-    items: filteredApplications,
-    getItemId: (app) => app.id,
+    items: filteredApplications?.filter(app => app != null) || [],
+    getItemId: (app) => app?.id || 0,
   });
 
   // Prepare bulk edit fields (must come after multiSelect hook)
@@ -446,13 +559,13 @@ export default function Applications() {
         { value: "maintenance", label: "Maintenance" },
         { value: "deprecated", label: "Deprecated" },
       ],
-      currentValues: new Set(multiSelect.selectedItems.map(app => app.status)),
+      currentValues: new Set(multiSelect.selectedItems?.map(app => app.status) || []),
     },
     {
       key: "lob",
       label: "Line of Business",
       type: "text",
-      currentValues: new Set(multiSelect.selectedItems.map(app => app.lob)),
+      currentValues: new Set(multiSelect.selectedItems?.map(app => app.lob) || []),
     },
     {
       key: "deployment",
@@ -462,15 +575,27 @@ export default function Applications() {
         { value: "cloud", label: "Cloud" },
         { value: "on-premise", label: "On-Premise" },
       ],
-      currentValues: new Set(multiSelect.selectedItems.map(app => app.deployment)),
+      currentValues: new Set(multiSelect.selectedItems?.map(app => app.deployment) || []),
     },
     {
       key: "os",
       label: "Operating System",
       type: "text",
-      currentValues: new Set(multiSelect.selectedItems.map(app => app.os)),
+      currentValues: new Set(multiSelect.selectedItems?.map(app => app.os) || []),
     },
   ];
+
+  // Add error boundary for debugging
+  if (!applications && !isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+        <div className="text-center">
+          <h2 className="text-2xl mb-4">Error Loading Applications</h2>
+          <p>Unable to fetch applications. Please check the console for errors.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">
@@ -500,13 +625,34 @@ export default function Applications() {
             {canCreate('applications') && (
               <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-blue-600 text-white hover:bg-blue-700">
+                  <Button 
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                    disabled={isProductionView && currentInitiative}
+                  >
                     <Plus className="mr-2" size={16} />
                     New Application
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-5xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
-                  <ApplicationForm onSuccess={() => setIsCreateDialogOpen(false)} />
+                  {currentInitiative && !isProductionView ? (
+                    <div className="mb-4 p-3 bg-blue-900/20 border border-blue-700 rounded">
+                      <p className="text-sm text-blue-300">
+                        <GitBranch className="inline h-4 w-4 mr-1" />
+                        Creating in initiative: <strong>{currentInitiative.name}</strong>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-700 rounded">
+                      <p className="text-sm text-yellow-300">
+                        <AlertTriangle className="inline h-4 w-4 mr-1" />
+                        Creating directly in production. Switch to an initiative to track changes.
+                      </p>
+                    </div>
+                  )}
+                  <ApplicationForm 
+                    onSuccess={() => setIsCreateDialogOpen(false)} 
+                    initiativeId={currentInitiative?.initiativeId}
+                  />
                 </DialogContent>
               </Dialog>
             )}
@@ -516,8 +662,11 @@ export default function Applications() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-6">
+        {/* View Mode Indicator */}
+        <ViewModeIndicator />
+        
         {/* Search and Filter Bar */}
-        <div className="mb-6 space-y-4">
+        <div className="mb-6 space-y-4 mt-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="relative">
@@ -637,6 +786,30 @@ export default function Applications() {
                           <div className="flex items-center space-x-2">
                             <Box className="h-4 w-4 text-blue-500" />
                             <span>{app.name}</span>
+                            {(() => {
+                              const lock = isApplicationLocked(app.id);
+                              if (!lock) return null;
+                              const isLockedByMe = lock.lock.lockedBy === lock.user?.id;
+                              return (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      {isLockedByMe ? (
+                                        <GitBranch className="h-4 w-4 text-green-500" />
+                                      ) : (
+                                        <Lock className="h-4 w-4 text-yellow-500" />
+                                      )}
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {isLockedByMe 
+                                        ? `Checked out by you in ${currentInitiative?.name}`
+                                        : `Locked by ${lock.user?.username} in ${currentInitiative?.name}`
+                                      }
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              );
+                            })()}
                           </div>
                         </TableCell>
                         <TableCell className="text-gray-300">{app.lob || '-'}</TableCell>
@@ -695,7 +868,53 @@ export default function Applications() {
                       </TableRow>
                     </ContextMenuTrigger>
                     <ContextMenuContent>
-                      {canUpdate('applications') && (
+                      {/* Version Control Options */}
+                      {currentInitiative && !isProductionView && (
+                        <>
+                          {(() => {
+                            const lock = isApplicationLocked(app.id);
+                            const isLockedByMe = lock?.lock.lockedBy === lock?.user?.id;
+                            const isLockedByOther = lock && !isLockedByMe;
+                            
+                            return (
+                              <>
+                                {!lock && (
+                                  <ContextMenuItem 
+                                    onClick={() => checkoutMutation.mutate(app)}
+                                    disabled={checkoutMutation.isPending}
+                                  >
+                                    <GitBranch className="mr-2 h-4 w-4" />
+                                    Checkout
+                                  </ContextMenuItem>
+                                )}
+                                {isLockedByMe && (
+                                  <>
+                                    <ContextMenuItem onClick={() => setEditingApp(app)}>
+                                      <Edit className="mr-2 h-4 w-4" />
+                                      Edit
+                                    </ContextMenuItem>
+                                    <ContextMenuItem 
+                                      onClick={() => checkinMutation.mutate({ app, changes: {} })}
+                                      disabled={checkinMutation.isPending}
+                                    >
+                                      <Unlock className="mr-2 h-4 w-4" />
+                                      Checkin
+                                    </ContextMenuItem>
+                                  </>
+                                )}
+                                {isLockedByOther && (
+                                  <ContextMenuItem disabled>
+                                    <Lock className="mr-2 h-4 w-4" />
+                                    Locked by {lock.user?.username}
+                                  </ContextMenuItem>
+                                )}
+                              </>
+                            );
+                          })()}
+                          <ContextMenuSeparator />
+                        </>
+                      )}
+                      {canUpdate('applications') && (!currentInitiative || isProductionView) && (
                         <ContextMenuItem onClick={() => setEditingApp(app)}>
                           <Edit className="mr-2 h-4 w-4" />
                           Edit
@@ -793,7 +1012,35 @@ export default function Applications() {
               initialData={editingApp} 
               applicationId={editingApp.id}
               isEditing={true}
-              onSuccess={() => {
+              onSuccess={async () => {
+                try {
+                  // If in an initiative and app is checked out, do checkin
+                  if (currentInitiative && !isProductionView) {
+                    const lock = isApplicationLocked(editingApp.id);
+                    console.log('Edit complete - checking lock status:', {
+                      hasLock: !!lock,
+                      lockDetails: lock,
+                      currentUserId: lock?.user?.id,
+                      isLockedByMe: lock?.lock.lockedBy === lock?.user?.id,
+                      initiativeId: currentInitiative?.initiativeId
+                    });
+                    
+                    if (lock?.lock.lockedBy === lock?.user?.id) {
+                      // App is checked out by current user, do checkin
+                      // Note: The form has already saved the changes to the server
+                      console.log('Attempting checkin...');
+                      await checkinMutation.mutateAsync({ 
+                        app: editingApp, 
+                        changes: editingApp // Pass the full app data as changes
+                      });
+                    } else {
+                      console.log('Skipping checkin - not locked by current user');
+                    }
+                  }
+                } catch (error) {
+                  console.error('Checkin failed after edit:', error);
+                  // Don't block the UI close even if checkin fails
+                }
                 setEditingApp(null);
                 queryClient.invalidateQueries({ queryKey: ["/api/applications"] });
               }} 
@@ -869,8 +1116,10 @@ export default function Applications() {
             <AlertDialogCancel className="bg-gray-700 text-white border-gray-600 hover:bg-gray-600">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                const ids = multiSelect.selectedItems.map(app => app.id);
-                bulkDeleteMutation.mutate(ids);
+                const ids = multiSelect.selectedItems?.map(app => app.id) || [];
+                if (ids.length > 0) {
+                  bulkDeleteMutation.mutate(ids);
+                }
               }}
               className="bg-red-600 text-white hover:bg-red-700"
             >
@@ -981,6 +1230,16 @@ export default function Applications() {
           setShowCapabilitiesView(showCapabilitiesUpload);
         }}
       />
+
+
+      {/* View Application Details Modal */}
+      {viewingApp && (
+        <ApplicationDetailsModal
+          application={viewingApp}
+          isOpen={!!viewingApp}
+          onClose={() => setViewingApp(null)}
+        />
+      )}
     </div>
   );
 }

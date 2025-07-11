@@ -23,17 +23,69 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  Eye
+  Eye,
+  Edit,
+  UserPlus,
+  CheckSquare,
+  MoreVertical
 } from "lucide-react";
 import { ConflictList } from "@/components/conflicts/conflict-list";
 import { AuditTrail } from "@/components/audit/audit-trail";
 import { CreateInitiativeDialog } from "@/components/initiatives/create-initiative-dialog";
+import { EditInitiativeDialog } from "@/components/initiatives/edit-initiative-dialog";
+import { TransferOwnershipDialog } from "@/components/initiatives/transfer-ownership-dialog";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function InitiativesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [selectedInitiative, setSelectedInitiative] = useState<any>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showTransferDialog, setShowTransferDialog] = useState(false);
+  const [editingInitiative, setEditingInitiative] = useState<any>(null);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const completeInitiativeMutation = useMutation({
+    mutationFn: async (initiative: any) => {
+      const response = await api.post(`/api/initiatives/${initiative.initiativeId || initiative.id}/baseline`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['initiatives'] });
+      toast({
+        title: "Initiative completed",
+        description: "All changes have been deployed to production.",
+      });
+      setSelectedInitiative(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to complete initiative",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCompleteInitiative = async (initiative: any) => {
+    if (!window.confirm(
+      `Are you sure you want to complete "${initiative.name}"?\n\n` +
+      "This will deploy all changes to production and cannot be undone."
+    )) {
+      return;
+    }
+    completeInitiativeMutation.mutate(initiative);
+  };
 
   const { data: initiatives, isLoading } = useQuery({
     queryKey: ['initiatives', 'all'],
@@ -43,9 +95,9 @@ export default function InitiativesPage() {
     }
   });
 
-  const filteredInitiatives = initiatives?.filter((init: any) => 
-    init.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    init.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredInitiatives = initiatives?.filter((item: any) => 
+    item.initiative.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.initiative.description?.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
 
   const getStatusColor = (status: string) => {
@@ -96,9 +148,38 @@ export default function InitiativesPage() {
                 <h2 className="text-xl font-semibold">{selectedInitiative.name}</h2>
                 <p className="text-muted-foreground">{selectedInitiative.description}</p>
               </div>
-              <Button variant="outline" onClick={() => setSelectedInitiative(null)}>
-                Back to List
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setEditingInitiative(selectedInitiative);
+                    setShowEditDialog(true);
+                  }}
+                >
+                  Edit Initiative
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setEditingInitiative(selectedInitiative);
+                    setShowTransferDialog(true);
+                  }}
+                >
+                  Transfer Ownership
+                </Button>
+                {selectedInitiative.status === 'active' && (
+                  <Button 
+                    variant="default"
+                    onClick={() => handleCompleteInitiative(selectedInitiative)}
+                    disabled={completeInitiativeMutation.isPending}
+                  >
+                    {completeInitiativeMutation.isPending ? "Completing..." : "Complete Initiative"}
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setSelectedInitiative(null)}>
+                  Back to List
+                </Button>
+              </div>
             </div>
 
             <div className="grid grid-cols-4 gap-4">
@@ -247,54 +328,94 @@ export default function InitiativesPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredInitiatives.map((initiative: any) => (
-                        <TableRow key={initiative.id}>
+                      filteredInitiatives.map((item: any) => (
+                        <TableRow key={item.initiative.id}>
                           <TableCell>
                             <div>
-                              <div className="font-medium">{initiative.name}</div>
+                              <div className="font-medium">{item.initiative.name}</div>
                               <div className="text-sm text-muted-foreground">
-                                {initiative.description}
+                                {item.initiative.description}
                               </div>
                             </div>
                           </TableCell>
 
                           <TableCell>
-                            <Badge className={getStatusColor(initiative.status)}>
-                              {initiative.status}
+                            <Badge className={getStatusColor(item.initiative.status)}>
+                              {item.initiative.status}
                             </Badge>
                           </TableCell>
 
                           <TableCell>
-                            <span>{getPriorityIcon(initiative.priority)} {initiative.priority}</span>
+                            <span>{getPriorityIcon(item.initiative.priority)} {item.initiative.priority}</span>
                           </TableCell>
 
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Users className="h-4 w-4" />
-                              <span>{initiative.participantCount || 0}</span>
+                              <span>{item.participantCount || 0}</span>
                             </div>
                           </TableCell>
 
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Package className="h-4 w-4" />
-                              <span>{initiative.artifactCount || 0}</span>
+                              <span>{item.artifactCount || 0}</span>
                             </div>
                           </TableCell>
 
                           <TableCell>
-                            {format(new Date(initiative.createdAt), 'MMM d, yyyy')}
+                            {format(new Date(item.initiative.createdAt), 'MMM d, yyyy')}
                           </TableCell>
 
                           <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setSelectedInitiative(initiative)}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              View
-                            </Button>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedInitiative({...item.initiative, participantCount: item.participantCount, artifactCount: item.artifactCount})}
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setEditingInitiative(item.initiative);
+                                      setShowEditDialog(true);
+                                    }}
+                                  >
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit Initiative
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setEditingInitiative(item.initiative);
+                                      setShowTransferDialog(true);
+                                    }}
+                                  >
+                                    <UserPlus className="h-4 w-4 mr-2" />
+                                    Transfer Ownership
+                                  </DropdownMenuItem>
+                                  {item.initiative.status === 'active' && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() => handleCompleteInitiative(item.initiative)}
+                                      >
+                                        <CheckSquare className="h-4 w-4 mr-2" />
+                                        Complete Initiative
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))
@@ -310,6 +431,18 @@ export default function InitiativesPage() {
       <CreateInitiativeDialog 
         open={showCreateDialog} 
         onOpenChange={setShowCreateDialog} 
+      />
+
+      <EditInitiativeDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        initiative={editingInitiative}
+      />
+
+      <TransferOwnershipDialog
+        open={showTransferDialog}
+        onOpenChange={setShowTransferDialog}
+        initiative={editingInitiative}
       />
     </div>
   );

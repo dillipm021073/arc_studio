@@ -211,6 +211,20 @@ export function registerTechnicalProcessRoutes(app: Express) {
         })
         .returning();
 
+      // Create baseline version for version control
+      const { artifactVersions } = await import("../../shared/schema");
+      await db.insert(artifactVersions).values({
+        artifactType: 'technical_process',
+        artifactId: newProcess.id,
+        versionNumber: 1,
+        isBaseline: true,
+        artifactData: newProcess,
+        changeType: 'create',
+        createdBy: req.user!.id,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
       // Insert interfaces if provided
       if (interfaceData && interfaceData.length > 0) {
         await db.insert(technicalProcessInterfaces).values(

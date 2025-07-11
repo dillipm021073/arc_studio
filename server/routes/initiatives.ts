@@ -157,18 +157,44 @@ initiativesRouter.put("/:id", requireAuth, async (req, res) => {
     const userId = req.user!.id;
     const data = createInitiativeSchema.parse(req.body);
 
-    // Check if user is participant with appropriate role
-    const [participant] = await db.select()
-      .from(initiativeParticipants)
-      .where(
-        and(
-          eq(initiativeParticipants.initiativeId, id),
-          eq(initiativeParticipants.userId, userId)
-        )
-      );
+    console.log("Update initiative request:", {
+      paramId: id,
+      userId,
+      userIdType: typeof userId,
+      user: req.user
+    });
 
-    if (!participant || !['lead', 'architect'].includes(participant.role)) {
-      return res.status(403).json({ error: "Not authorized to update this initiative" });
+    // First check if user is the creator/owner
+    const [initiative] = await db.select()
+      .from(initiatives)
+      .where(eq(initiatives.id, parseInt(id)));
+
+    if (!initiative) {
+      return res.status(404).json({ error: "Initiative not found" });
+    }
+
+    console.log("Initiative found:", {
+      id: initiative.id,
+      createdBy: initiative.createdBy,
+      createdByType: typeof initiative.createdBy,
+      comparison: initiative.createdBy === userId
+    });
+
+    // Allow if user is creator or participant with appropriate role
+    if (initiative.createdBy !== userId) {
+      const [participant] = await db.select()
+        .from(initiativeParticipants)
+        .where(
+          and(
+            eq(initiativeParticipants.initiativeId, initiative.initiativeId),
+            eq(initiativeParticipants.userId, userId)
+          )
+        );
+
+
+      if (!participant || !['lead', 'architect'].includes(participant.role)) {
+        return res.status(403).json({ error: "Not authorized to update this initiative" });
+      }
     }
 
     const [updated] = await db.update(initiatives)
@@ -178,7 +204,7 @@ initiativesRouter.put("/:id", requireAuth, async (req, res) => {
         updatedBy: userId,
         updatedAt: new Date()
       })
-      .where(eq(initiatives.initiativeId, id))
+      .where(eq(initiatives.id, parseInt(id)))
       .returning();
 
     res.json(updated);
@@ -352,6 +378,107 @@ initiativesRouter.post("/:id/conflicts/:conflictId/resolve", requireAuth, async 
 });
 
 // Complete initiative (baseline)
+initiativesRouter.post("/:id/baseline", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+
+    // Check if user has permission
+    const [participant] = await db.select()
+      .from(initiativeParticipants)
+      .where(
+        and(
+          eq(initiativeParticipants.initiativeId, id),
+          eq(initiativeParticipants.userId, userId)
+        )
+      );
+
+    if (!participant || participant.role !== 'lead') {
+      return res.status(403).json({ error: "Only initiative lead can complete the initiative" });
+    }
+
+    await VersionControlService.baselineInitiative(id, userId);
+
+    res.json({ message: "Initiative completed and baselined successfully" });
+  } catch (error) {
+    console.error("Error completing initiative:", error);
+    res.status(500).json({ error: error.message || "Failed to complete initiative" });
+  }
+});
+
+// Transfer ownership
+initiativesRouter.post("/:id/transfer-ownership", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+    const { newOwnerId } = req.body;
+
+    // Check if user is the current owner (creator)
+    const [initiative] = await db.select()
+      .from(initiatives)
+      .where(eq(initiatives.id, parseInt(id)));
+
+    if (!initiative || initiative.createdBy !== userId) {
+      return res.status(403).json({ error: "Only the initiative owner can transfer ownership" });
+    }
+
+    // Update the initiative creator and add new owner as lead participant
+    await db.transaction(async (tx) => {
+      // Update initiative owner
+      await tx.update(initiatives)
+        .set({
+          createdBy: newOwnerId,
+          updatedBy: userId,
+          updatedAt: new Date()
+        })
+        .where(eq(initiatives.id, parseInt(id)));
+
+      // Remove old owner as lead if they are a participant
+      await tx.update(initiativeParticipants)
+        .set({ role: 'developer' })
+        .where(
+          and(
+            eq(initiativeParticipants.initiativeId, initiative.initiativeId),
+            eq(initiativeParticipants.userId, userId),
+            eq(initiativeParticipants.role, 'lead')
+          )
+        );
+
+      // Add new owner as lead participant if not already
+      const [existingParticipant] = await tx.select()
+        .from(initiativeParticipants)
+        .where(
+          and(
+            eq(initiativeParticipants.initiativeId, initiative.initiativeId),
+            eq(initiativeParticipants.userId, newOwnerId)
+          )
+        );
+
+      if (existingParticipant) {
+        // Update existing participant to lead
+        await tx.update(initiativeParticipants)
+          .set({ role: 'lead' })
+          .where(eq(initiativeParticipants.id, existingParticipant.id));
+      } else {
+        // Add as new lead participant
+        await tx.insert(initiativeParticipants)
+          .values({
+            initiativeId: initiative.initiativeId,
+            userId: newOwnerId,
+            role: 'lead',
+            addedBy: userId
+          });
+      }
+    });
+
+    res.json({ message: "Ownership transferred successfully" });
+  } catch (error) {
+    console.error("Error transferring ownership:", error);
+    res.status(500).json({ error: "Failed to transfer ownership" });
+  }
+});
+
+// Complete initiative (baseline) - duplicate endpoint for backward compatibility
 initiativesRouter.post("/:id/complete", requireAuth, async (req, res) => {
   try {
     const { id } = req.params;

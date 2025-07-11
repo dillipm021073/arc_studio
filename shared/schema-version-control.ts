@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, decimal, index, primaryKey, foreignKey } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, decimal, index, primaryKey, foreignKey, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { applications, interfaces, businessProcesses, users } from "./schema";
@@ -99,7 +99,7 @@ export const artifactLocks = pgTable("artifact_locks", {
   lockExpiry: timestamp("lock_expiry"), // Auto-release after timeout
   lockReason: text("lock_reason"),
 }, (table) => ({
-  uniqueLock: index("idx_unique_lock").on(table.artifactType, table.artifactId, table.initiativeId),
+  uniqueLock: unique("idx_unique_lock").on(table.artifactType, table.artifactId, table.initiativeId),
   expiryIdx: index("idx_locks_expiry").on(table.lockExpiry),
 }));
 

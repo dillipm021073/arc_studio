@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePersistentFilters } from "@/hooks/use-persistent-filters";
 import { useCommunicationCounts } from "@/hooks/use-communication-counts";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useMultiSelect } from "@/hooks/use-multi-select";
 import { useQuery } from "@tanstack/react-query";
+import { useInitiative } from "@/components/initiatives/initiative-context";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -56,7 +58,10 @@ import {
   ArrowRight,
   FileJson,
   Copy,
-  AlertTriangle
+  AlertTriangle,
+  GitBranch,
+  Lock,
+  Unlock
 } from "lucide-react";
 import { Link } from "wouter";
 import InterfaceFormEnhanced from "@/components/interfaces/interface-form-enhanced";
@@ -69,6 +74,7 @@ import { BulkEditDialog, type BulkEditField } from "@/components/bulk-edit-dialo
 import CommunicationBadge from "@/components/communications/communication-badge";
 import InterfaceDecommissionModal from "@/components/modals/interface-decommission-modal";
 import { cn } from "@/lib/utils";
+import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
 
 interface Interface {
   id: number;
@@ -109,8 +115,22 @@ export default function Interfaces() {
   const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
+  // Initiative context
+  const { currentInitiative, isProductionView } = useInitiative();
+
   const { data: interfaces, isLoading } = useQuery<Interface[]>({
     queryKey: ["/api/interfaces"],
+  });
+
+  // Fetch locks for version control
+  const { data: locks } = useQuery({
+    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryFn: async () => {
+      if (!currentInitiative) return [];
+      const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
+      return response.data;
+    },
+    enabled: !!currentInitiative && !isProductionView
   });
 
   const { data: businessProcesses } = useQuery({
@@ -272,6 +292,69 @@ export default function Interfaces() {
     bulkUpdateMutation.mutate({ ids, updates });
   };
 
+  // Version Control mutations
+  const checkoutMutation = useMutation({
+    mutationFn: async (iface: Interface) => {
+      const response = await api.post('/api/version-control/checkout', {
+        artifactType: 'interface',
+        artifactId: iface.id,
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: (data, iface) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      toast({
+        title: "Interface checked out",
+        description: `${iface.imlNumber} is now locked for editing in ${currentInitiative?.name}`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Checkout failed",
+        description: error.response?.data?.error || "Failed to checkout interface",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const checkinMutation = useMutation({
+    mutationFn: async ({ iface, changes }: { iface: Interface; changes: any }) => {
+      const response = await api.post('/api/version-control/checkin', {
+        artifactType: 'interface',
+        artifactId: iface.id,
+        initiativeId: currentInitiative?.initiativeId,
+        changes,
+        changeDescription: `Updated ${iface.imlNumber} via UI`
+      });
+      return response.data;
+    },
+    onSuccess: (data, { iface }) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/interfaces'] });
+      toast({
+        title: "Changes checked in",
+        description: `${iface.imlNumber} has been updated in ${currentInitiative?.name}`
+      });
+      setEditingInterface(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Checkin failed",
+        description: error.response?.data?.error || "Failed to checkin changes",
+        variant: "destructive"
+      });
+    }
+  });
+
+  // Helper to check if an interface is locked
+  const isInterfaceLocked = (interfaceId: number) => {
+    if (!locks) return null;
+    return locks.find((l: any) => 
+      l.lock.artifactType === 'interface' && 
+      l.lock.artifactId === interfaceId
+    );
+  };
 
   const getApplication = (id: number) => {
     return applications?.find(app => app.id === id);
@@ -452,13 +535,34 @@ export default function Interfaces() {
             </Button>
             <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-blue-600 text-white hover:bg-blue-700">
+                <Button 
+                  className="bg-blue-600 text-white hover:bg-blue-700"
+                  disabled={isProductionView && currentInitiative}
+                >
                   <Plus className="mr-2" size={16} />
                   New Interface
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
-                <InterfaceFormEnhanced onSuccess={() => setIsCreateDialogOpen(false)} />
+                {currentInitiative && !isProductionView ? (
+                  <div className="mb-4 p-3 bg-blue-900/20 border border-blue-700 rounded">
+                    <p className="text-sm text-blue-300">
+                      <GitBranch className="inline h-4 w-4 mr-1" />
+                      Creating in initiative: <strong>{currentInitiative.name}</strong>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mb-4 p-3 bg-yellow-900/20 border border-yellow-700 rounded">
+                    <p className="text-sm text-yellow-300">
+                      <AlertTriangle className="inline h-4 w-4 mr-1" />
+                      Creating directly in production. Switch to an initiative to track changes.
+                    </p>
+                  </div>
+                )}
+                <InterfaceFormEnhanced 
+                  onSuccess={() => setIsCreateDialogOpen(false)} 
+                  initiativeId={currentInitiative?.initiativeId}
+                />
               </DialogContent>
             </Dialog>
           </div>
@@ -467,8 +571,11 @@ export default function Interfaces() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-6">
+        {/* View Mode Indicator */}
+        <ViewModeIndicator />
+        
         {/* Search and Filter Bar */}
-        <div className="mb-6 space-y-4">
+        <div className="mb-6 space-y-4 mt-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="relative">
@@ -555,6 +662,60 @@ export default function Interfaces() {
                     {rowContent}
                   </ContextMenuTrigger>
                   <ContextMenuContent className="bg-gray-800 border-gray-700">
+                    {/* Version Control Options */}
+                    {currentInitiative && !isProductionView && (
+                      <>
+                        {(() => {
+                          const lock = isInterfaceLocked(interface_.id);
+                          const isLockedByMe = lock?.lock.lockedBy === lock?.user?.id;
+                          const isLockedByOther = lock && !isLockedByMe;
+                          
+                          return (
+                            <>
+                              {!lock && (
+                                <ContextMenuItem 
+                                  onClick={() => checkoutMutation.mutate(interface_)}
+                                  disabled={checkoutMutation.isPending}
+                                  className="text-gray-300 hover:bg-gray-700"
+                                >
+                                  <GitBranch className="mr-2 h-4 w-4" />
+                                  Checkout
+                                </ContextMenuItem>
+                              )}
+                              {isLockedByMe && (
+                                <>
+                                  <ContextMenuItem 
+                                    onClick={() => setEditingInterface(interface_)}
+                                    className="text-gray-300 hover:bg-gray-700"
+                                  >
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </ContextMenuItem>
+                                  <ContextMenuItem 
+                                    onClick={() => checkinMutation.mutate({ interface: interface_, changes: {} })}
+                                    disabled={checkinMutation.isPending}
+                                    className="text-gray-300 hover:bg-gray-700"
+                                  >
+                                    <Unlock className="mr-2 h-4 w-4" />
+                                    Checkin
+                                  </ContextMenuItem>
+                                </>
+                              )}
+                              {isLockedByOther && (
+                                <ContextMenuItem 
+                                  disabled
+                                  className="text-gray-500"
+                                >
+                                  <Lock className="mr-2 h-4 w-4" />
+                                  Locked by {lock.user?.username}
+                                </ContextMenuItem>
+                              )}
+                            </>
+                          );
+                        })()}
+                        <ContextMenuSeparator className="bg-gray-700" />
+                      </>
+                    )}
                     <ContextMenuItem 
                       onClick={() => setViewingInterface(interface_)}
                       className="text-gray-300 hover:bg-gray-700"
@@ -562,7 +723,7 @@ export default function Interfaces() {
                       <Eye className="h-4 w-4 mr-2" />
                       View Details
                     </ContextMenuItem>
-                    {canUpdate && (
+                    {canUpdate && (!currentInitiative || isProductionView) && (
                       <ContextMenuItem 
                         onClick={() => setEditingInterface(interface_)}
                         className="text-gray-300 hover:bg-gray-700"
@@ -632,6 +793,30 @@ export default function Interfaces() {
                         <div className="flex items-center space-x-2">
                           <Plug className="h-4 w-4 text-green-600" />
                           <span>{interface_.imlNumber}</span>
+                          {(() => {
+                            const lock = isInterfaceLocked(interface_.id);
+                            if (!lock) return null;
+                            const isLockedByMe = lock.lock.lockedBy === lock.user?.id;
+                            return (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    {isLockedByMe ? (
+                                      <GitBranch className="h-4 w-4 text-green-500" />
+                                    ) : (
+                                      <Lock className="h-4 w-4 text-yellow-500" />
+                                    )}
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {isLockedByMe 
+                                      ? `Checked out by you in ${currentInitiative?.name}`
+                                      : `Locked by ${lock.user?.username} in ${currentInitiative?.name}`
+                                    }
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            );
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell className="text-gray-300">
@@ -832,12 +1017,6 @@ export default function Interfaces() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Edit Interface Dialog */}
-      <InterfaceEditDialog
-        interface={editingInterface}
-        open={!!editingInterface}
-        onOpenChange={(open) => !open && setEditingInterface(null)}
-      />
 
       {/* Duplicate and Edit Interface Dialog */}
       <Dialog open={!!duplicatingInterface} onOpenChange={(open) => !open && setDuplicatingInterface(null)}>
@@ -906,6 +1085,35 @@ export default function Interfaces() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Edit Interface Dialog */}
+      {editingInterface && (
+        <InterfaceEditDialog
+          interface={editingInterface}
+          open={!!editingInterface}
+          onOpenChange={(open) => !open && setEditingInterface(null)}
+          onSuccess={async (updatedInterface) => {
+            try {
+              // If in an initiative and interface is checked out, do checkin
+              if (currentInitiative && !isProductionView) {
+                const lock = isInterfaceLocked(editingInterface.id);
+                if (lock?.lock.lockedBy === lock?.user?.id) {
+                  // Interface is checked out by current user, do checkin
+                  await checkinMutation.mutateAsync({ 
+                    iface: editingInterface, 
+                    changes: updatedInterface 
+                  });
+                }
+              }
+            } catch (error) {
+              console.error('Checkin failed after edit:', error);
+              // Don't block the UI close even if checkin fails
+            }
+            setEditingInterface(null);
+            queryClient.invalidateQueries({ queryKey: ["/api/interfaces"] });
+          }}
+        />
+      )}
     </div>
   );
 }

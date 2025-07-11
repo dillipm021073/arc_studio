@@ -103,6 +103,20 @@ router.post("/", requirePermission("internal_activities", "create"), async (req,
       .values(validatedData)
       .returning();
 
+    // Create baseline version for version control
+    const { artifactVersions } = await import("../../shared/schema");
+    await db.insert(artifactVersions).values({
+      artifactType: 'internal_process',
+      artifactId: newActivity.id,
+      versionNumber: 1,
+      isBaseline: true,
+      artifactData: newActivity,
+      changeType: 'create',
+      createdBy: req.user!.id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+
     res.status(201).json(newActivity);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -180,6 +194,22 @@ router.post("/bulk", requirePermission("internal_activities", "create"), async (
       .insert(internalActivities)
       .values(validatedActivities)
       .returning();
+
+    // Create baseline versions for version control
+    const { artifactVersions } = await import("../../shared/schema");
+    const baselineVersions = newActivities.map(activity => ({
+      artifactType: 'internal_process' as const,
+      artifactId: activity.id,
+      versionNumber: 1,
+      isBaseline: true,
+      artifactData: activity,
+      changeType: 'create' as const,
+      createdBy: req.user!.id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    }));
+    
+    await db.insert(artifactVersions).values(baselineVersions);
 
     res.status(201).json(newActivities);
   } catch (error) {
