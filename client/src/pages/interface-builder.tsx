@@ -1864,56 +1864,71 @@ export default function InterfaceBuilder() {
               });
             }
             
-            // For complex SVGs, we'll use the UML node type which handles SVG better
-            // For simpler SVGs, we can use image node
-            const useUmlNode = svgString.length > 50000 || response.data.isFallback;
+            // Extract dimensions from SVG if possible
+            let svgWidth = 800;
+            let svgHeight = 600;
             
-            if (useUmlNode) {
-              // Use UML node for complex diagrams
-              const newNode = {
-                id: `uml-${diagram.id}-${Date.now()}`,
-                type: 'uml',
-                position: { 
-                  x: Math.random() * 300 + 100, 
-                  y: Math.random() * 300 + 100 
-                },
-                style: {
-                  width: 600,
-                  height: 400
-                },
-                data: {
-                  id: `uml-${diagram.id}`,
-                  name: diagram.name,
-                  description: diagram.description || '',
-                  diagramType: diagram.diagramType,
-                  content: diagram.content,
-                  svg: svgString,
-                  metadata: response.data.metadata,
-                  isFallback: response.data.isFallback || false,
-                  category: 'UML',
-                  color: '#9333ea',
-                  width: 600,
-                  height: 400,
-                  isResizing: true
-                }
-              };
+            const widthMatch = svgString.match(/width="(\d+)(?:px)?"/);
+            const heightMatch = svgString.match(/height="(\d+)(?:px)?"/);
+            
+            if (widthMatch && heightMatch) {
+              svgWidth = parseInt(widthMatch[1]);
+              svgHeight = parseInt(heightMatch[1]);
               
-              console.log('Adding UML node to canvas (complex diagram)');
+              // Scale down if too large for the canvas
+              const maxWidth = 1200;
+              const maxHeight = 800;
               
-              setCanvasData(prev => ({
-                ...prev,
-                nodes: [...prev.nodes, newNode]
-              }));
-              
-              setShowUmlManager(false);
-              
-              toast({
-                title: 'UML Diagram Added',
-                description: `${diagram.name} has been added to the canvas`,
-              });
-              
-              return;
+              if (svgWidth > maxWidth || svgHeight > maxHeight) {
+                const scale = Math.min(maxWidth / svgWidth, maxHeight / svgHeight);
+                svgWidth = Math.round(svgWidth * scale);
+                svgHeight = Math.round(svgHeight * scale);
+              }
             }
+            
+            // Always use svgBackground node for direct canvas rendering
+            const newNode = {
+              id: `uml-svg-${diagram.id}-${Date.now()}`,
+              type: 'svgBackground',
+              position: { 
+                x: 100, 
+                y: 100 
+              },
+              data: {
+                svg: svgString,
+                width: svgWidth,
+                height: svgHeight,
+                label: diagram.name
+              },
+              // Make the node dimensions match the SVG
+              style: {
+                width: svgWidth,
+                height: svgHeight,
+                background: 'transparent',
+                border: 'none',
+                padding: 0
+              },
+              // Prevent selection box
+              selectable: true,
+              dragHandle: '.drag-handle'
+            };
+            
+            console.log('Adding SVG background node to canvas');
+            console.log('SVG dimensions:', svgWidth, 'x', svgHeight);
+            
+            setCanvasData(prev => ({
+              ...prev,
+              nodes: [...prev.nodes, newNode]
+            }));
+            
+            setShowUmlManager(false);
+            
+            toast({
+              title: 'UML Diagram Added',
+              description: `${diagram.name} has been rendered directly on the canvas`,
+            });
+            
+            return;
             
             // For simpler diagrams, continue with image node approach
             // Clean and encode the SVG
