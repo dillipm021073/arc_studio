@@ -206,11 +206,8 @@ export default function InterfaceBuilder() {
 
   // Handle component selection from library
   const handleComponentSelect = useCallback((component: ComponentTemplate) => {
-    console.log('Component selected:', component.type, component.id);
-    
     // Check if it's a UML component
     if (component.type === 'uml' || component.id === 'uml-folder') {
-      console.log('Opening UML manager');
       setShowUmlManager(true);
       return;
     }
@@ -1853,7 +1850,6 @@ export default function InterfaceBuilder() {
 
             // Convert SVG to data URL
             const svgString = response.data.svg;
-            console.log('SVG Response received, length:', svgString.length);
             
             // Check if we got a fallback response
             if (response.data.isFallback) {
@@ -1912,9 +1908,6 @@ export default function InterfaceBuilder() {
               selectable: true,
               dragHandle: '.drag-handle'
             };
-            
-            console.log('Adding SVG background node to canvas');
-            console.log('SVG dimensions:', svgWidth, 'x', svgHeight);
             
             setCanvasData(prev => ({
               ...prev,
