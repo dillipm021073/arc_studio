@@ -2154,6 +2154,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const internalActivitiesVersionControlRouter = await import("./routes/internal-activities-version-control");
   app.use("/api/version-control", internalActivitiesVersionControlRouter.default);
   
+  // Register UML routes
+  const { umlRouter } = await import("./routes/uml");
+  app.use("/api/uml", umlRouter);
+  
   // Register Technical Processes Version Control routes
   const technicalProcessesVersionControlRouter = await import("./routes/technical-processes-version-control");
   app.use("/api/version-control", technicalProcessesVersionControlRouter.default);

@@ -1,6 +1,8 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from "@shared/schema";
+import * as versionControlSchema from "@shared/schema-version-control";
+import * as umlSchema from "@shared/schema-uml";
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -14,4 +16,11 @@ export const pool = new Pool({
   ssl: false // Disable SSL for local development
 });
 
-export const db = drizzle(pool, { schema });
+// Combine all schemas
+const combinedSchema = {
+  ...schema,
+  ...versionControlSchema,
+  ...umlSchema
+};
+
+export const db = drizzle(pool, { schema: combinedSchema });

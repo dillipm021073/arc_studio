@@ -50,6 +50,7 @@ import { projectStorage, ProjectStorageType } from '@/services/project-storage';
 import type { ProjectWithStorage } from '@/services/project-storage';
 import SaveAsDialog from '@/components/interface-builder/save-as-dialog';
 import GenerateFromLobDialog from '@/components/interface-builder/generate-from-lob-dialog';
+import { UmlManagerDialog } from '@/components/interface-builder/uml-manager-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { InterfaceProject } from '@/data/example-projects';
 import { interfaceBuilderApi } from '@/services/interface-builder-api';
@@ -89,6 +90,7 @@ export default function InterfaceBuilder() {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [canvasKey, setCanvasKey] = useState(0);
   const [showHelpDialog, setShowHelpDialog] = useState(false);
+  const [showUmlManager, setShowUmlManager] = useState(false);
   
   // Canvas toolbar state
   const [canUndo, setCanUndo] = useState(false);
@@ -203,6 +205,12 @@ export default function InterfaceBuilder() {
 
   // Handle component selection from library
   const handleComponentSelect = useCallback((component: ComponentTemplate) => {
+    // Check if it's a UML component
+    if (component.type === 'uml') {
+      setShowUmlManager(true);
+      return;
+    }
+    
     setSelectedComponent(component);
     setShowProperties(true);
     
@@ -1826,6 +1834,19 @@ export default function InterfaceBuilder() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* UML Manager Dialog */}
+      <UmlManagerDialog
+        open={showUmlManager}
+        onOpenChange={setShowUmlManager}
+        onRenderDiagram={(diagram) => {
+          // TODO: Implement rendering UML diagram on canvas
+          toast({
+            title: 'Render UML Diagram',
+            description: `Rendering ${diagram.name} on canvas`,
+          });
+        }}
+      />
     </div>
   );
 }

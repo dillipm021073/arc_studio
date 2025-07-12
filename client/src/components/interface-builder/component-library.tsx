@@ -33,7 +33,8 @@ import {
   Users,
   MoveRight,
   Box,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Folder
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -42,17 +43,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export interface ComponentTemplate {
   id: string;
-  type: 'interface' | 'application' | 'process' | 'text' | 'line' | 'shape';
+  type: 'interface' | 'application' | 'process' | 'text' | 'line' | 'shape' | 'uml' | 'internalActivity' | 'decision' | 'rectangle' | 'container' | 'roundedRectangle' | 'image';
   category: string;
   name: string;
   description: string;
   icon: React.ComponentType<any>;
   color: string;
   properties: Record<string, any>;
-  connectionPoints: {
+  connectionPoints?: {
     input: Array<{ id: string; type: string; position: 'top' | 'bottom' | 'left' | 'right' }>;
     output: Array<{ id: string; type: string; position: 'top' | 'bottom' | 'left' | 'right' }>;
   };
+  defaultData?: any;
 }
 
 const componentTemplates: ComponentTemplate[] = [
@@ -704,16 +706,18 @@ export default function ComponentLibrary({ onComponentSelect }: ComponentLibrary
     interface: { canScrollUp: false, canScrollDown: false },
     application: { canScrollUp: false, canScrollDown: false },
     process: { canScrollUp: false, canScrollDown: false },
-    tools: { canScrollUp: false, canScrollDown: false }
+    tools: { canScrollUp: false, canScrollDown: false },
+    uml: { canScrollUp: false, canScrollDown: false }
   });
   const scrollRefs = useRef<Record<string, HTMLDivElement | null>>({
     interface: null,
     application: null,
     process: null,
-    tools: null
+    tools: null,
+    uml: null
   });
 
-  const categories = ["all", "API", "Enterprise", "Messaging", "Data", "Frontend", "Backend", "Cloud", "Business", "Media", "Geometric Tools"];
+  const categories = ["all", "API", "Enterprise", "Messaging", "Data", "Frontend", "Backend", "Cloud", "Business", "Media", "Geometric Tools", "UML"];
   
   // Add more components to demonstrate scrolling
   const additionalComponents: ComponentTemplate[] = [
@@ -1417,6 +1421,24 @@ export default function ComponentLibrary({ onComponentSelect }: ComponentLibrary
           { id: 'bottom', type: 'data', position: 'bottom' }
         ]
       }
+    },
+    {
+      id: 'uml-folder',
+      type: 'uml',
+      category: 'UML',
+      name: 'UML Diagrams',
+      description: 'Create and manage PlantUML diagrams',
+      icon: Folder,
+      color: 'bg-purple-600',
+      properties: {
+        diagramType: 'folder',
+        folderName: 'UML Diagrams',
+        description: 'PlantUML sequence diagrams and more'
+      },
+      connectionPoints: {
+        input: [],
+        output: []
+      }
     }
   ];
   
@@ -1588,11 +1610,12 @@ export default function ComponentLibrary({ onComponentSelect }: ComponentLibrary
 
       <div className="flex-1 overflow-hidden flex flex-col">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-4 bg-gray-800 mx-4 mt-4 mb-2 flex-shrink-0" style={{ width: 'calc(100% - 2rem)' }}>
+          <TabsList className="grid w-full grid-cols-5 bg-gray-800 mx-4 mt-4 mb-2 flex-shrink-0" style={{ width: 'calc(100% - 2rem)' }}>
             <TabsTrigger value="interface" className="text-xs">Interfaces</TabsTrigger>
             <TabsTrigger value="application" className="text-xs">Apps</TabsTrigger>
             <TabsTrigger value="process" className="text-xs">Process</TabsTrigger>
             <TabsTrigger value="tools" className="text-xs">Tools</TabsTrigger>
+            <TabsTrigger value="uml" className="text-xs">UML</TabsTrigger>
           </TabsList>
           
           <div className="flex-1 overflow-hidden min-h-0">

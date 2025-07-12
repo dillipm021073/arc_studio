@@ -8,7 +8,7 @@ import { useLocation } from "wouter";
 import { useInitiative } from "@/components/initiatives/initiative-context";
 import { api } from "@/lib/api";
 import { Plus, Search, Edit, Trash2, Network, MoreVertical, Info, FileJson, Copy, Eye, TableIcon, UserPlus, FileDown, ChevronDown, Layers, GitBranch, Lock, Unlock, AlertTriangle , X} from "lucide-react";
-import { getProcessLevelIcon, getProcessIconProps, getProcessLevelDescription } from "@/lib/business-process-utils";
+import { getProcessLevelIcon, getProcessIconProps, getProcessLevelDescription, sortBusinessProcessesHierarchically } from "@/lib/business-process-utils";
 import { ProcessLevelBadge } from "@/components/ui/process-level-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,7 +118,9 @@ export default function BusinessProcesses() {
     queryFn: async () => {
       const response = await fetch("/api/business-processes");
       if (!response.ok) throw new Error("Failed to fetch business processes");
-      return response.json();
+      const data = await response.json();
+      console.log('Fetched business processes:', data.length, data);
+      return data;
     },
   });
 
@@ -142,7 +144,7 @@ export default function BusinessProcesses() {
     }
   });
 
-  // Fetch business process relationships for tree view
+  // Fetch business process relationships for hierarchy and tree view
   const { data: relationships = [] } = useQuery({
     queryKey: ["business-process-relationships"],
     queryFn: async () => {
@@ -150,7 +152,7 @@ export default function BusinessProcesses() {
       if (!response.ok) throw new Error("Failed to fetch relationships");
       return response.json();
     },
-    enabled: viewMode === "tree", // Only fetch when tree view is active
+    // Always fetch relationships as they're needed for hierarchical sorting in table view too
   });
 
   // Fetch communication counts for all business processes
@@ -599,6 +601,7 @@ export default function BusinessProcesses() {
 
   // Apply standard filters first
   let filteredByConditions = businessProcesses ? applyFilters(businessProcesses, otherFilters) : [];
+  console.log('After standard filters:', filteredByConditions.length);
 
   // Then apply custom hasCommunications filter if present
   if (hasCommunicationsFilter && communicationCounts) {
@@ -638,9 +641,28 @@ export default function BusinessProcesses() {
     );
   });
 
+  // Apply hierarchical sorting to filtered business processes
+  const hierarchicalBPs = useMemo(() => {
+    console.log('Computing hierarchicalBPs:', {
+      viewMode,
+      filteredBPsLength: filteredBPs.length,
+      relationshipsLength: relationships.length,
+      businessProcessesLength: businessProcesses?.length || 0
+    });
+    
+    if (viewMode === 'table') {
+      // Apply hierarchical sorting in table view
+      const sorted = sortBusinessProcessesHierarchically(filteredBPs, relationships);
+      console.log('Sorted BPs length:', sorted.length);
+      return sorted;
+    }
+    // For tree view, return unsorted as the tree component handles its own hierarchy
+    return filteredBPs;
+  }, [filteredBPs, relationships, viewMode]);
+
   // Initialize multi-select hook
   const multiSelect = useMultiSelect({
-    items: filteredBPs,
+    items: hierarchicalBPs,
     getItemId: (process) => process.id,
   });
 
@@ -817,7 +839,7 @@ export default function BusinessProcesses() {
             <TableRow className="border-gray-700">
               <TableHead className="w-12">
                 <Checkbox
-                  checked={filteredBPs.length > 0 && multiSelect.selectedItems.length === filteredBPs.length}
+                  checked={hierarchicalBPs.length > 0 && multiSelect.selectedItems.length === hierarchicalBPs.length}
                   onCheckedChange={(checked) => {
                     if (checked) {
                       multiSelect.selectAll();
@@ -847,18 +869,21 @@ export default function BusinessProcesses() {
                   Loading...
                 </TableCell>
               </TableRow>
-            ) : filteredBPs.length === 0 ? (
+            ) : hierarchicalBPs.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={10} className="text-center text-gray-400">
                   No business processes found
                 </TableCell>
               </TableRow>
             ) : (
-              filteredBPs.map((bp: any) => (
+              hierarchicalBPs.map((bp: any) => (
                 <ContextMenu key={bp.id}>
                   <ContextMenuTrigger asChild>
                     <TableRow 
-                      className={getRowClassName(getBusinessProcessState(bp), multiSelect.isSelected(bp))}
+                      className={`${getRowClassName(getBusinessProcessState(bp), multiSelect.isSelected(bp))} ${
+                        bp.indentLevel === 1 ? 'bg-gray-800/30' : 
+                        bp.indentLevel === 2 ? 'bg-gray-800/50' : ''
+                      }`}
                       onDoubleClick={() => setViewingBP(bp)}
                       title="Double-click to view business process details"
                     >
@@ -871,7 +896,13 @@ export default function BusinessProcesses() {
                         />
                       </TableCell>
                       <TableCell className="font-medium text-white">
-                        <div className="flex items-center space-x-2">
+                        <div 
+                          className="flex items-center space-x-2" 
+                          style={{ paddingLeft: `${(bp.indentLevel || 0) * 24}px` }}
+                        >
+                          {bp.indentLevel > 0 && (
+                            <span className="text-gray-500 mr-1">└─</span>
+                          )}
                           {(() => {
                             const ProcessIcon = getProcessLevelIcon(bp.level);
                             return (
@@ -881,7 +912,7 @@ export default function BusinessProcesses() {
                               />
                             );
                           })()}
-                          <span>{bp.businessProcess}</span>
+                          <span className={bp.indentLevel > 0 ? "text-gray-200" : ""}>{bp.businessProcess}</span>
                           <ArtifactStatusIndicator 
                             state={getBusinessProcessState(bp)} 
                             initiativeName={currentInitiative?.name}
