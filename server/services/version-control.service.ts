@@ -9,6 +9,8 @@ import {
   applications,
   interfaces,
   businessProcesses,
+  internalActivities,
+  technicalProcesses,
   ArtifactVersion,
   Initiative,
   VersionConflict
@@ -84,6 +86,12 @@ export class VersionControlService {
     } else if (type === 'business_process') {
       const [bp] = await db.select().from(businessProcesses).where(eq(businessProcesses.id, artifactId));
       productionData = bp;
+    } else if (type === 'internal_process') {
+      const [activity] = await db.select().from(internalActivities).where(eq(internalActivities.id, artifactId));
+      productionData = activity;
+    } else if (type === 'technical_process') {
+      const [tp] = await db.select().from(technicalProcesses).where(eq(technicalProcesses.id, artifactId));
+      productionData = tp;
     }
     
     if (!productionData) {
@@ -177,8 +185,15 @@ export class VersionControlService {
         )
       );
 
-    if (existingLock && existingLock.initiativeId !== initiativeId) {
-      throw new Error(`Artifact is locked by initiative ${existingLock.initiativeId}`);
+    // Check if locked by different initiative or different user
+    if (existingLock) {
+      if (existingLock.initiativeId !== initiativeId) {
+        throw new Error(`Artifact is locked by initiative ${existingLock.initiativeId}`);
+      }
+      if (existingLock.lockedBy !== userId) {
+        throw new Error(`Artifact is locked by another user`);
+      }
+      // If locked by same user in same initiative, allow checkout to proceed
     }
 
     // Get baseline version
@@ -216,12 +231,20 @@ export class VersionControlService {
       );
     
     // Then create new lock
-    await db.insert(artifactLocks).values({
+    const [newLock] = await db.insert(artifactLocks).values({
       artifactType: type,
       artifactId,
       initiativeId,
       lockedBy: userId,
       lockExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
+    }).returning();
+    
+    console.log('Service: Lock created in VersionControlService:', {
+      lock: newLock,
+      artifactType: type,
+      artifactId,
+      initiativeId,
+      userId
     });
 
     return newVersion;

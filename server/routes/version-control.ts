@@ -4,7 +4,8 @@ import { db } from "../db";
 import { artifactLocks, artifactVersions, initiativeParticipants, users } from "@db/schema";
 import { eq, and, or, gt, sql } from "drizzle-orm";
 import { VersionControlService, ArtifactType } from "../services/version-control.service";
-import { requireAuth } from "../auth";
+import { CheckoutImpactService } from "../services/checkout-impact.service";
+import { requireAuth, requireAdmin } from "../auth";
 
 export const versionControlRouter = Router();
 
@@ -28,20 +29,32 @@ const checkinSchema = z.object({
 versionControlRouter.post("/checkout", requireAuth, async (req, res) => {
   try {
     const userId = req.user!.id;
+    const userRole = req.user!.role;
     const { artifactType, artifactId, initiativeId } = checkoutSchema.parse(req.body);
+    
+    console.log('Checkout request received:', {
+      userId,
+      userRole,
+      artifactType,
+      artifactId,
+      initiativeId,
+      requestBody: req.body
+    });
 
-    // Check if user is participant in the initiative
-    const [participant] = await db.select()
-      .from(initiativeParticipants)
-      .where(
-        and(
-          eq(initiativeParticipants.initiativeId, initiativeId),
-          eq(initiativeParticipants.userId, userId)
-        )
-      );
+    // Check if user is participant in the initiative (admins bypass this check)
+    if (userRole !== 'admin') {
+      const [participant] = await db.select()
+        .from(initiativeParticipants)
+        .where(
+          and(
+            eq(initiativeParticipants.initiativeId, initiativeId),
+            eq(initiativeParticipants.userId, userId)
+          )
+        );
 
-    if (!participant) {
-      return res.status(403).json({ error: "You must be a participant in this initiative to checkout artifacts" });
+      if (!participant) {
+        return res.status(403).json({ error: "You must be a participant in this initiative to checkout artifacts" });
+      }
     }
 
     // Check for existing locks by other users
@@ -70,10 +83,38 @@ versionControlRouter.post("/checkout", requireAuth, async (req, res) => {
       initiativeId,
       userId
     );
+    
+    console.log(`Checkout successful:`, {
+      artifactType,
+      artifactId,
+      initiativeId,
+      userId,
+      versionId: version.id
+    });
+    
+    // Verify lock was created - join with user for complete lock info
+    const [newLockResult] = await db.select({
+      lock: artifactLocks,
+      user: users
+    })
+      .from(artifactLocks)
+      .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
+      .where(
+        and(
+          eq(artifactLocks.artifactType, artifactType),
+          eq(artifactLocks.artifactId, artifactId),
+          eq(artifactLocks.initiativeId, initiativeId),
+          eq(artifactLocks.lockedBy, userId),
+          gt(artifactLocks.lockExpiry, new Date())
+        )
+      );
+    
+    console.log('Lock created:', newLockResult);
 
     res.json({ 
       message: "Artifact checked out successfully",
-      version 
+      version,
+      lock: newLockResult
     });
   } catch (error) {
     console.error("Error checking out artifact:", error);
@@ -172,24 +213,127 @@ versionControlRouter.post("/checkin", requireAuth, async (req, res) => {
   }
 });
 
+// Cancel checkout - removes lock and deletes any uncommitted changes
+versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const { artifactType, artifactId, initiativeId } = checkoutSchema.parse(req.body);
+
+    // Check if user has the lock OR if user is admin
+    const [existingLock] = await db.select()
+      .from(artifactLocks)
+      .where(
+        and(
+          eq(artifactLocks.artifactType, artifactType),
+          eq(artifactLocks.artifactId, artifactId),
+          eq(artifactLocks.initiativeId, initiativeId)
+        )
+      );
+
+    if (!existingLock) {
+      return res.status(404).json({ error: "No checkout found for this artifact in the initiative" });
+    }
+
+    // Check if user owns the lock OR is admin
+    if (existingLock.lockedBy !== userId && userRole !== 'admin') {
+      return res.status(403).json({ 
+        error: "Only the lock owner or admin can cancel this checkout",
+        details: {
+          lockOwnerId: existingLock.lockedBy,
+          requestingUserId: userId,
+          userRole: userRole
+        }
+      });
+    }
+
+    // Check if this is an admin override
+    const isAdminOverride = existingLock.lockedBy !== userId && userRole === 'admin';
+    
+    // Get original user info for admin override logging
+    let originalUser = null;
+    if (isAdminOverride) {
+      const [user] = await db.select({
+        id: users.id,
+        name: users.name,
+        username: users.username
+      })
+      .from(users)
+      .where(eq(users.id, existingLock.lockedBy));
+      originalUser = user;
+    }
+
+    // Remove the lock
+    await db.delete(artifactLocks)
+      .where(eq(artifactLocks.id, existingLock.id));
+
+    // Delete any uncommitted version for this initiative
+    await db.delete(artifactVersions)
+      .where(
+        and(
+          eq(artifactVersions.artifactType, artifactType),
+          eq(artifactVersions.artifactId, artifactId),
+          eq(artifactVersions.initiativeId, initiativeId),
+          eq(artifactVersions.isBaseline, false)
+        )
+      );
+
+    const message = isAdminOverride 
+      ? `Admin override: Checkout cancelled for ${originalUser?.name || 'user'} (${originalUser?.username || 'unknown'})`
+      : "Checkout cancelled and changes discarded";
+
+    res.json({ 
+      success: true, 
+      message,
+      ...(isAdminOverride && { 
+        adminOverride: true,
+        originalUser: originalUser ? {
+          id: originalUser.id,
+          name: originalUser.name,
+          username: originalUser.username
+        } : null
+      })
+    });
+  } catch (error) {
+    console.error("Error cancelling checkout:", error);
+    res.status(500).json({ error: error.message || "Failed to cancel checkout" });
+  }
+});
+
 // Get current locks
 versionControlRouter.get("/locks", requireAuth, async (req, res) => {
   try {
     const { initiativeId } = req.query;
 
-    let query = db.select({
+    let whereConditions = [gt(artifactLocks.lockExpiry, new Date())];
+    
+    if (initiativeId) {
+      whereConditions.push(eq(artifactLocks.initiativeId, initiativeId as string));
+    }
+
+    const query = db.select({
       lock: artifactLocks,
       user: users
     })
     .from(artifactLocks)
     .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
-    .where(gt(artifactLocks.lockExpiry, new Date()));
-
-    if (initiativeId) {
-      query = query.where(eq(artifactLocks.initiativeId, initiativeId as string));
-    }
+    .where(and(...whereConditions));
 
     const locks = await query;
+    
+    console.log(`Fetching locks for initiative ${initiativeId}:`, {
+      count: locks.length,
+      currentTime: new Date(),
+      locks: locks.map(l => ({
+        artifactType: l.lock.artifactType,
+        artifactId: l.lock.artifactId,
+        lockedBy: l.lock.lockedBy,
+        username: l.user?.username,
+        initiativeId: l.lock.initiativeId,
+        expiry: l.lock.lockExpiry,
+        isExpired: l.lock.lockExpiry < new Date()
+      }))
+    });
 
     res.json(locks);
   } catch (error) {
@@ -222,6 +366,467 @@ versionControlRouter.delete("/locks/:lockId", requireAuth, async (req, res) => {
     res.json({ message: "Lock released successfully" });
   } catch (error) {
     console.error("Error releasing lock:", error);
+    res.status(500).json({ error: "Failed to release lock" });
+  }
+});
+
+// IMPACT-AWARE CHECKOUT ENDPOINTS
+
+// Get checkout impact analysis
+versionControlRouter.post("/analyze-checkout-impact", requireAuth, async (req, res) => {
+  try {
+    const { artifactType, artifactId, initiativeId } = req.body;
+
+    if (!artifactType || !artifactId || !initiativeId) {
+      return res.status(400).json({ 
+        error: "artifactType, artifactId, and initiativeId are required" 
+      });
+    }
+
+    const analysis = await CheckoutImpactService.analyzeCheckoutImpact(
+      artifactType as ArtifactType,
+      artifactId,
+      initiativeId
+    );
+
+    res.json(analysis);
+  } catch (error) {
+    console.error("Error analyzing checkout impact:", error);
+    res.status(500).json({ error: "Failed to analyze checkout impact" });
+  }
+});
+
+// Perform bulk checkout based on impact analysis
+versionControlRouter.post("/bulk-checkout", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const { artifactType, artifactId, initiativeId, autoApprove = false } = req.body;
+
+    if (!artifactType || !artifactId || !initiativeId) {
+      return res.status(400).json({ 
+        error: "artifactType, artifactId, and initiativeId are required" 
+      });
+    }
+
+    // Check if user is participant in the initiative (admins bypass this check)
+    if (userRole !== 'admin') {
+      const [participant] = await db.select()
+        .from(initiativeParticipants)
+        .where(
+          and(
+            eq(initiativeParticipants.initiativeId, initiativeId),
+            eq(initiativeParticipants.userId, userId)
+          )
+        );
+
+      if (!participant) {
+        return res.status(403).json({ 
+          error: "You must be a participant in this initiative to checkout artifacts" 
+        });
+      }
+    }
+
+    // First, analyze the impact
+    const analysis = await CheckoutImpactService.analyzeCheckoutImpact(
+      artifactType as ArtifactType,
+      artifactId,
+      initiativeId
+    );
+
+    // Then perform the bulk checkout
+    const results = await CheckoutImpactService.performBulkCheckout(
+      analysis,
+      initiativeId,
+      userId,
+      autoApprove
+    );
+
+    res.json({
+      analysis,
+      checkoutResults: results,
+      message: `Bulk checkout completed. ${results.successful} artifacts checked out successfully, ${results.failed.length} failed.`
+    });
+  } catch (error) {
+    console.error("Error performing bulk checkout:", error);
+    res.status(500).json({ error: "Failed to perform bulk checkout" });
+  }
+});
+
+// Enhanced checkout with optional auto-impact
+versionControlRouter.post("/checkout-with-impact", requireAuth, async (req, res) => {
+  try {
+    const userId = req.user!.id;
+    const userRole = req.user!.role;
+    const { artifactType, artifactId, initiativeId, includeImpacts = false } = req.body;
+
+    if (!artifactType || !artifactId || !initiativeId) {
+      return res.status(400).json({ 
+        error: "artifactType, artifactId, and initiativeId are required" 
+      });
+    }
+
+    // Check if user is participant in the initiative (admins bypass this check)
+    if (userRole !== 'admin') {
+      const [participant] = await db.select()
+        .from(initiativeParticipants)
+        .where(
+          and(
+            eq(initiativeParticipants.initiativeId, initiativeId),
+            eq(initiativeParticipants.userId, userId)
+          )
+        );
+
+      if (!participant) {
+        return res.status(403).json({ 
+          error: "You must be a participant in this initiative to checkout artifacts" 
+        });
+      }
+    }
+
+    if (includeImpacts) {
+      // Perform impact-aware checkout
+      const analysis = await CheckoutImpactService.analyzeCheckoutImpact(
+        artifactType as ArtifactType,
+        artifactId,
+        initiativeId
+      );
+
+      const results = await CheckoutImpactService.performBulkCheckout(
+        analysis,
+        initiativeId,
+        userId,
+        false
+      );
+
+      res.json({
+        primaryCheckout: true,
+        analysis,
+        bulkCheckoutResults: results,
+        message: `Impact-aware checkout completed. ${results.successful} total artifacts checked out.`
+      });
+    } else {
+      // Standard single checkout
+      const version = await VersionControlService.checkoutArtifact(
+        artifactType as ArtifactType,
+        artifactId,
+        initiativeId,
+        userId
+      );
+
+      // Still provide impact analysis for information
+      const analysis = await CheckoutImpactService.analyzeCheckoutImpact(
+        artifactType as ArtifactType,
+        artifactId,
+        initiativeId
+      );
+
+      res.json({
+        primaryCheckout: true,
+        version,
+        analysis,
+        message: "Single artifact checked out successfully. Impact analysis provided for reference."
+      });
+    }
+  } catch (error) {
+    console.error("Error in enhanced checkout:", error);
+    res.status(500).json({ error: error.message || "Failed to checkout artifact" });
+  }
+});
+
+// ADMIN OVERRIDE ENDPOINTS
+
+// Admin override: Force cancel any checkout
+versionControlRouter.post("/admin/cancel-checkout", requireAdmin, async (req, res) => {
+  try {
+    const adminUserId = req.user!.id;
+    const { artifactType, artifactId, initiativeId, reason } = req.body;
+
+    if (!artifactType || !artifactId || !initiativeId) {
+      return res.status(400).json({ error: "artifactType, artifactId, and initiativeId are required" });
+    }
+
+    // Find any existing lock for this artifact
+    const [existingLock] = await db.select({
+      lock: artifactLocks,
+      user: users
+    })
+    .from(artifactLocks)
+    .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
+    .where(
+      and(
+        eq(artifactLocks.artifactType, artifactType),
+        eq(artifactLocks.artifactId, artifactId),
+        eq(artifactLocks.initiativeId, initiativeId)
+      )
+    );
+
+    if (!existingLock) {
+      return res.status(404).json({ error: "No checkout found for this artifact" });
+    }
+
+    const originalUser = existingLock.user;
+
+    // Remove the lock
+    await db.delete(artifactLocks)
+      .where(eq(artifactLocks.id, existingLock.lock.id));
+
+    // Delete any uncommitted version for this initiative
+    await db.delete(artifactVersions)
+      .where(
+        and(
+          eq(artifactVersions.artifactType, artifactType),
+          eq(artifactVersions.artifactId, artifactId),
+          eq(artifactVersions.initiativeId, initiativeId),
+          eq(artifactVersions.isBaseline, false)
+        )
+      );
+
+    res.json({ 
+      success: true, 
+      message: `Admin override: Checkout cancelled for ${originalUser?.name || 'user'} (${originalUser?.username || 'unknown'})`,
+      details: {
+        artifactType,
+        artifactId,
+        initiativeId,
+        originalUser: originalUser ? {
+          id: originalUser.id,
+          name: originalUser.name,
+          username: originalUser.username
+        } : null,
+        reason: reason || 'Admin override - no reason provided'
+      }
+    });
+  } catch (error) {
+    console.error("Error in admin cancel checkout:", error);
+    res.status(500).json({ error: error.message || "Failed to cancel checkout" });
+  }
+});
+
+// Admin override: Force checkout any artifact
+versionControlRouter.post("/admin/force-checkout", requireAdmin, async (req, res) => {
+  try {
+    const adminUserId = req.user!.id;
+    const { artifactType, artifactId, initiativeId, reason } = req.body;
+
+    if (!artifactType || !artifactId || !initiativeId) {
+      return res.status(400).json({ error: "artifactType, artifactId, and initiativeId are required" });
+    }
+
+    // Check for existing locks by other users and forcibly remove them
+    const existingLocks = await db.select({
+      lock: artifactLocks,
+      user: users
+    })
+    .from(artifactLocks)
+    .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
+    .where(
+      and(
+        eq(artifactLocks.artifactType, artifactType),
+        eq(artifactLocks.artifactId, artifactId),
+        gt(artifactLocks.lockExpiry, new Date())
+      )
+    );
+
+    let overriddenUsers = [];
+    
+    // Remove existing locks
+    if (existingLocks.length > 0) {
+      for (const existing of existingLocks) {
+        if (existing.user) {
+          overriddenUsers.push({
+            id: existing.user.id,
+            name: existing.user.name,
+            username: existing.user.username,
+            initiativeId: existing.lock.initiativeId
+          });
+        }
+
+        await db.delete(artifactLocks)
+          .where(eq(artifactLocks.id, existing.lock.id));
+
+        // Delete any uncommitted changes for that user's initiative
+        await db.delete(artifactVersions)
+          .where(
+            and(
+              eq(artifactVersions.artifactType, artifactType),
+              eq(artifactVersions.artifactId, artifactId),
+              eq(artifactVersions.initiativeId, existing.lock.initiativeId),
+              eq(artifactVersions.isBaseline, false)
+            )
+          );
+      }
+    }
+
+    // Create the admin checkout
+    const lockExpiry = new Date();
+    lockExpiry.setHours(lockExpiry.getHours() + 24); // 24 hour lock
+
+    const [newLock] = await db.insert(artifactLocks)
+      .values({
+        artifactType,
+        artifactId,
+        initiativeId,
+        lockedBy: adminUserId,
+        lockExpiry,
+        lockReason: `Admin force checkout: ${reason || 'No reason provided'}`
+      })
+      .returning();
+
+    // Create initial version if needed
+    const version = await VersionControlService.checkoutArtifact(
+      artifactType as ArtifactType,
+      artifactId,
+      initiativeId,
+      adminUserId
+    );
+
+    res.json({ 
+      success: true,
+      message: "Admin force checkout successful",
+      lock: newLock,
+      version,
+      overriddenUsers,
+      details: {
+        reason: reason || 'Admin force checkout - no reason provided',
+        overriddenCheckouts: overriddenUsers.length
+      }
+    });
+  } catch (error) {
+    console.error("Error in admin force checkout:", error);
+    res.status(500).json({ error: error.message || "Failed to force checkout artifact" });
+  }
+});
+
+// Admin override: Force checkin any artifact
+versionControlRouter.post("/admin/force-checkin", requireAdmin, async (req, res) => {
+  try {
+    const adminUserId = req.user!.id;
+    const { artifactType, artifactId, initiativeId, changes, changeDescription, reason } = req.body;
+
+    if (!artifactType || !artifactId || !initiativeId || !changes) {
+      return res.status(400).json({ 
+        error: "artifactType, artifactId, initiativeId, and changes are required" 
+      });
+    }
+
+    // Check if there's currently a lock (and who owns it)
+    const [currentLock] = await db.select({
+      lock: artifactLocks,
+      user: users
+    })
+    .from(artifactLocks)
+    .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
+    .where(
+      and(
+        eq(artifactLocks.artifactType, artifactType),
+        eq(artifactLocks.artifactId, artifactId),
+        eq(artifactLocks.initiativeId, initiativeId)
+      )
+    );
+
+    let originalUser = null;
+    if (currentLock && currentLock.user) {
+      originalUser = {
+        id: currentLock.user.id,
+        name: currentLock.user.name,
+        username: currentLock.user.username
+      };
+    }
+
+    // Force checkin using the admin user ID
+    const version = await VersionControlService.checkinArtifact(
+      artifactType as ArtifactType,
+      artifactId,
+      initiativeId,
+      adminUserId,
+      changes,
+      changeDescription || `Admin force checkin: ${reason || 'No reason provided'}`
+    );
+
+    // Remove any locks for this artifact
+    if (currentLock) {
+      await db.delete(artifactLocks)
+        .where(eq(artifactLocks.id, currentLock.lock.id));
+    }
+
+    res.json({ 
+      success: true,
+      message: "Admin force checkin successful",
+      version,
+      details: {
+        reason: reason || 'Admin force checkin - no reason provided',
+        originalUser,
+        adminOverride: true
+      }
+    });
+  } catch (error) {
+    console.error("Error in admin force checkin:", error);
+    res.status(500).json({ error: error.message || "Failed to force checkin artifact" });
+  }
+});
+
+// Admin: Get all locks across the system
+versionControlRouter.get("/admin/all-locks", requireAdmin, async (req, res) => {
+  try {
+    const locks = await db.select({
+      lock: artifactLocks,
+      user: users
+    })
+    .from(artifactLocks)
+    .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
+    .where(gt(artifactLocks.lockExpiry, new Date()));
+
+    res.json({
+      locks,
+      count: locks.length
+    });
+  } catch (error) {
+    console.error("Error fetching all locks:", error);
+    res.status(500).json({ error: "Failed to fetch all locks" });
+  }
+});
+
+// Admin: Release any lock by ID
+versionControlRouter.delete("/admin/locks/:lockId", requireAdmin, async (req, res) => {
+  try {
+    const { lockId } = req.params;
+    const { reason } = req.body;
+
+    const [lock] = await db.select({
+      lock: artifactLocks,
+      user: users
+    })
+    .from(artifactLocks)
+    .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
+    .where(eq(artifactLocks.id, parseInt(lockId)));
+
+    if (!lock) {
+      return res.status(404).json({ error: "Lock not found" });
+    }
+
+    const originalUser = lock.user ? {
+      id: lock.user.id,
+      name: lock.user.name,
+      username: lock.user.username
+    } : null;
+
+    await db.delete(artifactLocks).where(eq(artifactLocks.id, parseInt(lockId)));
+
+    res.json({ 
+      success: true,
+      message: "Admin override: Lock released successfully",
+      details: {
+        lockId: parseInt(lockId),
+        artifactType: lock.lock.artifactType,
+        artifactId: lock.lock.artifactId,
+        initiativeId: lock.lock.initiativeId,
+        originalUser,
+        reason: reason || 'Admin override - no reason provided'
+      }
+    });
+  } catch (error) {
+    console.error("Error in admin lock release:", error);
     res.status(500).json({ error: "Failed to release lock" });
   }
 });
