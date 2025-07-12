@@ -29,10 +29,8 @@ export class PlantUmlService {
     const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy;
     
     if (!proxyUrl) {
-      console.log('No proxy configuration found in environment variables');
       return undefined;
     }
-
     
     if (url.startsWith('https:')) {
       return new HttpsProxyAgent(proxyUrl);
@@ -176,52 +174,41 @@ export class PlantUmlService {
    * Fetch SVG content from PlantUML server
    */
   static async renderSvg(text: string): Promise<string> {
-    console.log('PlantUML text to render:', text);
-    console.log('Text length:', text.length);
-    
     // First, always try the encoded URL approach with ~1 prefix
     try {
-      console.log('Attempting encoded URL approach');
       const encoded = await this.encode(text);
       // Add ~1 prefix to indicate DEFLATE encoding as per PlantUML documentation
       const url = `https://www.plantuml.com/plantuml/svg/~1${encoded}`;
-      console.log('Encoded URL length:', url.length);
       
       const svgContent = await this.fetchWithNativeHttp(url);
       if (svgContent && (svgContent.includes('<svg') || svgContent.includes('<?xml'))) {
         // Check if it's an error diagram
         if (svgContent.includes('bad URL') || svgContent.includes('DEFLATE')) {
-          console.log('PlantUML returned encoding error, trying simple base64');
           throw new Error('Encoding error from PlantUML');
         }
-        console.log('Success with encoded URL approach');
         return this.cleanSvg(svgContent);
       }
     } catch (error) {
-      console.log('Encoded URL approach failed:', error.message);
+      // Silently try next approach
     }
     
     // Fallback to simple base64 encoding for text endpoint
     try {
-      console.log('Attempting simple base64 encoding');
       const encoded = this.simpleEncode(text);
       const url = `https://www.plantuml.com/plantuml/txt/${encoded}`;
-      console.log('Simple encoded URL length:', url.length);
       
       const textContent = await this.fetchWithNativeHttp(url);
       if (textContent) {
-        console.log('Got text diagram, converting to SVG format request');
         // Extract the diagram ID from the response if possible
         // Otherwise, use the svg endpoint with simple encoding
         const svgUrl = url.replace('/txt/', '/svg/');
         const svgContent = await this.fetchWithNativeHttp(svgUrl);
         if (svgContent && (svgContent.includes('<svg') || svgContent.includes('<?xml'))) {
-          console.log('Success with simple encoding');
           return this.cleanSvg(svgContent);
         }
       }
     } catch (error) {
-      console.log('Simple encoding approach failed:', error.message);
+      // Silently try next approach
     }
     
     // All attempts failed, return fallback
