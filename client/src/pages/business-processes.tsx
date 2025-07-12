@@ -8,7 +8,7 @@ import { useLocation } from "wouter";
 import { useInitiative } from "@/components/initiatives/initiative-context";
 import { api } from "@/lib/api";
 import { Plus, Search, Edit, Trash2, Network, MoreVertical, Info, FileJson, Copy, Eye, TableIcon, UserPlus, FileDown, ChevronDown, Layers, GitBranch, Lock, Unlock, AlertTriangle , X} from "lucide-react";
-import { getProcessLevelIcon, getProcessIconProps, getProcessLevelDescription, sortBusinessProcessesHierarchically } from "@/lib/business-process-utils";
+import { getProcessLevelIcon, getProcessIconProps, getProcessLevelDescription } from "@/lib/business-process-utils";
 import { ProcessLevelBadge } from "@/components/ui/process-level-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -118,9 +118,7 @@ export default function BusinessProcesses() {
     queryFn: async () => {
       const response = await fetch("/api/business-processes");
       if (!response.ok) throw new Error("Failed to fetch business processes");
-      const data = await response.json();
-      console.log('Fetched business processes:', data.length, data);
-      return data;
+      return response.json();
     },
   });
 
@@ -144,7 +142,7 @@ export default function BusinessProcesses() {
     }
   });
 
-  // Fetch business process relationships for hierarchy and tree view
+  // Fetch business process relationships for tree view
   const { data: relationships = [] } = useQuery({
     queryKey: ["business-process-relationships"],
     queryFn: async () => {
@@ -152,7 +150,7 @@ export default function BusinessProcesses() {
       if (!response.ok) throw new Error("Failed to fetch relationships");
       return response.json();
     },
-    // Always fetch relationships as they're needed for hierarchical sorting in table view too
+    enabled: viewMode === "tree", // Only fetch when tree view is active
   });
 
   // Fetch communication counts for all business processes
@@ -601,7 +599,6 @@ export default function BusinessProcesses() {
 
   // Apply standard filters first
   let filteredByConditions = businessProcesses ? applyFilters(businessProcesses, otherFilters) : [];
-  console.log('After standard filters:', filteredByConditions.length);
 
   // Then apply custom hasCommunications filter if present
   if (hasCommunicationsFilter && communicationCounts) {
@@ -641,24 +638,8 @@ export default function BusinessProcesses() {
     );
   });
 
-  // Apply hierarchical sorting to filtered business processes
-  const hierarchicalBPs = useMemo(() => {
-    console.log('Computing hierarchicalBPs:', {
-      viewMode,
-      filteredBPsLength: filteredBPs.length,
-      relationshipsLength: relationships.length,
-      businessProcessesLength: businessProcesses?.length || 0
-    });
-    
-    if (viewMode === 'table') {
-      // Apply hierarchical sorting in table view
-      const sorted = sortBusinessProcessesHierarchically(filteredBPs, relationships);
-      console.log('Sorted BPs length:', sorted.length);
-      return sorted;
-    }
-    // For tree view, return unsorted as the tree component handles its own hierarchy
-    return filteredBPs;
-  }, [filteredBPs, relationships, viewMode]);
+  // No hierarchical sorting for now - just use filtered business processes
+  const hierarchicalBPs = filteredBPs;
 
   // Initialize multi-select hook
   const multiSelect = useMultiSelect({
