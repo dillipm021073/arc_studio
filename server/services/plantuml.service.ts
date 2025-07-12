@@ -1,5 +1,10 @@
 import { deflate } from 'zlib';
 import { promisify } from 'util';
+import { request as httpsRequest } from 'https';
+import { request as httpRequest } from 'http';
+import { URL } from 'url';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { HttpProxyAgent } from 'http-proxy-agent';
 
 const deflateAsync = promisify(deflate);
 
@@ -16,6 +21,26 @@ export class PlantUmlService {
     'https://www.plantuml.com/plantuml/{format}/{encoded}',
     'http://www.plantuml.com/plantuml/{format}/{encoded}',
   ];
+
+  /**
+   * Get proxy configuration from environment variables
+   */
+  private static getProxyAgent(url: string) {
+    const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy;
+    
+    if (!proxyUrl) {
+      console.log('No proxy configuration found in environment variables');
+      return undefined;
+    }
+
+    console.log(`Using proxy: ${proxyUrl} for URL: ${url}`);
+    
+    if (url.startsWith('https:')) {
+      return new HttpsProxyAgent(proxyUrl);
+    } else {
+      return new HttpProxyAgent(proxyUrl);
+    }
+  }
   
   /**
    * Encode PlantUML text using the PlantUML encoding algorithm
@@ -82,19 +107,97 @@ export class PlantUmlService {
   }
 
   /**
+   * Fetch content using native Node.js HTTP client (better proxy support)
+   */
+  private static async fetchWithNativeHttp(url: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const parsedUrl = new URL(url);
+      const requestFn = parsedUrl.protocol === 'https:' ? httpsRequest : httpRequest;
+      
+      const options: any = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: 'GET',
+        headers: {
+          'User-Agent': 'StudioArchitect-PlantUML-Client/1.0'
+        },
+        timeout: 10000
+      };
+
+      // Add proxy agent if configured
+      const agent = this.getProxyAgent(url);
+      if (agent) {
+        options.agent = agent;
+      }
+
+      const req = requestFn(options, (res) => {
+        let data = '';
+        
+        // Handle redirects manually
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          const location = res.headers.location;
+          if (location) {
+            console.log(`Redirect to: ${location}`);
+            return PlantUmlService.fetchWithNativeHttp(location).then(resolve).catch(reject);
+          }
+        }
+        
+        if (res.statusCode !== 200) {
+          return reject(new Error(`HTTP ${res.statusCode}`));
+        }
+        
+        res.on('data', (chunk) => data += chunk);
+        res.on('end', () => resolve(data));
+        res.on('error', reject);
+      });
+      
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Request timeout'));
+      });
+      
+      req.end();
+    });
+  }
+
+  /**
    * Fetch SVG content from PlantUML server
    */
   static async renderSvg(text: string): Promise<string> {
     const encoded = await this.encode(text);
     
-    // First try direct URL patterns (bypass redirects)
+    // First try with native HTTP client (better proxy support)
     for (let i = 0; i < this.DIRECT_PLANTUML_PATTERNS.length; i++) {
       try {
         const url = this.DIRECT_PLANTUML_PATTERNS[i]
           .replace('{format}', 'svg')
           .replace('{encoded}', encoded);
         
-        console.log(`Attempting direct PlantUML URL ${i + 1}/${this.DIRECT_PLANTUML_PATTERNS.length}:`, url);
+        console.log(`Attempting native HTTP client ${i + 1}/${this.DIRECT_PLANTUML_PATTERNS.length}:`, url);
+        
+        const svgContent = await this.fetchWithNativeHttp(url);
+        
+        if (svgContent && (svgContent.includes('<svg') || svgContent.includes('<?xml'))) {
+          console.log(`Success with native HTTP client ${i + 1}`);
+          return this.cleanSvg(svgContent);
+        }
+        
+        console.log(`Native HTTP client ${i + 1} returned non-SVG content`);
+      } catch (error) {
+        console.log(`Native HTTP client ${i + 1} error:`, error.message);
+      }
+    }
+    
+    // Fallback to fetch API
+    for (let i = 0; i < this.DIRECT_PLANTUML_PATTERNS.length; i++) {
+      try {
+        const url = this.DIRECT_PLANTUML_PATTERNS[i]
+          .replace('{format}', 'svg')
+          .replace('{encoded}', encoded);
+        
+        console.log(`Attempting fetch API ${i + 1}/${this.DIRECT_PLANTUML_PATTERNS.length}:`, url);
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -112,14 +215,14 @@ export class PlantUmlService {
         if (response.ok) {
           const svgContent = await response.text();
           if (svgContent.includes('<svg') || svgContent.includes('<?xml')) {
-            console.log(`Success with direct URL ${i + 1}`);
+            console.log(`Success with fetch API ${i + 1}`);
             return this.cleanSvg(svgContent);
           }
         }
         
-        console.log(`Direct URL ${i + 1} failed: ${response.status}`);
+        console.log(`Fetch API ${i + 1} failed: ${response.status}`);
       } catch (error) {
-        console.log(`Direct URL ${i + 1} error:`, error.message);
+        console.log(`Fetch API ${i + 1} error:`, error.message);
       }
     }
     
