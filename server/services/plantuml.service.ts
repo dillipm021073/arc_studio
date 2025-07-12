@@ -277,6 +277,9 @@ export class PlantUmlService {
     // Remove XML declaration if present
     svg = svg.replace(/<\?xml[^>]*\?>/g, '');
     
+    // Keep the original dimensions for proper rendering
+    // Don't replace width/height with 100% as it breaks the aspect ratio
+    
     // Add viewBox if missing (for better scaling)
     if (!svg.includes('viewBox')) {
       const widthMatch = svg.match(/width="(\d+)"/);
@@ -288,10 +291,6 @@ export class PlantUmlService {
         svg = svg.replace('<svg', `<svg viewBox="0 0 ${width} ${height}"`);
       }
     }
-    
-    // Remove fixed width/height for responsive sizing
-    svg = svg.replace(/width="\d+"/, 'width="100%"');
-    svg = svg.replace(/height="\d+"/, 'height="100%"');
     
     return svg;
   }
