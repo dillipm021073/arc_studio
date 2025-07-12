@@ -4,7 +4,18 @@ import { promisify } from 'util';
 const deflateAsync = promisify(deflate);
 
 export class PlantUmlService {
-  private static readonly PLANTUML_SERVER = 'https://www.plantuml.com/plantuml';
+  private static readonly PLANTUML_SERVERS = [
+    'https://www.plantuml.com/plantuml',
+    'http://www.plantuml.com/plantuml',  // Try HTTP as fallback  
+    'https://plantuml.com/plantuml',      // Try without www
+    'http://plantuml.com/plantuml'        // HTTP without www
+  ];
+  
+  // Direct URL patterns that bypass redirects
+  private static readonly DIRECT_PLANTUML_PATTERNS = [
+    'https://www.plantuml.com/plantuml/{format}/{encoded}',
+    'http://www.plantuml.com/plantuml/{format}/{encoded}',
+  ];
   
   /**
    * Encode PlantUML text using the PlantUML encoding algorithm
@@ -64,31 +75,131 @@ export class PlantUmlService {
   /**
    * Get the URL for a PlantUML diagram
    */
-  static async getDiagramUrl(text: string, format: 'svg' | 'png' = 'svg'): Promise<string> {
+  static async getDiagramUrl(text: string, format: 'svg' | 'png' = 'svg', serverIndex: number = 0): Promise<string> {
     const encoded = await this.encode(text);
-    return `${this.PLANTUML_SERVER}/${format}/${encoded}`;
+    const server = this.PLANTUML_SERVERS[serverIndex] || this.PLANTUML_SERVERS[0];
+    return `${server}/${format}/${encoded}`;
   }
 
   /**
    * Fetch SVG content from PlantUML server
    */
   static async renderSvg(text: string): Promise<string> {
-    try {
-      const url = await this.getDiagramUrl(text, 'svg');
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`PlantUML server returned ${response.status}`);
+    const encoded = await this.encode(text);
+    
+    // First try direct URL patterns (bypass redirects)
+    for (let i = 0; i < this.DIRECT_PLANTUML_PATTERNS.length; i++) {
+      try {
+        const url = this.DIRECT_PLANTUML_PATTERNS[i]
+          .replace('{format}', 'svg')
+          .replace('{encoded}', encoded);
+        
+        console.log(`Attempting direct PlantUML URL ${i + 1}/${this.DIRECT_PLANTUML_PATTERNS.length}:`, url);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const response = await fetch(url, {
+          signal: controller.signal,
+          redirect: 'follow',
+          headers: {
+            'User-Agent': 'StudioArchitect-PlantUML-Client/1.0'
+          }
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          const svgContent = await response.text();
+          if (svgContent.includes('<svg') || svgContent.includes('<?xml')) {
+            console.log(`Success with direct URL ${i + 1}`);
+            return this.cleanSvg(svgContent);
+          }
+        }
+        
+        console.log(`Direct URL ${i + 1} failed: ${response.status}`);
+      } catch (error) {
+        console.log(`Direct URL ${i + 1} error:`, error.message);
       }
-      
-      const svgContent = await response.text();
-      
-      // Clean up SVG for embedding
-      return this.cleanSvg(svgContent);
-    } catch (error) {
-      console.error('Error rendering PlantUML diagram:', error);
-      throw new Error('Failed to render PlantUML diagram');
     }
+    
+    // Fallback to regular server attempts
+    for (let i = 0; i < this.PLANTUML_SERVERS.length; i++) {
+      try {
+        const url = await this.getDiagramUrl(text, 'svg', i);
+        console.log(`Attempting PlantUML server ${i + 1}/${this.PLANTUML_SERVERS.length}:`, url);
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
+        const response = await fetch(url, {
+          signal: controller.signal,
+          redirect: 'follow',
+          headers: {
+            'User-Agent': 'StudioArchitect-PlantUML-Client/1.0'
+          }
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          const svgContent = await response.text();
+          if (svgContent.includes('<svg') || svgContent.includes('<?xml')) {
+            console.log(`Success with server ${i + 1}`);
+            return this.cleanSvg(svgContent);
+          }
+        }
+        
+        console.log(`Server ${i + 1} failed: ${response.status}`);
+      } catch (error) {
+        console.log(`Server ${i + 1} error:`, error.message);
+      }
+    }
+    
+    // All attempts failed, return fallback
+    console.error('All PlantUML attempts failed, using fallback');
+    return this.generateFallbackSvg(text, 'All PlantUML servers are currently unavailable');
+  }
+
+  /**
+   * Generate a fallback SVG when PlantUML server is unavailable
+   */
+  private static generateFallbackSvg(text: string, errorMessage: string): string {
+    const lines = text.split('\n');
+    const lineHeight = 20;
+    const padding = 20;
+    const width = 600;
+    const height = Math.max(200, lines.length * lineHeight + padding * 2);
+
+    return `
+      <svg viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+        <rect width="100%" height="100%" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2"/>
+        <text x="${padding}" y="30" font-family="monospace" font-size="14" fill="#dc3545" font-weight="bold">
+          PlantUML Server Unavailable
+        </text>
+        <text x="${padding}" y="55" font-family="monospace" font-size="12" fill="#6c757d">
+          ${errorMessage}
+        </text>
+        <text x="${padding}" y="85" font-family="monospace" font-size="12" fill="#495057" font-weight="bold">
+          Source Code:
+        </text>
+        ${lines.map((line, index) => 
+          `<text x="${padding}" y="${105 + index * lineHeight}" font-family="monospace" font-size="11" fill="#212529">${this.escapeXml(line)}</text>`
+        ).join('\n        ')}
+      </svg>
+    `.trim();
+  }
+
+  /**
+   * Escape XML special characters
+   */
+  private static escapeXml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   /**

@@ -64,7 +64,7 @@ umlRouter.post("/folders", requireAuth, async (req, res) => {
     const schema = z.object({
       name: z.string().min(1),
       description: z.string().optional(),
-      parentId: z.number().optional()
+      parentId: z.number().nullable().optional()
     });
 
     const data = schema.parse({ name, description, parentId });
@@ -323,20 +323,32 @@ umlRouter.post("/render", requireAuth, async (req, res) => {
     }
 
     if (format === 'svg') {
-      // Render SVG
+      // Render SVG (now includes fallback handling)
       const svgContent = await PlantUmlService.renderSvg(content);
       
       // Extract metadata
       const metadata = PlantUmlService.extractMetadata(content);
       
+      // Check if this is a fallback SVG
+      const isFallback = svgContent.includes('PlantUML Server Unavailable');
+      
       res.json({ 
         svg: svgContent,
-        metadata 
+        metadata,
+        isFallback,
+        message: isFallback ? 'PlantUML server is currently unavailable. Showing source code instead.' : undefined
       });
     } else {
-      // Return URL for PNG
-      const url = await PlantUmlService.getDiagramUrl(content, 'png');
-      res.json({ url });
+      try {
+        // Return URL for PNG
+        const url = await PlantUmlService.getDiagramUrl(content, 'png');
+        res.json({ url });
+      } catch (error) {
+        // For PNG format, we can't provide a fallback, so return an error
+        res.status(503).json({ 
+          error: "PlantUML server is currently unavailable. Please try again later or use SVG format for a fallback view." 
+        });
+      }
     }
   } catch (error) {
     console.error("Error rendering diagram:", error);
