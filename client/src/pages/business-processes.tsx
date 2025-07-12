@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useInitiative } from "@/components/initiatives/initiative-context";
 import { api } from "@/lib/api";
-import { Plus, Search, Edit, Trash2, Network, MoreVertical, Info, FileJson, Copy, Eye, TableIcon, UserPlus, FileDown, ChevronDown, Layers, GitBranch, Lock, Unlock, AlertTriangle } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Network, MoreVertical, Info, FileJson, Copy, Eye, TableIcon, UserPlus, FileDown, ChevronDown, Layers, GitBranch, Lock, Unlock, AlertTriangle , X} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -69,6 +69,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ImportExportDialog } from "@/components/import-export-dialog";
 import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
+import { 
+  getArtifactState, 
+  getRowClassName, 
+  ArtifactState 
+} from "@/lib/artifact-state-utils";
+import { 
+  ArtifactStatusBadge, 
+  ArtifactStatusIndicator, 
+  StatusColumn 
+} from "@/components/ui/artifact-status-badge";
 
 export default function BusinessProcesses() {
   const {
@@ -80,7 +90,7 @@ export default function BusinessProcesses() {
     hasActiveFilters
   } = usePersistentFilters('business-processes');
   
-  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isAdmin } = usePermissions();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingBP, setEditingBP] = useState<any>(null);
   const [viewingBP, setViewingBP] = useState<any>(null);
@@ -119,6 +129,15 @@ export default function BusinessProcesses() {
       return response.data;
     },
     enabled: !!currentInitiative && !isProductionView
+  });
+
+  // Fetch current user for version control
+  const { data: currentUser } = useQuery({
+    queryKey: ['/api/auth/me'],
+    queryFn: async () => {
+      const response = await api.get('/api/auth/me');
+      return response.data.user;
+    }
   });
 
   // Fetch business process relationships for tree view
@@ -263,12 +282,55 @@ export default function BusinessProcesses() {
     }
   });
 
+  const cancelCheckoutMutation = useMutation({
+    mutationFn: async (bp: any) => {
+      const response = await api.post('/api/version-control/cancel-checkout', {
+        artifactType: 'business_process',
+        artifactId: bp.id,
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: (data, bp) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/business-processs'] });
+      toast({
+        title: "Checkout cancelled",
+        description: `${bp.businessProcess} checkout has been cancelled and changes discarded`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cancel checkout failed",
+        description: error.response?.data?.error || "Failed to cancel checkout",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Helper to check if a business process is locked
   const isBusinessProcessLocked = (bpId: number) => {
     if (!locks) return null;
     return locks.find((l: any) => 
       l.lock.artifactType === 'business_process' && 
       l.lock.artifactId === bpId
+    );
+  };
+
+  // Helper to get business process state for visual indicators
+  const getBusinessProcessState = (bp: any): ArtifactState => {
+    const lock = isBusinessProcessLocked(bp.id);
+    // TODO: Add logic to detect initiative changes and conflicts
+    const hasInitiativeChanges = false; // This would check if BP has versions in current initiative
+    const hasConflicts = false; // This would check for version conflicts
+    
+    return getArtifactState(
+      bp.id,
+      'business_process',
+      lock,
+      currentUser?.id,
+      hasInitiativeChanges,
+      hasConflicts
     );
   };
 
@@ -518,12 +580,20 @@ export default function BusinessProcesses() {
     { key: "hasCommunications", label: "Has Communications", type: "select", options: [
       { value: "yes", label: "Yes" },
       { value: "no", label: "No" }
+    ]},
+    { key: "versionState", label: "Version State", type: "select", options: [
+      { value: "production", label: "Production Baseline" },
+      { value: "checked_out_me", label: "Checked Out by Me" },
+      { value: "checked_out_other", label: "Locked by Others" },
+      { value: "initiative_changes", label: "Initiative Changes" },
+      { value: "conflicted", label: "Conflicted" }
     ]}
   ];
 
-  // Separate hasCommunications filters from other filters
+  // Separate custom filters from standard filters
   const hasCommunicationsFilter = filters.find(f => f.column === 'hasCommunications');
-  const otherFilters = filters.filter(f => f.column !== 'hasCommunications');
+  const versionStateFilter = filters.find(f => f.column === 'versionState');
+  const otherFilters = filters.filter(f => f.column !== 'hasCommunications' && f.column !== 'versionState');
 
   // Apply standard filters first
   let filteredByConditions = businessProcesses ? applyFilters(businessProcesses, otherFilters) : [];
@@ -539,6 +609,18 @@ export default function BusinessProcesses() {
       }
       return true;
     });
+  }
+
+  // Apply version state filter if present
+  if (versionStateFilter && currentInitiative && !isProductionView) {
+    try {
+      filteredByConditions = filteredByConditions.filter((bp: any) => {
+        const bpState = getBusinessProcessState(bp);
+        return bpState.state === versionStateFilter.value;
+      });
+    } catch (e) {
+      console.error('Error in version state filter:', e);
+    }
   }
 
   // Then apply search
@@ -752,19 +834,20 @@ export default function BusinessProcesses() {
               <TableHead className="text-gray-300">Domain Owner</TableHead>
               <TableHead className="text-gray-300">IT Owner</TableHead>
               <TableHead className="text-gray-300">Status</TableHead>
+              <TableHead className="text-gray-300">Version Status</TableHead>
               <TableHead className="text-gray-300">Communications</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-gray-400">
+                <TableCell colSpan={10} className="text-center text-gray-400">
                   Loading...
                 </TableCell>
               </TableRow>
             ) : filteredBPs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center text-gray-400">
+                <TableCell colSpan={10} className="text-center text-gray-400">
                   No business processes found
                 </TableCell>
               </TableRow>
@@ -773,7 +856,7 @@ export default function BusinessProcesses() {
                 <ContextMenu key={bp.id}>
                   <ContextMenuTrigger asChild>
                     <TableRow 
-                      className={`border-gray-700 hover:bg-gray-700/50 cursor-context-menu ${multiSelect.isSelected(bp) ? 'bg-blue-900/20' : ''}`}
+                      className={getRowClassName(getBusinessProcessState(bp), multiSelect.isSelected(bp))}
                       onDoubleClick={() => setViewingBP(bp)}
                       title="Double-click to view business process details"
                     >
@@ -787,31 +870,18 @@ export default function BusinessProcesses() {
                       </TableCell>
                       <TableCell className="font-medium text-white">
                         <div className="flex items-center space-x-2">
+                          <Network className="h-4 w-4 text-blue-600" />
                           <span>{bp.businessProcess}</span>
-                          {(() => {
-                            const lock = isBusinessProcessLocked(bp.id);
-                            if (!lock) return null;
-                            const isLockedByMe = lock.lock.lockedBy === lock.user?.id;
-                            return (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    {isLockedByMe ? (
-                                      <GitBranch className="h-4 w-4 text-green-500" />
-                                    ) : (
-                                      <Lock className="h-4 w-4 text-yellow-500" />
-                                    )}
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    {isLockedByMe 
-                                      ? `Checked out by you in ${currentInitiative?.name}`
-                                      : `Locked by ${lock.user?.username} in ${currentInitiative?.name}`
-                                    }
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            );
-                          })()}
+                          <ArtifactStatusIndicator 
+                            state={getBusinessProcessState(bp)} 
+                            initiativeName={currentInitiative?.name}
+                          />
+                          <ArtifactStatusBadge 
+                            state={getBusinessProcessState(bp)} 
+                            showIcon={false}
+                            showText={true}
+                            size="sm"
+                          />
                         </div>
                       </TableCell>
                   <TableCell className="text-gray-300">{bp.lob}</TableCell>
@@ -838,6 +908,9 @@ export default function BusinessProcesses() {
                       </Badge>
                     </TableCell>
                     <TableCell>
+                      <StatusColumn state={getBusinessProcessState(bp)} />
+                    </TableCell>
+                    <TableCell>
                       <CommunicationBadge 
                         entityType="business_process" 
                         entityId={bp.id} 
@@ -852,7 +925,7 @@ export default function BusinessProcesses() {
                       <>
                         {(() => {
                           const lock = isBusinessProcessLocked(bp.id);
-                          const isLockedByMe = lock?.lock.lockedBy === lock?.user?.id;
+                          const isLockedByMe = lock?.lock.lockedBy === currentUser?.id || isAdmin;
                           const isLockedByOther = lock && !isLockedByMe;
                           
                           return (
@@ -878,6 +951,14 @@ export default function BusinessProcesses() {
                                   >
                                     <Unlock className="mr-2 h-4 w-4" />
                                     Checkin
+                                  </ContextMenuItem>
+                                  <ContextMenuItem 
+                                    onClick={() => cancelCheckoutMutation.mutate(bp)}
+                                    disabled={cancelCheckoutMutation.isPending}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <X className="mr-2 h-4 w-4" />
+                                    Cancel Checkout
                                   </ContextMenuItem>
                                 </>
                               )}

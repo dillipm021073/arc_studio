@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -173,14 +174,14 @@ export default function ChangeRequestFormEnhanced({
     defaultValues: {
       crNumber: changeRequest?.crNumber || "",
       title: changeRequest?.title || "",
-      description: changeRequest?.description || "",
-      reason: changeRequest?.reason || "",
-      benefit: changeRequest?.benefit || "",
+      description: changeRequest?.description ?? "",
+      reason: changeRequest?.reason ?? "",
+      benefit: changeRequest?.benefit ?? "",
       status: changeRequest?.status || "draft",
       priority: changeRequest?.priority || "medium",
-      owner: changeRequest?.owner || "",
-      requestedBy: changeRequest?.requestedBy || "",
-      approvedBy: changeRequest?.approvedBy || "",
+      owner: changeRequest?.owner ?? "",
+      requestedBy: changeRequest?.requestedBy ?? "",
+      approvedBy: changeRequest?.approvedBy ?? "",
       targetDate: changeRequest?.targetDate 
         ? (typeof changeRequest.targetDate === 'string' 
           ? new Date(changeRequest.targetDate) 
@@ -503,7 +504,8 @@ export default function ChangeRequestFormEnhanced({
                       <Textarea 
                         placeholder="Detailed description of the change request" 
                         className="min-h-[100px] bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                        {...field} 
+                        {...field}
+                        value={field.value ?? ""}
                       />
                     </FormControl>
                     <FormMessage />
@@ -522,7 +524,8 @@ export default function ChangeRequestFormEnhanced({
                         <Textarea 
                           placeholder="Why is this change needed?" 
                           className="min-h-[80px] bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                          {...field} 
+                          {...field}
+                          value={field.value ?? ""} 
                         />
                       </FormControl>
                       <FormMessage />
@@ -540,7 +543,8 @@ export default function ChangeRequestFormEnhanced({
                         <Textarea 
                           placeholder="What benefits will this change bring?" 
                           className="min-h-[80px] bg-gray-700 border-gray-600 text-white placeholder-gray-400"
-                          {...field} 
+                          {...field}
+                          value={field.value ?? ""} 
                         />
                       </FormControl>
                       <FormMessage />
@@ -669,7 +673,7 @@ export default function ChangeRequestFormEnhanced({
                     <FormItem>
                       <FormLabel className="text-gray-300">Owner</FormLabel>
                       <FormControl>
-                        <Input placeholder="Change owner" {...field} className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" />
+                        <Input placeholder="Change owner" {...field} value={field.value ?? ""} className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -683,7 +687,7 @@ export default function ChangeRequestFormEnhanced({
                     <FormItem>
                       <FormLabel className="text-gray-300">Requested By</FormLabel>
                       <FormControl>
-                        <Input placeholder="Requester name" {...field} className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" />
+                        <Input placeholder="Requester name" {...field} value={field.value ?? ""} className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -697,7 +701,7 @@ export default function ChangeRequestFormEnhanced({
                     <FormItem>
                       <FormLabel className="text-gray-300">Approved By</FormLabel>
                       <FormControl>
-                        <Input placeholder="Approver name" {...field} className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" />
+                        <Input placeholder="Approver name" {...field} value={field.value ?? ""} className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

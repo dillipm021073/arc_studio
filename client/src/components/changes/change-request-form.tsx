@@ -31,14 +31,14 @@ export default function ChangeRequestForm({ onSuccess, initialData, isEditing = 
     defaultValues: {
       crNumber: initialData?.crNumber || "",
       title: initialData?.title || "",
-      description: initialData?.description || "",
-      reason: initialData?.reason || "",
-      benefit: initialData?.benefit || "",
+      description: initialData?.description ?? "",
+      reason: initialData?.reason ?? "",
+      benefit: initialData?.benefit ?? "",
       status: initialData?.status || "draft",
       priority: initialData?.priority || "medium",
-      owner: initialData?.owner || "",
-      requestedBy: initialData?.requestedBy || "",
-      approvedBy: initialData?.approvedBy || "",
+      owner: initialData?.owner ?? "",
+      requestedBy: initialData?.requestedBy ?? "",
+      approvedBy: initialData?.approvedBy ?? "",
       targetDate: initialData?.targetDate 
         ? (typeof initialData.targetDate === 'string' 
           ? new Date(initialData.targetDate) 
@@ -73,18 +73,10 @@ export default function ChangeRequestForm({ onSuccess, initialData, isEditing = 
 
   const onSubmit = (data: InsertChangeRequest) => {
     // Convert dates to ISO strings
-    const submitData = {
+    const submitData: InsertChangeRequest = {
       ...data,
-      targetDate: data.targetDate ? 
-        (data.targetDate instanceof Date ? 
-          data.targetDate.toISOString() : 
-          data.targetDate) : 
-        undefined,
-      completedDate: data.completedDate ? 
-        (data.completedDate instanceof Date ? 
-          data.completedDate.toISOString() : 
-          data.completedDate) : 
-        undefined
+      targetDate: data.targetDate || undefined,
+      completedDate: data.completedDate || undefined
     };
     createMutation.mutate(submitData);
   };
@@ -163,7 +155,7 @@ export default function ChangeRequestForm({ onSuccess, initialData, isEditing = 
               <FormItem>
                 <FormLabel className="text-gray-300">Description</FormLabel>
                 <FormControl>
-                  <Textarea rows={3} placeholder="Describe the change request" {...field} className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" />
+                  <Textarea rows={3} placeholder="Describe the change request" {...field} value={field.value ?? ""} className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" />
                 </FormControl>
                 <FormMessage />
               </FormItem>

@@ -45,9 +45,15 @@ import {
   HardDrive,
   Database,
   FileText,
-  Import
+  Import,
+  Folder
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { FolderTree } from './folder-tree';
+import { FolderBreadcrumb } from './folder-breadcrumb';
+import { CreateFolderDialog } from './create-folder-dialog';
+import { RenameFolderDialog } from './rename-folder-dialog';
+import { DeleteFolderDialog } from './delete-folder-dialog';
 
 import { Project } from '@/types/project';
 import { projectStorage, ProjectStorageType, ProjectWithStorage } from '@/services/project-storage';
@@ -96,6 +102,18 @@ export default function ProjectManager({
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [newProjectTemplate, setNewProjectTemplate] = useState('blank');
+  
+  // Folder management state
+  const [currentFolderPath, setCurrentFolderPath] = useState('/');
+  const [folders, setFolders] = useState<string[]>([]);
+  const [showFolderTree, setShowFolderTree] = useState(true);
+  const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
+  const [createFolderParentPath, setCreateFolderParentPath] = useState('/');
+  const [renameFolderDialogOpen, setRenameFolderDialogOpen] = useState(false);
+  const [renameFolderPath, setRenameFolderPath] = useState('');
+  const [renameFolderCurrentName, setRenameFolderCurrentName] = useState('');
+  const [deleteFolderDialogOpen, setDeleteFolderDialogOpen] = useState(false);
+  const [deleteFolderPath, setDeleteFolderPath] = useState('');
 
   const handleLoadProject = (project: ProjectWithStorage) => {
     console.log('ProjectManager: Loading project:', project);
@@ -236,15 +254,23 @@ export default function ProjectManager({
   useEffect(() => {
     if (open) {
       loadAllProjects();
+      loadFolders();
     }
   }, [open]);
+
+  // Reload projects when folder path changes
+  useEffect(() => {
+    if (open) {
+      loadAllProjects();
+    }
+  }, [currentFolderPath]);
   
   const loadAllProjects = async () => {
     // Load team projects with cache busting
     setLoadingTeam(true);
     try {
       // Add timestamp to force fresh data
-      const teamProjectsData = await projectStorage.getTeamProjects();
+      const teamProjectsData = await projectStorage.getTeamProjects(currentFolderPath !== '/' ? currentFolderPath : undefined);
       console.log('ProjectManager: Loaded team projects from API:', teamProjectsData);
       console.log('Team projects count:', teamProjectsData.length);
       const teamProjectsWithStorage = teamProjectsData.map(p => ({ ...p, storageType: ProjectStorageType.TEAM }));
@@ -293,6 +319,157 @@ export default function ProjectManager({
     }
   };
 
+  const loadFolders = async () => {
+    try {
+      const response = await fetch('/api/interface-builder/folders', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const folderList = await response.json();
+        setFolders(folderList);
+      }
+    } catch (error) {
+      console.error('Failed to load folders:', error);
+    }
+  };
+
+  const handleCreateFolder = async (parentPath: string, folderName: string) => {
+    const newFolderPath = parentPath === '/' ? `/${folderName}` : `${parentPath}/${folderName}`;
+    
+    try {
+      // Create the folder in the database
+      const response = await fetch('/api/interface-builder/folders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          path: newFolderPath,
+          name: folderName,
+          parentPath: parentPath === '/' ? null : parentPath,
+          isTeamFolder: false // Default to personal folder
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create folder');
+      }
+
+      // Reload folders from database to ensure consistency
+      await loadFolders();
+
+      toast({
+        title: 'Folder Created',
+        description: `Created folder: ${newFolderPath}`,
+      });
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+      toast({
+        title: 'Failed to Create Folder',
+        description: error.message || 'An error occurred while creating the folder',
+        variant: 'destructive'
+      });
+      // Remove from local state if API call failed
+      setFolders(prev => prev.filter(f => f !== newFolderPath));
+    }
+  };
+
+  const handleRenameFolder = async (oldPath: string, newName: string) => {
+    try {
+      const response = await fetch(`/api/interface-builder/folders/${encodeURIComponent(oldPath)}/rename`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ newName })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to rename folder');
+      }
+
+      const { newPath } = await response.json();
+      
+      // Update local state
+      setFolders(prev => {
+        const updated = prev.filter(f => !f.startsWith(oldPath));
+        // Add renamed folder and its subfolders
+        prev.forEach(f => {
+          if (f.startsWith(oldPath)) {
+            updated.push(f.replace(oldPath, newPath));
+          }
+        });
+        return updated.sort();
+      });
+
+      // Update current path if needed
+      if (currentFolderPath.startsWith(oldPath)) {
+        setCurrentFolderPath(currentFolderPath.replace(oldPath, newPath));
+      }
+
+      // Reload projects
+      loadAllProjects();
+
+      toast({
+        title: 'Folder Renamed',
+        description: `Renamed folder to: ${newName}`,
+      });
+    } catch (error) {
+      console.error('Failed to rename folder:', error);
+      toast({
+        title: 'Rename Failed',
+        description: 'Failed to rename folder',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleDeleteFolder = async (folderPath: string) => {
+    try {
+      const response = await fetch(`/api/interface-builder/folders/${encodeURIComponent(folderPath)}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete folder');
+      }
+      
+      // Update local state
+      setFolders(prev => prev.filter(f => !f.startsWith(folderPath)));
+
+      // Navigate to root if current folder was deleted
+      if (currentFolderPath.startsWith(folderPath)) {
+        setCurrentFolderPath('/');
+      }
+
+      // Reload projects
+      loadAllProjects();
+
+      toast({
+        title: 'Folder Deleted',
+        description: 'Folder and all its contents have been deleted',
+      });
+    } catch (error) {
+      console.error('Failed to delete folder:', error);
+      toast({
+        title: 'Delete Failed',
+        description: 'Failed to delete folder',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const filterProjectsByFolder = (projects: ProjectWithStorage[]) => {
+    if (currentFolderPath === '/') {
+      return projects;
+    }
+    return projects.filter(p => (p as any).folderPath === currentFolderPath);
+  };
+
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'E-commerce': return <CreditCard className="h-4 w-4" />;
@@ -330,16 +507,26 @@ export default function ProjectManager({
     }
   };
 
-  // Filter projects based on search query
-  const filterProjects = (projects: ProjectWithStorage[]) => {
-    if (!searchQuery.trim()) return projects;
+  // Filter projects based on search query and folder
+  const filterProjects = (projects: ProjectWithStorage[], skipFolderFilter = false) => {
+    let filtered = projects;
     
-    const query = searchQuery.toLowerCase();
-    return projects.filter(project => 
-      project.name.toLowerCase().includes(query) ||
-      project.description.toLowerCase().includes(query) ||
-      (project.metadata?.tags || []).some(tag => tag.toLowerCase().includes(query))
-    );
+    // Filter by folder (skip for team projects as they're already server-side filtered)
+    if (!skipFolderFilter) {
+      filtered = filterProjectsByFolder(filtered);
+    }
+    
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(project => 
+        project.name.toLowerCase().includes(query) ||
+        project.description.toLowerCase().includes(query) ||
+        (project.metadata?.tags || []).some(tag => tag.toLowerCase().includes(query))
+      );
+    }
+    
+    return filtered;
   };
 
   const NoResults = ({ type }: { type: string }) => (
@@ -435,7 +622,7 @@ export default function ProjectManager({
         <DialogTrigger asChild>
           {children}
         </DialogTrigger>
-        <DialogContent className="max-w-5xl h-[90vh] bg-gray-900 border-gray-700 flex flex-col p-0 overflow-hidden">
+        <DialogContent className="max-w-6xl h-[90vh] bg-gray-900 border-gray-700 flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-6 pb-4 flex-shrink-0">
             <DialogTitle className="text-white flex items-center gap-2">
               <FolderOpen className="h-5 w-5" />
@@ -446,33 +633,69 @@ export default function ProjectManager({
             </DialogDescription>
           </DialogHeader>
 
-          {/* Search Bar */}
-          <div className="px-6 pb-4 flex-shrink-0">
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Search projects by name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-gray-800 border-gray-700 text-white pl-10"
-              />
-              <svg
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          <div className="flex-1 flex overflow-hidden">
+            {/* Folder Tree Sidebar */}
+            {showFolderTree && (
+              <div className="w-64 border-r border-gray-700 bg-gray-950 p-4 overflow-hidden flex flex-col">
+                <h3 className="text-sm font-medium text-gray-400 mb-3">Folders</h3>
+                <FolderTree
+                  folders={folders}
+                  currentPath={currentFolderPath}
+                  onFolderSelect={setCurrentFolderPath}
+                  onCreateFolder={(parentPath) => {
+                    setCreateFolderParentPath(parentPath);
+                    setCreateFolderDialogOpen(true);
+                  }}
+                  onRenameFolder={(path, currentName) => {
+                    setRenameFolderPath(path);
+                    setRenameFolderCurrentName(currentName);
+                    setRenameFolderDialogOpen(true);
+                  }}
+                  onDeleteFolder={(path) => {
+                    setDeleteFolderPath(path);
+                    setDeleteFolderDialogOpen(true);
+                  }}
                 />
-              </svg>
-            </div>
-          </div>
+              </div>
+            )}
 
-          <Tabs defaultValue="team" className="flex-1 flex flex-col overflow-hidden">
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Breadcrumb */}
+              <div className="px-6 py-2 border-b border-gray-700 flex-shrink-0">
+                <FolderBreadcrumb
+                  currentPath={currentFolderPath}
+                  onNavigate={setCurrentFolderPath}
+                />
+              </div>
+
+              {/* Search Bar */}
+              <div className="px-6 py-4 flex-shrink-0">
+                <div className="relative">
+                  <Input
+                    type="text"
+                    placeholder="Search projects by name..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full bg-gray-800 border-gray-700 text-white pl-10"
+                  />
+                  <svg
+                    className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+
+              <Tabs defaultValue="team" className="flex-1 flex flex-col overflow-hidden">
             <div className="px-6 flex-shrink-0">
               <TabsList className="grid w-full grid-cols-4 bg-gray-800">
                 <TabsTrigger value="team" className="flex items-center gap-1">
@@ -506,10 +729,10 @@ export default function ProjectManager({
                 </div>
               ) : teamProjects.length > 0 ? (
                 <>
-                  {filterProjects(teamProjects).length > 0 ? (
+                  {filterProjects(teamProjects, true).length > 0 ? (
                     <ScrollArea className="flex-1 project-manager-scroll">
                       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 p-4">
-                        {filterProjects(teamProjects).map((project) => (
+                        {filterProjects(teamProjects, true).map((project) => (
                           <ProjectCard key={project.id} project={project} />
                         ))}
                       </div>
@@ -622,8 +845,8 @@ export default function ProjectManager({
             </TabsContent>
           </Tabs>
 
-          {/* Fixed bottom panel for selected project */}
-          <div className="border-t border-gray-700 bg-gray-800 p-4 flex-shrink-0">
+              {/* Fixed bottom panel for selected project */}
+              <div className="border-t border-gray-700 bg-gray-800 p-4 flex-shrink-0">
             {selectedProject ? (
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1 mr-4">
@@ -687,6 +910,8 @@ export default function ProjectManager({
                 Select a project to see available actions
               </div>
             )}
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -898,6 +1123,39 @@ export default function ProjectManager({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Folder Dialog */}
+      <CreateFolderDialog
+        open={createFolderDialogOpen}
+        onOpenChange={setCreateFolderDialogOpen}
+        parentPath={createFolderParentPath}
+        onCreateFolder={(folderName) => {
+          handleCreateFolder(createFolderParentPath, folderName);
+        }}
+      />
+
+      {/* Rename Folder Dialog */}
+      <RenameFolderDialog
+        open={renameFolderDialogOpen}
+        onOpenChange={setRenameFolderDialogOpen}
+        folderPath={renameFolderPath}
+        currentName={renameFolderCurrentName}
+        onRename={(newName) => {
+          handleRenameFolder(renameFolderPath, newName);
+          setRenameFolderDialogOpen(false);
+        }}
+      />
+
+      {/* Delete Folder Dialog */}
+      <DeleteFolderDialog
+        open={deleteFolderDialogOpen}
+        onOpenChange={setDeleteFolderDialogOpen}
+        folderPath={deleteFolderPath}
+        onDelete={() => {
+          handleDeleteFolder(deleteFolderPath);
+          setDeleteFolderDialogOpen(false);
+        }}
+      />
 
       {/* Save Project Trigger (hidden, called programmatically) */}
       <Button

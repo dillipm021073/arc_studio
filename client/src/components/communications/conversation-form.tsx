@@ -69,19 +69,19 @@ export default function ConversationForm({ conversation, onSuccess, linkedEntity
   const [newParticipantRole, setNewParticipantRole] = useState("");
 
   // Fetch data for entity linking
-  const { data: applications } = useQuery({
+  const { data: applications = [] } = useQuery<any[]>({
     queryKey: ["/api/applications"],
   });
 
-  const { data: interfaces } = useQuery({
+  const { data: interfaces = [] } = useQuery<any[]>({
     queryKey: ["/api/interfaces"],
   });
 
-  const { data: businessProcesses } = useQuery({
+  const { data: businessProcesses = [] } = useQuery<any[]>({
     queryKey: ["/api/business-processes"],
   });
 
-  const { data: changeRequests } = useQuery({
+  const { data: changeRequests = [] } = useQuery<any[]>({
     queryKey: ["/api/change-requests"],
   });
 

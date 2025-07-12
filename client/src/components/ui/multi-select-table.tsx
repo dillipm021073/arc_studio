@@ -17,6 +17,7 @@ interface MultiSelectTableProps<T> {
   headers: React.ReactNode;
   children: (item: T) => React.ReactNode;
   renderContextMenu?: (item: T, rowContent: React.ReactNode) => React.ReactNode;
+  getRowClassName?: (item: T, isSelected: boolean) => string;
   className?: string;
 }
 
@@ -34,6 +35,7 @@ export function MultiSelectTable<T>({
   headers,
   children,
   renderContextMenu,
+  getRowClassName,
   className,
 }: MultiSelectTableProps<T>) {
   let lastClickedIndex = -1;
@@ -79,7 +81,7 @@ export function MultiSelectTable<T>({
               key={String(id)}
               className={cn(
                 'cursor-pointer',
-                isSelected && 'bg-accent',
+                getRowClassName ? getRowClassName(item, isSelected) : cn(isSelected && 'bg-accent'),
               )}
               onClick={(e) => handleRowClick(item, index, e)}
               onDoubleClick={() => onRowDoubleClick?.(item)}

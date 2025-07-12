@@ -278,6 +278,19 @@ export const imlDiagrams = pgTable("iml_diagrams", {
   updatedAt: timestamp("updated_at").defaultNow()
 });
 
+// Interface Builder Folders
+export const interfaceBuilderFolders = pgTable("interface_builder_folders", {
+  id: serial("id").primaryKey(),
+  path: text("path").notNull().unique(), // Full folder path (e.g., "/folder/subfolder")
+  name: text("name").notNull(), // Folder name (just the last part of the path)
+  parentPath: text("parent_path"), // Parent folder path (null for root folders)
+  description: text("description"),
+  createdBy: text("created_by").notNull(),
+  isTeamFolder: boolean("is_team_folder").notNull().default(false), // Whether this folder is visible to all users
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
 // Interface Builder Projects
 export const interfaceBuilderProjects = pgTable("interface_builder_projects", {
   id: serial("id").primaryKey(),
@@ -285,6 +298,7 @@ export const interfaceBuilderProjects = pgTable("interface_builder_projects", {
   name: text("name").notNull(),
   description: text("description"),
   category: text("category").notNull(), // microservices, enterprise, data-pipeline, frontend-backend, iot-edge, legacy-integration
+  folderPath: text("folder_path").default("/"), // Folder path for organization (e.g., "/folder/subfolder/")
   nodes: text("nodes").notNull(), // JSON string of React Flow nodes
   edges: text("edges").notNull(), // JSON string of React Flow edges
   metadata: text("metadata"), // JSON string of project metadata
@@ -707,6 +721,12 @@ export const insertImlDiagramSchema = createInsertSchema(imlDiagrams).omit({
   updatedAt: true
 });
 
+export const insertInterfaceBuilderFolderSchema = createInsertSchema(interfaceBuilderFolders).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
 export const insertInterfaceBuilderProjectSchema = createInsertSchema(interfaceBuilderProjects).omit({
   id: true,
   createdAt: true,
@@ -835,6 +855,9 @@ export type InsertInterfaceConsumerDescription = z.infer<typeof insertInterfaceC
 
 export type ImlDiagram = typeof imlDiagrams.$inferSelect;
 export type InsertImlDiagram = z.infer<typeof insertImlDiagramSchema>;
+
+export type InterfaceBuilderFolder = typeof interfaceBuilderFolders.$inferSelect;
+export type InsertInterfaceBuilderFolder = z.infer<typeof insertInterfaceBuilderFolderSchema>;
 
 export type InterfaceBuilderProject = typeof interfaceBuilderProjects.$inferSelect;
 export type InsertInterfaceBuilderProject = z.infer<typeof insertInterfaceBuilderProjectSchema>;

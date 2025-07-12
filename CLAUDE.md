@@ -53,6 +53,14 @@ Track all proposed changes with:
 - **Impact analysis**: List of systems (AMLs) impacted and IMLs impacted
 - **Testing requirements**: What needs to be tested
 
+## Important
+  Applications are representing the applicaiton master list.
+  Interfaces are representing the interface master list.
+  business processes are the BPM. and these processes generate SID UML and sequence diagrams.
+  Internal capabilities are defined against capbilties of the applications defined in the AMLs.
+  Technical processes are part of the Applications which uses the internal activities, interfaces to perform certain tasks.
+  All the above 5 items, applications, interfaces, business processes , internal activities, technical processes that we call as "artifacts".
+
 ## Key Features
 
 ### 1. Change Management

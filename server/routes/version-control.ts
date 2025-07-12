@@ -103,11 +103,11 @@ versionControlRouter.post("/checkout", requireAuth, async (req, res) => {
         and(
           eq(artifactLocks.artifactType, artifactType),
           eq(artifactLocks.artifactId, artifactId),
-          eq(artifactLocks.initiativeId, initiativeId),
-          eq(artifactLocks.lockedBy, userId),
-          gt(artifactLocks.lockExpiry, new Date())
+          eq(artifactLocks.initiativeId, initiativeId)
         )
-      );
+      )
+      .orderBy(sql`${artifactLocks.id} DESC`)
+      .limit(1);
     
     console.log('Lock created:', newLockResult);
 
@@ -218,7 +218,29 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
   try {
     const userId = req.user!.id;
     const userRole = req.user!.role;
-    const { artifactType, artifactId, initiativeId } = checkoutSchema.parse(req.body);
+    
+    // Make artifactId optional for cancel checkout
+    const cancelSchema = z.object({
+      artifactType: z.enum(['application', 'interface', 'business_process', 'internal_process', 'technical_process']),
+      artifactId: z.number().optional(),
+      initiativeId: z.string()
+    });
+    
+    const { artifactType, artifactId, initiativeId } = cancelSchema.parse(req.body);
+    
+    // If no artifactId provided, try to find and cancel any locks for this user/initiative/type
+    if (!artifactId) {
+      await db.delete(artifactLocks)
+        .where(
+          and(
+            eq(artifactLocks.artifactType, artifactType),
+            eq(artifactLocks.initiativeId, initiativeId),
+            eq(artifactLocks.lockedBy, userId)
+          )
+        );
+      
+      return res.json({ message: "All checkouts cancelled for artifact type" });
+    }
 
     // Check if user has the lock OR if user is admin
     const [existingLock] = await db.select()
@@ -321,19 +343,6 @@ versionControlRouter.get("/locks", requireAuth, async (req, res) => {
 
     const locks = await query;
     
-    console.log(`Fetching locks for initiative ${initiativeId}:`, {
-      count: locks.length,
-      currentTime: new Date(),
-      locks: locks.map(l => ({
-        artifactType: l.lock.artifactType,
-        artifactId: l.lock.artifactId,
-        lockedBy: l.lock.lockedBy,
-        username: l.user?.username,
-        initiativeId: l.lock.initiativeId,
-        expiry: l.lock.lockExpiry,
-        isExpired: l.lock.lockExpiry < new Date()
-      }))
-    });
 
     res.json(locks);
   } catch (error) {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { 
   interfaceBuilderProjects, 
+  interfaceBuilderFolders,
   applications, 
   interfaces,
   interfaceProviderConsumerLink 
@@ -19,11 +20,12 @@ router.use(requireAuth);
 router.get("/projects", async (req, res) => {
   try {
     const currentUser = req.user!.username;
+    const { folderPath } = req.query;
     
     // Get all projects that are either:
     // 1. Created by the current user (personal projects)
     // 2. Team projects (visible to all users)
-    const projects = await db
+    let query = db
       .select()
       .from(interfaceBuilderProjects)
       .where(or(
@@ -31,10 +33,29 @@ router.get("/projects", async (req, res) => {
         eq(interfaceBuilderProjects.isTeamProject, true)
       ));
     
+    // Filter by folder path if provided and if folderPath column exists
+    if (folderPath && typeof folderPath === 'string') {
+      try {
+        query = query.where(eq(interfaceBuilderProjects.folderPath, folderPath));
+      } catch (columnError) {
+        // If folderPath column doesn't exist, ignore the filter for now
+        console.warn("folderPath column does not exist yet, ignoring folder filter");
+      }
+    }
+    
+    const projects = await query;
+    
     res.json(projects);
   } catch (error) {
     console.error("Error fetching projects:", error);
     console.error("Error details:", error.message);
+    
+    // If it's a column error, return empty array for now
+    if (error.message && error.message.includes('column "folder_path" does not exist')) {
+      console.warn("Database schema not yet migrated, returning empty projects list");
+      return res.json([]);
+    }
+    
     res.status(500).json({ error: "Failed to fetch projects" });
   }
 });
@@ -74,7 +95,7 @@ router.get("/projects/:id", async (req, res) => {
 router.post("/projects", async (req, res) => {
   try {
     const currentUser = req.user!;
-    const { name, description, category, nodes, edges, metadata, isTeamProject } = req.body;
+    const { name, description, category, nodes, edges, metadata, isTeamProject, folderPath } = req.body;
     
     // Validate required fields
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -95,6 +116,7 @@ router.post("/projects", async (req, res) => {
         name: name.trim(),
         description: description || null,
         category: category || "custom",
+        folderPath: folderPath || "/",
         nodes: JSON.stringify(nodes || []),
         edges: JSON.stringify(edges || []),
         metadata: JSON.stringify(metadata || {}),
@@ -115,7 +137,7 @@ router.put("/projects/:id", async (req, res) => {
   try {
     const currentUser = req.user!;
     const projectId = req.params.id;
-    const { name, description, category, nodes, edges, metadata, isTeamProject } = req.body;
+    const { name, description, category, nodes, edges, metadata, isTeamProject, folderPath } = req.body;
     
     
     // First check if the project exists and get its current state
@@ -185,6 +207,11 @@ router.put("/projects/:id", async (req, res) => {
       metadata: JSON.stringify(metadata || {}),
       updatedAt: new Date()
     };
+    
+    // Include folderPath if provided
+    if (folderPath !== undefined) {
+      updateData.folderPath = folderPath;
+    }
     
     
     // Only include isTeamProject if it's being changed
@@ -504,6 +531,290 @@ router.get("/lobs", async (req, res) => {
   } catch (error) {
     console.error("Error fetching LOBs:", error);
     res.status(500).json({ error: "Failed to fetch LOBs" });
+  }
+});
+
+// Create a new folder
+router.post("/folders", async (req, res) => {
+  try {
+    const currentUser = req.user!;
+    const { path, name, parentPath, isTeamFolder } = req.body;
+    
+    // Check permissions for team folders
+    if (isTeamFolder && currentUser.role !== 'Admin' && currentUser.role !== 'admin' && currentUser.role !== 'Manager') {
+      return res.status(403).json({ error: "Only Managers and Admins can create team folders" });
+    }
+    
+    // Check if folder already exists
+    const [existing] = await db
+      .select()
+      .from(interfaceBuilderFolders)
+      .where(eq(interfaceBuilderFolders.path, path));
+    
+    if (existing) {
+      return res.status(409).json({ error: "Folder already exists" });
+    }
+    
+    // Create the folder
+    const [folder] = await db
+      .insert(interfaceBuilderFolders)
+      .values({
+        path,
+        name,
+        parentPath: parentPath || null,
+        createdBy: currentUser.username,
+        isTeamFolder: isTeamFolder || false
+      })
+      .returning();
+    
+    res.json(folder);
+  } catch (error) {
+    console.error("Error creating folder:", error);
+    
+    // If the table doesn't exist yet, return a helpful error
+    if (error.message && error.message.includes('relation "interface_builder_folders" does not exist')) {
+      return res.status(503).json({ 
+        error: "Database schema not yet migrated. Please run the migration script to enable folder functionality." 
+      });
+    }
+    
+    res.status(500).json({ error: "Failed to create folder" });
+  }
+});
+
+// Get folder structure
+router.get("/folders", async (req, res) => {
+  try {
+    const currentUser = req.user!.username;
+    
+    // Get all folders that are either:
+    // 1. Created by the current user
+    // 2. Team folders (visible to all users)
+    const folders = await db
+      .select()
+      .from(interfaceBuilderFolders)
+      .where(or(
+        eq(interfaceBuilderFolders.createdBy, currentUser),
+        eq(interfaceBuilderFolders.isTeamFolder, true)
+      ));
+    
+    // Return just the paths in sorted order
+    const folderPaths = folders.map(f => f.path).sort();
+    
+    res.json(folderPaths);
+  } catch (error) {
+    console.error("Error fetching folders:", error);
+    
+    // If the table doesn't exist yet, return empty array
+    if (error.message && error.message.includes('relation "interface_builder_folders" does not exist')) {
+      console.warn("Database schema not yet migrated, returning empty folders list");
+      return res.json([]);
+    }
+    
+    res.status(500).json({ error: "Failed to fetch folders" });
+  }
+});
+
+// Get folder impact (what will be deleted)
+router.get("/folders/:folderPath/impact", async (req, res) => {
+  try {
+    const currentUser = req.user!;
+    const folderPath = decodeURIComponent(req.params.folderPath);
+    
+    // Check permissions
+    if (currentUser.role !== 'Admin' && currentUser.role !== 'admin' && currentUser.role !== 'Manager') {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+    
+    // Get all projects in this folder and subfolders
+    const projects = await db
+      .select({
+        id: interfaceBuilderProjects.id,
+        name: interfaceBuilderProjects.name,
+        category: interfaceBuilderProjects.category,
+        folderPath: interfaceBuilderProjects.folderPath
+      })
+      .from(interfaceBuilderProjects)
+      .where(or(
+        eq(interfaceBuilderProjects.folderPath, folderPath),
+        sql`${interfaceBuilderProjects.folderPath} LIKE ${folderPath + '/%'}`
+      ));
+    
+    // Extract subfolders
+    const subfolders = new Set<string>();
+    projects.forEach(p => {
+      if (p.folderPath && p.folderPath !== folderPath && p.folderPath.startsWith(folderPath)) {
+        // Get the relative path and extract immediate subfolders
+        const relativePath = p.folderPath.substring(folderPath.length);
+        const parts = relativePath.split('/').filter(Boolean);
+        if (parts.length > 0) {
+          let subfolder = folderPath;
+          for (const part of parts) {
+            subfolder += '/' + part;
+            subfolders.add(subfolder);
+          }
+        }
+      }
+    });
+    
+    res.json({
+      projects: projects.filter(p => p.folderPath === folderPath),
+      subfolders: Array.from(subfolders).sort()
+    });
+  } catch (error) {
+    console.error("Error getting folder impact:", error);
+    res.status(500).json({ error: "Failed to get folder impact" });
+  }
+});
+
+// Rename folder
+router.put("/folders/:folderPath/rename", async (req, res) => {
+  try {
+    const currentUser = req.user!;
+    const oldPath = decodeURIComponent(req.params.folderPath);
+    const { newName } = req.body;
+    
+    // Check permissions
+    if (currentUser.role !== 'Admin' && currentUser.role !== 'admin' && currentUser.role !== 'Manager') {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+    
+    if (!newName || typeof newName !== 'string' || newName.includes('/')) {
+      return res.status(400).json({ error: "Invalid folder name" });
+    }
+    
+    // Get the folder
+    const [folder] = await db
+      .select()
+      .from(interfaceBuilderFolders)
+      .where(eq(interfaceBuilderFolders.path, oldPath));
+    
+    if (!folder) {
+      return res.status(404).json({ error: "Folder not found" });
+    }
+    
+    // Check ownership for non-team folders
+    if (!folder.isTeamFolder && folder.createdBy !== currentUser.username && 
+        currentUser.role !== 'Admin' && currentUser.role !== 'admin') {
+      return res.status(403).json({ error: "You can only rename your own folders" });
+    }
+    
+    // Calculate new path
+    const pathParts = oldPath.split('/').filter(Boolean);
+    pathParts[pathParts.length - 1] = newName;
+    const newPath = '/' + pathParts.join('/');
+    
+    // Update folder and all subfolders and projects in a transaction
+    await db.transaction(async (tx) => {
+      // Update the folder itself
+      await tx
+        .update(interfaceBuilderFolders)
+        .set({ 
+          path: newPath, 
+          name: newName,
+          updatedAt: new Date()
+        })
+        .where(eq(interfaceBuilderFolders.path, oldPath));
+      
+      // Update all subfolders
+      const subfolders = await tx
+        .select()
+        .from(interfaceBuilderFolders)
+        .where(sql`${interfaceBuilderFolders.path} LIKE ${oldPath + '/%'}`);
+      
+      for (const subfolder of subfolders) {
+        const updatedPath = subfolder.path.replace(oldPath, newPath);
+        const updatedParentPath = subfolder.parentPath?.replace(oldPath, newPath) || null;
+        await tx
+          .update(interfaceBuilderFolders)
+          .set({ 
+            path: updatedPath,
+            parentPath: updatedParentPath,
+            updatedAt: new Date()
+          })
+          .where(eq(interfaceBuilderFolders.id, subfolder.id));
+      }
+      
+      // Update projects in this folder
+      await tx
+        .update(interfaceBuilderProjects)
+        .set({ folderPath: newPath })
+        .where(eq(interfaceBuilderProjects.folderPath, oldPath));
+      
+      // Update projects in subfolders
+      const projects = await tx
+        .select()
+        .from(interfaceBuilderProjects)
+        .where(sql`${interfaceBuilderProjects.folderPath} LIKE ${oldPath + '/%'}`);
+      
+      for (const project of projects) {
+        const updatedPath = project.folderPath!.replace(oldPath, newPath);
+        await tx
+          .update(interfaceBuilderProjects)
+          .set({ folderPath: updatedPath })
+          .where(eq(interfaceBuilderProjects.id, project.id));
+      }
+    });
+    
+    res.json({ success: true, newPath });
+  } catch (error) {
+    console.error("Error renaming folder:", error);
+    res.status(500).json({ error: "Failed to rename folder" });
+  }
+});
+
+// Delete folder
+router.delete("/folders/:folderPath", async (req, res) => {
+  try {
+    const currentUser = req.user!;
+    const folderPath = decodeURIComponent(req.params.folderPath);
+    
+    // Check permissions
+    if (currentUser.role !== 'Admin' && currentUser.role !== 'admin' && currentUser.role !== 'Manager') {
+      return res.status(403).json({ error: "Insufficient permissions" });
+    }
+    
+    // Get the folder
+    const [folder] = await db
+      .select()
+      .from(interfaceBuilderFolders)
+      .where(eq(interfaceBuilderFolders.path, folderPath));
+    
+    if (!folder) {
+      return res.status(404).json({ error: "Folder not found" });
+    }
+    
+    // Check ownership for non-team folders
+    if (!folder.isTeamFolder && folder.createdBy !== currentUser.username && 
+        currentUser.role !== 'Admin' && currentUser.role !== 'admin') {
+      return res.status(403).json({ error: "You can only delete your own folders" });
+    }
+    
+    // Delete folder, subfolders, and all projects in a transaction
+    await db.transaction(async (tx) => {
+      // Delete all projects in this folder and subfolders
+      await tx
+        .delete(interfaceBuilderProjects)
+        .where(or(
+          eq(interfaceBuilderProjects.folderPath, folderPath),
+          sql`${interfaceBuilderProjects.folderPath} LIKE ${folderPath + '/%'}`
+        ));
+      
+      // Delete all subfolders
+      await tx
+        .delete(interfaceBuilderFolders)
+        .where(sql`${interfaceBuilderFolders.path} LIKE ${folderPath + '/%'}`);
+      
+      // Delete the folder itself
+      await tx
+        .delete(interfaceBuilderFolders)
+        .where(eq(interfaceBuilderFolders.path, folderPath));
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting folder:", error);
+    res.status(500).json({ error: "Failed to delete folder" });
   }
 });
 

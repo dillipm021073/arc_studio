@@ -220,32 +220,42 @@ export class VersionControlService {
     }).returning();
 
     // Create or update lock
-    // First delete any existing lock for this artifact in this initiative
-    await db.delete(artifactLocks)
+    // First delete any existing locks for this artifact (in ANY initiative to prevent conflicts)
+    const deletedLocks = await db.delete(artifactLocks)
       .where(
         and(
           eq(artifactLocks.artifactType, type),
-          eq(artifactLocks.artifactId, artifactId),
-          eq(artifactLocks.initiativeId, initiativeId)
+          eq(artifactLocks.artifactId, artifactId)
+          // Remove initiativeId filter to clean up any orphaned locks
         )
-      );
+      )
+      .returning();
+      
+    console.log(`Deleted ${deletedLocks.length} existing locks for ${type} ${artifactId}`);
+    
+    console.log(`Creating lock for ${type} ${artifactId} in initiative ${initiativeId} by user ${userId}`);
     
     // Then create new lock
-    const [newLock] = await db.insert(artifactLocks).values({
-      artifactType: type,
-      artifactId,
-      initiativeId,
-      lockedBy: userId,
-      lockExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000)
-    }).returning();
+    try {
+      const [newLock] = await db.insert(artifactLocks).values({
+        artifactType: type,
+        artifactId,
+        initiativeId,
+        lockedBy: userId,
+        lockExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        lockReason: `Checked out for editing in initiative ${initiativeId}`
+      }).returning();
+      
+      console.log('Lock created in service:', newLock);
+      
+      if (!newLock) {
+        throw new Error('Failed to create artifact lock - no lock returned');
+      }
+    } catch (lockError) {
+      console.error('Failed to create lock:', lockError);
+      throw new Error(`Failed to create artifact lock: ${lockError.message}`);
+    }
     
-    console.log('Service: Lock created in VersionControlService:', {
-      lock: newLock,
-      artifactType: type,
-      artifactId,
-      initiativeId,
-      userId
-    });
 
     return newVersion;
   }

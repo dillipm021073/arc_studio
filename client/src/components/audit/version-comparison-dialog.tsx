@@ -104,8 +104,14 @@ export function VersionComparisonDialog({
   };
 
   const renderValue = (value: any): string => {
-    if (value === null || value === undefined) return 'null';
-    if (typeof value === 'object') return JSON.stringify(value, null, 2);
+    if (value === null) return '(null)';
+    if (value === undefined) return '(undefined)';
+    if (value === '') return '(empty string)';
+    if (typeof value === 'object') {
+      if (Array.isArray(value) && value.length === 0) return '(empty array)';
+      if (typeof value === 'object' && Object.keys(value).length === 0) return '(empty object)';
+      return JSON.stringify(value, null, 2);
+    }
     return String(value);
   };
 
@@ -138,13 +144,13 @@ export function VersionComparisonDialog({
             <div className="grid grid-cols-2 gap-4 mt-2">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Old Value</label>
-                <pre className="text-xs p-2 bg-red-50 rounded border border-red-200 overflow-x-auto">
+                <pre className="text-xs p-2 bg-red-50 text-red-900 rounded border border-red-200 overflow-x-auto">
                   {renderValue(change.oldValue)}
                 </pre>
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">New Value</label>
-                <pre className="text-xs p-2 bg-green-50 rounded border border-green-200 overflow-x-auto">
+                <pre className="text-xs p-2 bg-green-50 text-green-900 rounded border border-green-200 overflow-x-auto">
                   {renderValue(change.newValue)}
                 </pre>
               </div>
@@ -152,18 +158,36 @@ export function VersionComparisonDialog({
           )}
 
           {change.type === 'added' && (
-            <div className="mt-2">
-              <pre className="text-xs p-2 bg-green-50 rounded border border-green-200 overflow-x-auto">
-                {renderValue(change.newValue)}
-              </pre>
+            <div className="grid grid-cols-2 gap-4 mt-2">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Old Value</label>
+                <pre className="text-xs p-2 bg-gray-50 text-gray-700 rounded border border-gray-200 overflow-x-auto">
+                  {renderValue(change.oldValue)}
+                </pre>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">New Value</label>
+                <pre className="text-xs p-2 bg-green-50 text-green-900 rounded border border-green-200 overflow-x-auto">
+                  {renderValue(change.newValue)}
+                </pre>
+              </div>
             </div>
           )}
 
           {change.type === 'removed' && (
-            <div className="mt-2">
-              <pre className="text-xs p-2 bg-red-50 rounded border border-red-200 overflow-x-auto">
-                {renderValue(change.oldValue)}
-              </pre>
+            <div className="grid grid-cols-2 gap-4 mt-2">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Old Value</label>
+                <pre className="text-xs p-2 bg-red-50 text-red-900 rounded border border-red-200 overflow-x-auto">
+                  {renderValue(change.oldValue)}
+                </pre>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">New Value</label>
+                <pre className="text-xs p-2 bg-gray-50 text-gray-700 rounded border border-gray-200 overflow-x-auto">
+                  {renderValue(change.newValue)}
+                </pre>
+              </div>
             </div>
           )}
 

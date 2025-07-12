@@ -12,6 +12,8 @@ import Interfaces from "@/pages/interfaces";
 import ChangeRequests from "@/pages/change-requests";
 import BusinessProcesses from "@/pages/business-processes";
 import BusinessProcessDiagram from "@/pages/business-process-diagram";
+import BusinessProcessComparison from "@/pages/business-process-comparison";
+import BusinessProcessTimeline from "@/pages/business-process-timeline";
 import InternalActivities from "@/pages/internal-activities";
 import TechnicalProcesses from "@/pages/technical-processes";
 import TechnicalProcessDetail from "@/pages/technical-process-detail";
@@ -49,6 +51,8 @@ const ProtectedInterfaces = withAuth(Interfaces);
 const ProtectedChangeRequests = withAuth(ChangeRequests);
 const ProtectedBusinessProcesses = withAuth(BusinessProcesses);
 const ProtectedBusinessProcessDiagram = withAuth(BusinessProcessDiagram);
+const ProtectedBusinessProcessComparison = withAuth(BusinessProcessComparison);
+const ProtectedBusinessProcessTimeline = withAuth(BusinessProcessTimeline);
 const ProtectedInternalActivities = withAuth(InternalActivities);
 const ProtectedTechnicalProcesses = withAuth(TechnicalProcesses);
 const ProtectedTechnicalProcessDetail = withAuth(TechnicalProcessDetail);
@@ -113,6 +117,8 @@ function Router() {
                 <Route path="/change-requests" component={ProtectedChangeRequests} />
                 <Route path="/business-processes" component={ProtectedBusinessProcesses} />
                 <Route path="/business-processes/:id/diagram" component={ProtectedBusinessProcessDiagram} />
+                <Route path="/business-processes/:id/compare" component={ProtectedBusinessProcessComparison} />
+                <Route path="/business-processes/:id/timeline" component={ProtectedBusinessProcessTimeline} />
                 <Route path="/internal-activities" component={ProtectedInternalActivities} />
                 <Route path="/technical-processes" component={ProtectedTechnicalProcesses} />
                 <Route path="/technical-processes/:id/diagram" component={ProtectedTechnicalProcessDiagram} />

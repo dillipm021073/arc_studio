@@ -3,6 +3,24 @@ import type { Config } from "tailwindcss";
 export default {
   darkMode: ["class"],
   content: ["./client/index.html", "./client/src/**/*.{js,jsx,ts,tsx}"],
+  safelist: [
+    'bg-amber-950/30',
+    'border-l-4',
+    'border-amber-500',
+    'hover:bg-amber-950/40',
+    'bg-red-950/30',
+    'border-red-500',
+    'hover:bg-red-950/40',
+    'bg-blue-950/30',
+    'border-blue-500',
+    'hover:bg-blue-950/40',
+    'bg-purple-950/30',
+    'border-purple-500',
+    'hover:bg-purple-950/40',
+    'bg-orange-950/30',
+    'border-orange-500',
+    'hover:bg-orange-950/40'
+  ],
   theme: {
     extend: {
       borderRadius: {

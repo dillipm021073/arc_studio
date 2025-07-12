@@ -61,7 +61,8 @@ import {
   AlertTriangle,
   GitBranch,
   Lock,
-  Unlock
+  Unlock,
+  X
 } from "lucide-react";
 import { Link } from "wouter";
 import InterfaceFormEnhanced from "@/components/interfaces/interface-form-enhanced";
@@ -75,6 +76,16 @@ import CommunicationBadge from "@/components/communications/communication-badge"
 import InterfaceDecommissionModal from "@/components/modals/interface-decommission-modal";
 import { cn } from "@/lib/utils";
 import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
+import { 
+  getArtifactState, 
+  getRowClassName, 
+  ArtifactState 
+} from "@/lib/artifact-state-utils";
+import { 
+  ArtifactStatusBadge, 
+  ArtifactStatusIndicator, 
+  StatusColumn 
+} from "@/components/ui/artifact-status-badge";
 
 interface Interface {
   id: number;
@@ -104,7 +115,7 @@ export default function Interfaces() {
     hasActiveFilters
   } = usePersistentFilters('interfaces');
   
-  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isAdmin } = usePermissions();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingInterface, setEditingInterface] = useState<Interface | null>(null);
   const [viewingInterface, setViewingInterface] = useState<Interface | null>(null);
@@ -120,6 +131,15 @@ export default function Interfaces() {
 
   const { data: interfaces, isLoading } = useQuery<Interface[]>({
     queryKey: ["/api/interfaces"],
+  });
+
+  // Fetch current user
+  const { data: currentUser } = useQuery({
+    queryKey: ['/api/auth/me'],
+    queryFn: async () => {
+      const response = await api.get('/api/auth/me');
+      return response.data.user;
+    }
   });
 
   // Fetch locks for version control
@@ -347,12 +367,55 @@ export default function Interfaces() {
     }
   });
 
+  const cancelCheckoutMutation = useMutation({
+    mutationFn: async (interface_: any) => {
+      const response = await api.post('/api/version-control/cancel-checkout', {
+        artifactType: 'interface',
+        artifactId: interface_.id,
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: (data, interface_) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/interfaces'] });
+      toast({
+        title: "Checkout cancelled",
+        description: `${interface_.imlNumber} checkout has been cancelled and changes discarded`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cancel checkout failed",
+        description: error.response?.data?.error || "Failed to cancel checkout",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Helper to check if an interface is locked
   const isInterfaceLocked = (interfaceId: number) => {
     if (!locks) return null;
     return locks.find((l: any) => 
       l.lock.artifactType === 'interface' && 
       l.lock.artifactId === interfaceId
+    );
+  };
+
+  // Helper to get interface state for visual indicators
+  const getInterfaceState = (interface_: Interface): ArtifactState => {
+    const lock = isInterfaceLocked(interface_.id);
+    // TODO: Add logic to detect initiative changes and conflicts
+    const hasInitiativeChanges = false; // This would check if interface has versions in current initiative
+    const hasConflicts = false; // This would check for version conflicts
+    
+    return getArtifactState(
+      interface_.id,
+      'interface',
+      lock,
+      currentUser?.id,
+      hasInitiativeChanges,
+      hasConflicts
     );
   };
 
@@ -421,12 +484,20 @@ export default function Interfaces() {
     { key: "hasCommunications", label: "Has Communications", type: "select", options: [
       { value: "yes", label: "Yes" },
       { value: "no", label: "No" }
+    ]},
+    { key: "versionState", label: "Version State", type: "select", options: [
+      { value: "production", label: "Production Baseline" },
+      { value: "checked_out_me", label: "Checked Out by Me" },
+      { value: "checked_out_other", label: "Locked by Others" },
+      { value: "initiative_changes", label: "Initiative Changes" },
+      { value: "conflicted", label: "Conflicted" }
     ]}
   ];
 
-  // Separate hasCommunications filters from other filters
+  // Separate custom filters from standard filters
   const hasCommunicationsFilter = filters.find(f => f.column === 'hasCommunications');
-  const otherFilters = filters.filter(f => f.column !== 'hasCommunications');
+  const versionStateFilter = filters.find(f => f.column === 'versionState');
+  const otherFilters = filters.filter(f => f.column !== 'hasCommunications' && f.column !== 'versionState');
 
   // Apply standard filters first
   let filteredByConditions = interfaces ? applyFilters(interfaces, otherFilters) : [];
@@ -442,6 +513,18 @@ export default function Interfaces() {
       }
       return true;
     });
+  }
+
+  // Apply version state filter if present
+  if (versionStateFilter && currentInitiative && !isProductionView) {
+    try {
+      filteredByConditions = filteredByConditions.filter(interface_ => {
+        const interfaceState = getInterfaceState(interface_);
+        return interfaceState.state === versionStateFilter.value;
+      });
+    } catch (e) {
+      console.error('Error in version state filter:', e);
+    }
   }
 
   // Then apply search
@@ -656,6 +739,9 @@ export default function Interfaces() {
               isAllSelected={multiSelect.isAllSelected}
               isSomeSelected={multiSelect.isSomeSelected}
               onRowDoubleClick={(iface) => setViewingInterface(iface)}
+              getRowClassName={(interface_, isSelected) => 
+                getRowClassName(getInterfaceState(interface_), isSelected)
+              }
               renderContextMenu={(interface_, rowContent) => (
                 <ContextMenu>
                   <ContextMenuTrigger asChild>
@@ -667,7 +753,7 @@ export default function Interfaces() {
                       <>
                         {(() => {
                           const lock = isInterfaceLocked(interface_.id);
-                          const isLockedByMe = lock?.lock.lockedBy === lock?.user?.id;
+                          const isLockedByMe = lock?.lock.lockedBy === currentUser?.id || isAdmin;
                           const isLockedByOther = lock && !isLockedByMe;
                           
                           return (
@@ -698,6 +784,14 @@ export default function Interfaces() {
                                   >
                                     <Unlock className="mr-2 h-4 w-4" />
                                     Checkin
+                                  </ContextMenuItem>
+                                  <ContextMenuItem 
+                                    onClick={() => cancelCheckoutMutation.mutate(interface_)}
+                                    disabled={cancelCheckoutMutation.isPending}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <X className="mr-2 h-4 w-4" />
+                                    Cancel Checkout
                                   </ContextMenuItem>
                                 </>
                               )}
@@ -778,6 +872,7 @@ export default function Interfaces() {
                   <TableHead className="w-[200px] text-gray-300">Provider → Consumer</TableHead>
                   <TableHead className="w-[150px] text-gray-300">Business Process</TableHead>
                   <TableHead className="w-[100px] text-gray-300">Status</TableHead>
+                  <TableHead className="w-[120px] text-gray-300">Version Status</TableHead>
                   <TableHead className="w-[120px] text-gray-300">Customer Focal</TableHead>
                   <TableHead className="w-[100px] text-gray-300">Communications</TableHead>
                 </>
@@ -793,30 +888,16 @@ export default function Interfaces() {
                         <div className="flex items-center space-x-2">
                           <Plug className="h-4 w-4 text-green-600" />
                           <span>{interface_.imlNumber}</span>
-                          {(() => {
-                            const lock = isInterfaceLocked(interface_.id);
-                            if (!lock) return null;
-                            const isLockedByMe = lock.lock.lockedBy === lock.user?.id;
-                            return (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    {isLockedByMe ? (
-                                      <GitBranch className="h-4 w-4 text-green-500" />
-                                    ) : (
-                                      <Lock className="h-4 w-4 text-yellow-500" />
-                                    )}
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    {isLockedByMe 
-                                      ? `Checked out by you in ${currentInitiative?.name}`
-                                      : `Locked by ${lock.user?.username} in ${currentInitiative?.name}`
-                                    }
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            );
-                          })()}
+                          <ArtifactStatusIndicator 
+                            state={getInterfaceState(interface_)} 
+                            initiativeName={currentInitiative?.name}
+                          />
+                          <ArtifactStatusBadge 
+                            state={getInterfaceState(interface_)} 
+                            showIcon={false}
+                            showText={true}
+                            size="sm"
+                          />
                         </div>
                       </TableCell>
                       <TableCell className="text-gray-300">
@@ -857,6 +938,9 @@ export default function Interfaces() {
                         <Badge className={getStatusColor(interface_.status)}>
                           {interface_.status.replace('_', ' ')}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <StatusColumn state={getInterfaceState(interface_)} />
                       </TableCell>
                       <TableCell className="text-gray-300">{interface_.customerFocal}</TableCell>
                       <TableCell>
@@ -1097,7 +1181,7 @@ export default function Interfaces() {
               // If in an initiative and interface is checked out, do checkin
               if (currentInitiative && !isProductionView) {
                 const lock = isInterfaceLocked(editingInterface.id);
-                if (lock?.lock.lockedBy === lock?.user?.id) {
+                if (lock?.lock.lockedBy === currentUser?.id || isAdmin) {
                   // Interface is checked out by current user, do checkin
                   await checkinMutation.mutateAsync({ 
                     iface: editingInterface, 

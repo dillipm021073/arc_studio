@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { db } from "./db";
 import { storage } from "./storage";
 import { requireAuth, requirePermission } from "./auth";
 import { parseIdParam } from "./middleware/validation";
@@ -44,6 +45,54 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
+
+// Helper function for auto-checkout logic
+async function performAutoCheckout(artifactType: string, artifactId: number, userId: number) {
+  try {
+    const { VersionControlService } = await import("./services/version-control.service");
+    const { initiatives, initiativeParticipants } = await import("@shared/schema");
+    const { eq, and } = await import("drizzle-orm");
+
+    // Get user's active initiatives
+    const userInitiatives = await db.select({
+      initiativeId: initiatives.initiativeId
+    })
+    .from(initiatives)
+    .innerJoin(initiativeParticipants, eq(initiatives.initiativeId, initiativeParticipants.initiativeId))
+    .where(and(
+      eq(initiativeParticipants.userId, userId),
+      eq(initiatives.status, 'active')
+    ));
+
+    // Auto-checkout in each active initiative if not already checked out
+    for (const initiative of userInitiatives) {
+      try {
+        const existingVersion = await VersionControlService.getInitiativeVersion(
+          artifactType as any,
+          artifactId,
+          initiative.initiativeId
+        );
+        
+        if (!existingVersion) {
+          // No version exists, auto-checkout
+          await VersionControlService.checkoutArtifact(
+            artifactType as any,
+            artifactId,
+            initiative.initiativeId,
+            userId
+          );
+          console.log(`Auto-checked out ${artifactType} ${artifactId} in initiative ${initiative.initiativeId} for user ${userId}`);
+        }
+      } catch (checkoutError) {
+        // Don't fail the update if auto-checkout fails, just log it
+        console.warn(`Auto-checkout failed for ${artifactType} ${artifactId} in initiative ${initiative.initiativeId}:`, checkoutError.message);
+      }
+    }
+  } catch (autoCheckoutError) {
+    // Don't fail the update if auto-checkout logic fails, just log it
+    console.warn(`Auto-checkout logic failed for ${artifactType} ${artifactId}:`, autoCheckoutError.message);
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Test endpoint
@@ -162,6 +211,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!application) {
         return res.status(404).json({ message: "Application not found" });
       }
+
+      // Auto-checkout: If user has active initiatives, ensure application is checked out
+      await performAutoCheckout('application', id, req.user!.id);
+
       res.json(application);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -2082,10 +2135,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register Initiatives routes (Version Control)
   const { initiativesRouter } = await import("./routes/initiatives");
   app.use("/api/initiatives", initiativesRouter);
+  
+  // Register Initiatives Changes routes
+  // TODO: Fix initiatives-changes.ts - references non-existent tables
+  // const initiativesChangesRouter = await import("./routes/initiatives-changes");
+  // app.use("/api", initiativesChangesRouter.default);
+  
+  // Register Impact Assessment routes
+  // TODO: Fix impact-assessment.service.ts - references non-existent tables
+  // const impactAssessmentRouter = await import("./routes/impact-assessment");
+  // app.use("/api", impactAssessmentRouter.default);
 
   // Register Version Control routes
   const { versionControlRouter } = await import("./routes/version-control");
   app.use("/api/version-control", versionControlRouter);
+  
+  // Register Internal Activities Version Control routes
+  const internalActivitiesVersionControlRouter = await import("./routes/internal-activities-version-control");
+  app.use("/api/version-control", internalActivitiesVersionControlRouter.default);
+  
+  // Register Technical Processes Version Control routes
+  const technicalProcessesVersionControlRouter = await import("./routes/technical-processes-version-control");
+  app.use("/api/version-control", technicalProcessesVersionControlRouter.default);
+  
+  // Register Version Control Changes routes
+  const versionControlChangesRouter = await import("./routes/version-control-changes");
+  app.use("/api/version-control", versionControlChangesRouter.default);
 
   // Register Audit routes
   const { auditRouter } = await import("./routes/audit");

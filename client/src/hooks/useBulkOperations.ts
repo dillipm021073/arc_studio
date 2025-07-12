@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
+import { useToast } from './use-toast';
 
 interface BulkUpdateRequest {
   ids: string[];
@@ -16,6 +16,7 @@ interface BulkDuplicateRequest {
 
 export function useBulkOperations(entityType: string) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const bulkUpdate = useMutation({
     mutationFn: async ({ ids, updates }: BulkUpdateRequest) => {
@@ -36,10 +37,17 @@ export function useBulkOperations(entityType: string) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [entityType] });
-      toast.success(data.message || `Successfully updated ${data.updatedCount} items`);
+      toast({
+        title: "Success",
+        description: data.message || `Successfully updated ${data.updatedCount} items`,
+      });
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to update items');
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to update items',
+        variant: "destructive",
+      });
     },
   });
 
@@ -62,10 +70,17 @@ export function useBulkOperations(entityType: string) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [entityType] });
-      toast.success(data.message || `Successfully deleted ${data.deletedCount} items`);
+      toast({
+        title: "Success",
+        description: data.message || `Successfully deleted ${data.deletedCount} items`,
+      });
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to delete items');
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to delete items',
+        variant: "destructive",
+      });
     },
   });
 
@@ -88,10 +103,17 @@ export function useBulkOperations(entityType: string) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [entityType] });
-      toast.success(data.message || `Successfully duplicated ${data.duplicatedCount} items`);
+      toast({
+        title: "Success",
+        description: data.message || `Successfully duplicated ${data.duplicatedCount} items`,
+      });
     },
     onError: (error: Error) => {
-      toast.error(error.message || 'Failed to duplicate items');
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to duplicate items',
+        variant: "destructive",
+      });
     },
   });
 

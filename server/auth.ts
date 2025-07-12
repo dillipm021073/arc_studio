@@ -259,6 +259,27 @@ export function requirePermission(resource: string, action: string) {
   };
 }
 
+// Middleware to require admin role (for admin override operations)
+export function requireAdmin(req: any, res: any, next: any) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+
+  const user = req.user as any;
+  
+  // Check both legacy role field and RBAC system
+  if (user.role === 'admin') {
+    next();
+    return;
+  }
+
+  // For more robust admin checking, you could also check RBAC roles here
+  // But for now, legacy role check is sufficient
+  return res.status(403).json({ 
+    message: 'Admin privileges required for this operation' 
+  });
+}
+
 // Middleware to check any of multiple permissions
 export function requireAnyPermission(...permissions: [string, string][]) {
   return async (req: any, res: any, next: any) => {

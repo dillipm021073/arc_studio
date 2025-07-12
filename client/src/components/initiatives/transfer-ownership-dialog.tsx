@@ -75,7 +75,7 @@ export function TransferOwnershipDialog({
 
   const transferMutation = useMutation({
     mutationFn: async (data: TransferOwnershipFormData) => {
-      const response = await api.post(`/api/initiatives/${initiative.id}/transfer-ownership`, {
+      const response = await api.post(`/api/initiatives/${initiative.initiativeId || initiative.id}/transfer-ownership`, {
         newOwnerId: parseInt(data.newOwnerId),
       });
       return response.data;

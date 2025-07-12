@@ -44,7 +44,7 @@ export const artifactVersions = pgTable("artifact_versions", {
   updatedBy: integer("updated_by").references(() => users.id),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
-  uniqueVersion: index("idx_unique_artifact_version").on(table.artifactType, table.artifactId, table.versionNumber),
+  uniqueVersion: unique("unique_artifact_version").on(table.artifactType, table.artifactId, table.versionNumber),
   baselineIdx: index("idx_artifact_versions_baseline").on(table.isBaseline),
   initiativeIdx: index("idx_artifact_versions_initiative").on(table.initiativeId),
   artifactIdx: index("idx_artifact_versions_artifact").on(table.artifactType, table.artifactId),

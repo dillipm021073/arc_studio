@@ -238,8 +238,8 @@ export class AuditService {
     versionFrom: number,
     versionTo: number
   ): Promise<VersionComparison> {
-    // Get both versions
-    const versions = await db.select({
+    // Get the most recent record for each version number
+    const fromVersionQuery = db.select({
       version: artifactVersions,
       creator: users
     })
@@ -249,16 +249,47 @@ export class AuditService {
       and(
         eq(artifactVersions.artifactType, artifactType),
         eq(artifactVersions.artifactId, artifactId),
-        inArray(artifactVersions.versionNumber, [versionFrom, versionTo])
+        eq(artifactVersions.versionNumber, versionFrom)
       )
-    );
+    )
+    .orderBy(desc(artifactVersions.createdAt))
+    .limit(1);
 
-    if (versions.length !== 2) {
+    const toVersionQuery = db.select({
+      version: artifactVersions,
+      creator: users
+    })
+    .from(artifactVersions)
+    .leftJoin(users, eq(users.id, artifactVersions.createdBy))
+    .where(
+      and(
+        eq(artifactVersions.artifactType, artifactType),
+        eq(artifactVersions.artifactId, artifactId),
+        eq(artifactVersions.versionNumber, versionTo)
+      )
+    )
+    .orderBy(desc(artifactVersions.createdAt))
+    .limit(1);
+
+    const [fromResults, toResults] = await Promise.all([
+      fromVersionQuery,
+      toVersionQuery
+    ]);
+
+    if (fromResults.length === 0 || toResults.length === 0) {
+      console.error(`Version comparison error: Versions not found`, {
+        artifactType,
+        artifactId,
+        versionFrom,
+        versionTo,
+        fromFound: fromResults.length > 0,
+        toFound: toResults.length > 0
+      });
       throw new Error('One or both versions not found');
     }
 
-    const fromVersion = versions.find(v => v.version.versionNumber === versionFrom)!;
-    const toVersion = versions.find(v => v.version.versionNumber === versionTo)!;
+    const fromVersion = fromResults[0];
+    const toVersion = toResults[0];
 
     // Get artifact name
     let artifactName = 'Unknown';
@@ -353,21 +384,25 @@ export class AuditService {
       const oldValue = oldObj?.[key];
       const newValue = newObj?.[key];
 
-      // Field was removed
-      if (oldValue !== undefined && newValue === undefined) {
+      // Field was removed (undefined or empty string)
+      if ((oldValue !== undefined && oldValue !== null && oldValue !== '') && 
+          (newValue === undefined || newValue === null || newValue === '')) {
         changes.push({
           field: key,
           path: currentPath,
           type: 'removed',
-          oldValue
+          oldValue,
+          newValue: newValue // Include newValue to show what it became
         });
       }
-      // Field was added
-      else if (oldValue === undefined && newValue !== undefined) {
+      // Field was added (from undefined/null/empty to having a value)
+      else if ((oldValue === undefined || oldValue === null || oldValue === '') && 
+               (newValue !== undefined && newValue !== null && newValue !== '')) {
         changes.push({
           field: key,
           path: currentPath,
           type: 'added',
+          oldValue: oldValue, // Include oldValue to show what it was
           newValue
         });
       }

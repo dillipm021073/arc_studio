@@ -2,7 +2,6 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { fileTypeFromBuffer } from 'file-type';
-import { env } from '@/env.js';
 
 interface ExtractedCapability {
   capabilityName: string;

@@ -1,7 +1,11 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useMultiSelect } from "@/hooks/use-multi-select";
+import { usePermissions } from "@/hooks/use-permissions";
+import { useInitiative } from "@/components/initiatives/initiative-context";
+import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -51,9 +55,28 @@ import {
   RefreshCw,
   GitBranch,
   Copy,
-  Eye
-} from "lucide-react";
+  Eye,
+  Lock,
+  Unlock
+, X} from "lucide-react";
 import { Link } from "wouter";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/auth-context";
+import { 
+  getArtifactState, 
+  getRowClassName, 
+  ArtifactState 
+} from "@/lib/artifact-state-utils";
+import { 
+  ArtifactStatusBadge, 
+  ArtifactStatusIndicator, 
+  StatusColumn 
+} from "@/components/ui/artifact-status-badge";
 
 interface InternalActivity {
   id: number;
@@ -85,10 +108,14 @@ interface BusinessProcess {
 export default function InternalActivities() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentInitiative, isProductionView } = useInitiative();
+  const { user } = useAuth();
+  const { isAdmin } = usePermissions();
   
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedApplication, setSelectedApplication] = useState<string>("");
   const [selectedActivityType, setSelectedActivityType] = useState<string>("");
+  const [selectedVersionState, setSelectedVersionState] = useState<string>("");
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingActivity, setEditingActivity] = useState<InternalActivity | null>(null);
   const [viewingActivity, setViewingActivity] = useState<any | null>(null);
@@ -121,6 +148,31 @@ export default function InternalActivities() {
     }
   });
 
+  // Fetch locks for version control
+  const { data: locks } = useQuery({
+    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryFn: async () => {
+      if (!currentInitiative) return [];
+      try {
+        const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
+        return response.data;
+      } catch (error) {
+        console.error('Failed to fetch locks:', error);
+        return [];
+      }
+    },
+    enabled: !!currentInitiative,
+  });
+
+  // Fetch current user for version control
+  const { data: currentUser } = useQuery({
+    queryKey: ['/api/auth/me'],
+    queryFn: async () => {
+      const response = await api.get('/api/auth/me');
+      return response.data.user;
+    }
+  });
+
   // Fetch applications for dropdown
   const { data: applications } = useQuery<Application[]>({
     queryKey: ["/api/applications"],
@@ -141,11 +193,55 @@ export default function InternalActivities() {
     }
   });
 
+  // Apply version state filtering
+  const filteredActivities = React.useMemo(() => {
+    let filtered = activities || [];
+    
+    // Apply version state filter if in initiative mode
+    if (selectedVersionState && selectedVersionState !== "all" && currentInitiative && !isProductionView) {
+      filtered = filtered.filter((activity: any) => {
+        const activityState = getActivityState(activity);
+        return activityState.state === selectedVersionState;
+      });
+    }
+    
+    return filtered;
+  }, [activities, selectedVersionState, currentInitiative, isProductionView]);
+
   // Initialize multi-select hook
   const multiSelect = useMultiSelect({
-    items: activities || [],
+    items: filteredActivities,
     getItemId: (activity) => activity.activity.id,
   });
+
+  // Helper function to check if activity is locked
+  const isActivityLocked = (activityId: number) => {
+    if (!locks || !Array.isArray(locks)) return null;
+    
+    const lock = locks.find((l: any) => 
+      l.lock.artifactType === 'internal_process' && 
+      l.lock.artifactId === activityId
+    );
+    
+    return lock || null;
+  };
+
+  // Helper to get activity state for visual indicators
+  const getActivityState = (activity: any): ArtifactState => {
+    const lock = isActivityLocked(activity.activity.id);
+    // TODO: Add logic to detect initiative changes and conflicts
+    const hasInitiativeChanges = false; // This would check if activity has versions in current initiative
+    const hasConflicts = false; // This would check for version conflicts
+    
+    return getArtifactState(
+      activity.activity.id,
+      'internal_process',
+      lock,
+      currentUser?.id,
+      hasInitiativeChanges,
+      hasConflicts
+    );
+  };
 
   // Create mutation
   const createMutation = useMutation({
@@ -221,6 +317,82 @@ export default function InternalActivities() {
     }
   });
 
+  // Version Control mutations
+  const checkoutMutation = useMutation({
+    mutationFn: async (activity: any) => {
+      const response = await api.post('/api/version-control/internal-activities/' + activity.activity.id + '/checkout', {
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: (data, activity) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      toast({
+        title: "Activity checked out",
+        description: `${activity.activity.activityName} is now locked for editing in ${currentInitiative?.name}`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to checkout activity",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const checkinMutation = useMutation({
+    mutationFn: async ({ activity, data }: { activity: any; data: any }) => {
+      const response = await api.post('/api/version-control/internal-activities/' + activity.activity.id + '/checkin', {
+        initiativeId: currentInitiative?.initiativeId,
+        data,
+        changeReason: `Updated ${activity.activity.activityName} via UI`
+      });
+      return response.data;
+    },
+    onSuccess: (data, { activity }) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/internal-activities'] });
+      toast({
+        title: "Changes checked in",
+        description: `${activity.activity.activityName} has been updated in ${currentInitiative?.name}`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to checkin changes",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const cancelCheckoutMutation = useMutation({
+    mutationFn: async (activity: InternalActivity) => {
+      const response = await api.post('/api/version-control/cancel-checkout', {
+        artifactType: 'internal_process',
+        artifactId: activity.id,
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: (data, activity) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/internal-processs'] });
+      toast({
+        title: "Checkout cancelled",
+        description: `${activity.activityName} checkout has been cancelled and changes discarded`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cancel checkout failed",
+        description: error.response?.data?.error || "Failed to cancel checkout",
+        variant: "destructive"
+      });
+    }
+  });
+
   const resetForm = () => {
     setFormData({
       applicationId: "",
@@ -245,7 +417,21 @@ export default function InternalActivities() {
     };
 
     if (editingActivity) {
-      updateMutation.mutate({ id: editingActivity.id, data });
+      // Check if we're in initiative mode and activity is locked by current user
+      const lock = isActivityLocked(editingActivity.id);
+      if (currentInitiative && !isProductionView && lock?.lock.lockedBy === user?.id) {
+        // Do checkin with the changes
+        const activityData = activities?.find((a: any) => a.activity.id === editingActivity.id);
+        if (activityData) {
+          checkinMutation.mutate({ activity: activityData, data });
+          setIsCreateDialogOpen(false);
+          setEditingActivity(null);
+          resetForm();
+        }
+      } else {
+        // Regular update
+        updateMutation.mutate({ id: editingActivity.id, data });
+      }
     } else {
       createMutation.mutate(data);
     }
@@ -604,13 +790,16 @@ export default function InternalActivities() {
 
       <div className="flex-1 overflow-auto">
         <div className="p-6">
+          {/* View Mode Indicator */}
+          {currentInitiative && <ViewModeIndicator />}
+          
           {/* Filters */}
-          <Card className="bg-gray-800 border-gray-700 mb-6">
+          <Card className="bg-gray-800 border-gray-700 mb-6 mt-4">
             <CardHeader>
               <CardTitle className="text-white">Filters</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
@@ -652,6 +841,23 @@ export default function InternalActivities() {
                     <SelectItem value="transform">Transform</SelectItem>
                     <SelectItem value="compute">Compute</SelectItem>
                     <SelectItem value="decide">Decide</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select 
+                  value={selectedVersionState} 
+                  onValueChange={setSelectedVersionState}
+                >
+                  <SelectTrigger className="bg-gray-700 border-gray-600">
+                    <SelectValue placeholder="All Version States" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-gray-700 border-gray-600">
+                    <SelectItem value="all">All Version States</SelectItem>
+                    <SelectItem value="production">Production Baseline</SelectItem>
+                    <SelectItem value="checked_out_me">Checked Out by Me</SelectItem>
+                    <SelectItem value="checked_out_other">Locked by Others</SelectItem>
+                    <SelectItem value="initiative_changes">Initiative Changes</SelectItem>
+                    <SelectItem value="conflicted">Conflicted</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -723,27 +929,28 @@ export default function InternalActivities() {
                     <TableHead className="text-gray-400">Duration</TableHead>
                     <TableHead className="text-gray-400">Pre-Condition</TableHead>
                     <TableHead className="text-gray-400">Post-Condition</TableHead>
+                    <TableHead className="text-gray-400">Version Status</TableHead>
                     <TableHead className="text-gray-400 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-gray-400">
+                      <TableCell colSpan={9} className="text-center text-gray-400">
                         Loading...
                       </TableCell>
                     </TableRow>
-                  ) : activities?.length === 0 ? (
+                  ) : filteredActivities?.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-gray-400">
+                      <TableCell colSpan={9} className="text-center text-gray-400">
                         No internal activities found
                       </TableCell>
                     </TableRow>
                   ) : (
-                    activities?.map((activity: any) => (
+                    filteredActivities?.map((activity: any) => (
                       <ContextMenu key={activity.activity.id}>
                         <ContextMenuTrigger asChild>
-                          <TableRow className={`border-gray-700 cursor-context-menu hover:bg-gray-700/50 ${multiSelect.isSelected(activity) ? 'bg-blue-900/20' : ''}`}>
+                          <TableRow className={getRowClassName(getActivityState(activity), multiSelect.isSelected(activity))}>
                             <TableCell className="w-12">
                               <Checkbox
                                 checked={multiSelect.isSelected(activity)}
@@ -753,7 +960,20 @@ export default function InternalActivities() {
                               />
                             </TableCell>
                             <TableCell className="text-white font-medium">
-                          {activity.activity.activityName}
+                          <div className="flex items-center space-x-2">
+                            <Activity className="h-4 w-4 text-green-600" />
+                            <span>{activity.activity.activityName}</span>
+                            <ArtifactStatusIndicator 
+                              state={getActivityState(activity)} 
+                              initiativeName={currentInitiative?.name}
+                            />
+                            <ArtifactStatusBadge 
+                              state={getActivityState(activity)} 
+                              showIcon={false}
+                              showText={true}
+                              size="sm"
+                            />
+                          </div>
                           {activity.activity.description && (
                             <p className="text-sm text-gray-400 mt-1">
                               {activity.activity.description}
@@ -785,6 +1005,9 @@ export default function InternalActivities() {
                         </TableCell>
                         <TableCell className="text-gray-300 text-sm">
                           {activity.activity.postCondition || '-'}
+                        </TableCell>
+                        <TableCell>
+                          <StatusColumn state={getActivityState(activity)} />
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -830,6 +1053,75 @@ export default function InternalActivities() {
                             <Copy className="h-4 w-4 mr-2" />
                             Duplicate
                           </ContextMenuItem>
+                          
+                          {/* Version Control Options */}
+                          {currentInitiative && !isProductionView && (
+                            <>
+                              <ContextMenuSeparator className="bg-gray-600" />
+                              {(() => {
+                                const lock = isActivityLocked(activity.activity.id);
+                                const isLockedByMe = lock?.lock.lockedBy === currentUser?.id || isAdmin;
+                                const isLockedByOther = lock && !isLockedByMe;
+                                
+                                return (
+                                  <>
+                                    {!lock && (
+                                      <ContextMenuItem 
+                                        onClick={() => checkoutMutation.mutate(activity)}
+                                        className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
+                                      >
+                                        <GitBranch className="mr-2 h-4 w-4" />
+                                        Checkout
+                                      </ContextMenuItem>
+                                    )}
+                                    {isLockedByMe && (
+                                      <>
+                                        <ContextMenuItem onClick={() => handleEdit(activity)}>
+                                          <Edit className="mr-2 h-4 w-4" />
+                                          Edit (Checked Out)
+                                        </ContextMenuItem>
+                                        <ContextMenuItem 
+                                          onClick={() => {
+                                            const data = {
+                                              applicationId: activity.activity.applicationId,
+                                              activityName: activity.activity.activityName,
+                                              activityType: activity.activity.activityType,
+                                              description: activity.activity.description,
+                                              sequenceNumber: activity.activity.sequenceNumber,
+                                              businessProcessId: activity.activity.businessProcessId,
+                                              preCondition: activity.activity.preCondition,
+                                              postCondition: activity.activity.postCondition,
+                                              estimatedDurationMs: activity.activity.estimatedDurationMs
+                                            };
+                                            checkinMutation.mutate({ activity, data });
+                                          }}
+                                          className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
+                                        >
+                                          <Unlock className="mr-2 h-4 w-4" />
+                                          Checkin
+                                        </ContextMenuItem>
+                                        <ContextMenuItem 
+                                          onClick={() => cancelCheckoutMutation.mutate(activity)}
+                                          disabled={cancelCheckoutMutation.isPending}
+                                          className="text-red-600 hover:text-red-700"
+                                        >
+                                          <X className="mr-2 h-4 w-4" />
+                                          Cancel Checkout
+                                        </ContextMenuItem>
+                                      </>
+                                    )}
+                                    {isLockedByOther && (
+                                      <ContextMenuItem disabled>
+                                        <Lock className="mr-2 h-4 w-4" />
+                                        Locked by {lock.user?.username}
+                                      </ContextMenuItem>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </>
+                          )}
+                          
                           <ContextMenuSeparator className="bg-gray-600" />
                           <ContextMenuItem
                             onClick={() => deleteMutation.mutate(activity.activity.id)}

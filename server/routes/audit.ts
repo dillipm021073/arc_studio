@@ -48,17 +48,29 @@ auditRouter.get("/compare-versions", requireAuth, async (req, res) => {
       });
     }
 
+    const fromVersion = parseInt(from as string);
+    const toVersion = parseInt(to as string);
+    const artifactId = parseInt(id as string);
+
+    if (isNaN(fromVersion) || isNaN(toVersion) || isNaN(artifactId)) {
+      return res.status(400).json({ 
+        error: "Invalid parameter format: version numbers and id must be integers" 
+      });
+    }
+
     const comparison = await AuditService.compareVersions(
       type as string,
-      parseInt(id as string),
-      parseInt(from as string),
-      parseInt(to as string)
+      artifactId,
+      fromVersion,
+      toVersion
     );
 
     res.json(comparison);
   } catch (error) {
     console.error("Error comparing versions:", error);
-    res.status(500).json({ error: "Failed to compare versions" });
+    res.status(500).json({ 
+      error: error instanceof Error ? error.message : "Failed to compare versions" 
+    });
   }
 });
 

@@ -38,7 +38,8 @@ import {
   FileText,
   GitBranch,
   Lock,
-  Unlock
+  Unlock,
+  X
 } from "lucide-react";
 import { Link } from "wouter";
 import ApplicationForm from "@/components/applications/application-form";
@@ -81,6 +82,16 @@ import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { BulkEditDialog, type BulkEditField } from "@/components/bulk-edit-dialog";
 import { cn } from "@/lib/utils";
 import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
+import { 
+  getArtifactState, 
+  getRowClassName, 
+  ArtifactState 
+} from "@/lib/artifact-state-utils";
+import { 
+  ArtifactStatusBadge, 
+  ArtifactStatusIndicator, 
+  StatusColumn 
+} from "@/components/ui/artifact-status-badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -117,7 +128,7 @@ export default function Applications() {
     hasActiveFilters
   } = usePersistentFilters('applications');
   
-  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isAdmin } = usePermissions();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingApp, setEditingApp] = useState<Application | null>(null);
   const [viewingApp, setViewingApp] = useState<Application | null>(null);
@@ -132,28 +143,51 @@ export default function Applications() {
   const [showBulkDuplicateConfirm, setShowBulkDuplicateConfirm] = useState(false);
   const [showCapabilitiesUpload, setShowCapabilitiesUpload] = useState<Application | null>(null);
   const [showCapabilitiesView, setShowCapabilitiesView] = useState<Application | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0); // Force refresh key
 
   // Initiative context
   const { currentInitiative, isProductionView } = useInitiative();
+  
+  // Refetch locks when initiative changes
+  useEffect(() => {
+    if (currentInitiative && !isProductionView) {
+      refetchLocks?.();
+    }
+  }, [currentInitiative?.initiativeId, isProductionView]);
 
   const { data: applications, isLoading } = useQuery<Application[]>({
     queryKey: ["/api/applications"],
   });
 
+  // Fetch current user
+  const { data: currentUser } = useQuery({
+    queryKey: ['/api/auth/me'],
+    queryFn: async () => {
+      const response = await api.get('/api/auth/me');
+      return response.data.user;
+    }
+  });
+
   // Fetch locks for version control
-  const { data: locks, error: locksError } = useQuery({
+  const { data: locks, error: locksError, refetch: refetchLocks } = useQuery({
     queryKey: ['version-control-locks', currentInitiative?.initiativeId],
     queryFn: async () => {
       if (!currentInitiative) return [];
       try {
-        const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
+        // Add timestamp to prevent caching
+        const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}&t=${Date.now()}`);
+        console.log('Locks API response:', response.data);
         return response.data;
       } catch (error) {
         console.error('Error fetching locks:', error);
         return [];
       }
     },
-    enabled: !!currentInitiative && !isProductionView
+    enabled: !!currentInitiative && !isProductionView,
+    staleTime: 0, // Always refetch when queried
+    cacheTime: 0,  // Don't cache the results
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true
   });
 
   // Log any errors for debugging
@@ -161,7 +195,19 @@ export default function Applications() {
     if (locksError) {
       console.error('Locks query error:', locksError);
     }
-  }, [locksError]);
+    if (locks) {
+      console.log('Locks data structure:', locks);
+      console.log('Current user ID:', currentUser?.id);
+      // Log each lock for debugging
+      locks.forEach((lock: any) => {
+        console.log(`Lock for ${lock.lock.artifactType} ${lock.lock.artifactId}:`, {
+          lockedBy: lock.lock.lockedBy,
+          username: lock.user?.username,
+          userId: lock.user?.id
+        });
+      });
+    }
+  }, [locksError, locks, currentUser]);
 
   // Fetch communication counts for all applications
   const applicationIds = applications?.map(app => app.id) || [];
@@ -376,6 +422,15 @@ export default function Applications() {
   // Version Control mutations
   const checkoutMutation = useMutation({
     mutationFn: async (app: Application) => {
+      console.log('Checkout mutation starting for:', app.name, 'ID:', app.id);
+      
+      // Check if already locked before attempting checkout
+      const currentLock = isApplicationLocked(app.id);
+      if (currentLock) {
+        console.log('App already locked, skipping checkout');
+        throw new Error('Application is already checked out');
+      }
+      
       const response = await api.post('/api/version-control/checkout', {
         artifactType: 'application',
         artifactId: app.id,
@@ -383,8 +438,49 @@ export default function Applications() {
       });
       return response.data;
     },
-    onSuccess: (data, app) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+    onSuccess: async (data, app) => {
+      console.log('Checkout response:', data);
+      
+      // If the response includes lock data, immediately update the cache
+      if (data.lock) {
+        console.log('Optimistically updating locks cache with new lock:', data.lock);
+        queryClient.setQueryData(
+          ['version-control-locks', currentInitiative?.initiativeId],
+          (oldLocks: any[] = []) => {
+            // Remove any existing lock for this artifact and add the new one
+            const filteredLocks = oldLocks.filter((l: any) => 
+              !(l.lock.artifactType === 'application' && l.lock.artifactId === app.id)
+            );
+            return [...filteredLocks, data.lock];
+          }
+        );
+      }
+      
+      // Immediately force refresh
+      setRefreshKey(prev => prev + 1);
+      
+      // Invalidate and refetch locks to ensure UI updates
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      
+      // Multiple attempts to ensure locks are refreshed
+      const newLocks = await refetchLocks();
+      console.log('Locks after refetch:', newLocks.data);
+      
+      // Add a small delay and refetch again to ensure backend has updated
+      setTimeout(async () => {
+        console.log('Refetching locks after delay...');
+        const finalLocks = await refetchLocks();
+        console.log('Final locks after delay:', finalLocks.data);
+        setRefreshKey(prev => prev + 1);
+        
+        // Check if the new lock is present
+        const newLock = finalLocks.data?.find((l: any) => 
+          l.lock.artifactType === 'application' && 
+          l.lock.artifactId === app.id
+        );
+        console.log(`Lock for app ${app.id} after checkout:`, newLock);
+      }, 500);
+      
       toast({
         title: "Application checked out",
         description: `${app.name} is now locked for editing in ${currentInitiative?.name}`
@@ -410,9 +506,10 @@ export default function Applications() {
       });
       return response.data;
     },
-    onSuccess: (data, { app }) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/applications'] });
+    onSuccess: async (data, { app }) => {
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/applications'] });
+      await refetchLocks();
       toast({
         title: "Changes checked in",
         description: `${app.name} has been updated in ${currentInitiative?.name}`
@@ -428,12 +525,94 @@ export default function Applications() {
     }
   });
 
+  const cancelCheckoutMutation = useMutation({
+    mutationFn: async (app: Application) => {
+      const response = await api.post('/api/version-control/cancel-checkout', {
+        artifactType: 'application',
+        artifactId: app.id,
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: async (data, app) => {
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['/api/applications'] });
+      await refetchLocks();
+      toast({
+        title: "Checkout cancelled",
+        description: `${app.name} checkout has been cancelled and changes discarded`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cancel checkout failed",
+        description: error.response?.data?.error || "Failed to cancel checkout",
+        variant: "destructive"
+      });
+    }
+  });
+
   // Helper to check if an application is locked
   const isApplicationLocked = (appId: number) => {
-    if (!locks) return null;
-    return locks.find((l: any) => 
+    if (!locks) {
+      console.log(`isApplicationLocked(${appId}): No locks data available`);
+      return null;
+    }
+    
+    console.log(`isApplicationLocked(${appId}): Checking against locks:`, {
+      lockCount: locks.length,
+      locks: locks.map(l => ({
+        artifactType: l.lock.artifactType,
+        artifactId: l.lock.artifactId,
+        lockedBy: l.lock.lockedBy,
+        username: l.user?.username
+      }))
+    });
+    
+    const found = locks.find((l: any) => 
       l.lock.artifactType === 'application' && 
       l.lock.artifactId === appId
+    );
+    
+    if (found) {
+      console.log(`isApplicationLocked(${appId}): Found lock`, {
+        lock: found,
+        lockedBy: found.lock.lockedBy,
+        lockExpiry: found.lock.lockExpiry,
+        username: found.user?.username
+      });
+    } else {
+      console.log(`isApplicationLocked(${appId}): No lock found for app ${appId}`);
+    }
+    return found;
+  };
+
+  // Helper to get application state for visual indicators
+  const getApplicationState = (app: Application): ArtifactState => {
+    const lock = isApplicationLocked(app.id);
+    // TODO: Add logic to detect initiative changes and conflicts
+    // For now, we'll use placeholder values
+    const hasInitiativeChanges = false; // This would check if app has versions in current initiative
+    const hasConflicts = false; // This would check for version conflicts
+    
+    // Debug logging
+    console.log(`getApplicationState for ${app.name} (${app.id}):`, {
+      hasLock: !!lock,
+      lock: lock,
+      currentUserId: currentUser?.id,
+      lockedBy: lock?.lock?.lockedBy,
+      isMatch: lock?.lock?.lockedBy === currentUser?.id,
+      isAdmin: isAdmin,
+      refreshKey: refreshKey
+    });
+    
+    return getArtifactState(
+      app.id,
+      'application',
+      lock,
+      currentUser?.id,
+      hasInitiativeChanges,
+      hasConflicts
     );
   };
 
@@ -490,12 +669,20 @@ export default function Applications() {
     { key: "hasCommunications", label: "Has Communications", type: "select", options: [
       { value: "yes", label: "Yes" },
       { value: "no", label: "No" }
+    ]},
+    { key: "versionState", label: "Version State", type: "select", options: [
+      { value: "production", label: "Production Baseline" },
+      { value: "checked_out_me", label: "Checked Out by Me" },
+      { value: "checked_out_other", label: "Locked by Others" },
+      { value: "initiative_changes", label: "Initiative Changes" },
+      { value: "conflicted", label: "Conflicted" }
     ]}
   ];
 
-  // Separate hasCommunications filters from other filters
+  // Separate custom filters from standard filters
   const hasCommunicationsFilter = filters.find(f => f.column === 'hasCommunications');
-  const otherFilters = filters.filter(f => f.column !== 'hasCommunications');
+  const versionStateFilter = filters.find(f => f.column === 'versionState');
+  const otherFilters = filters.filter(f => f.column !== 'hasCommunications' && f.column !== 'versionState');
 
   // Apply standard filters first - ensure no null applications
   const validApplications = (applications || []).filter(app => app != null);
@@ -516,6 +703,18 @@ export default function Applications() {
       });
     } catch (e) {
       console.error('Error in communications filter:', e);
+    }
+  }
+
+  // Apply version state filter if present
+  if (versionStateFilter && currentInitiative && !isProductionView) {
+    try {
+      filteredByConditions = filteredByConditions.filter(app => {
+        const appState = getApplicationState(app);
+        return appState.state === versionStateFilter.value;
+      });
+    } catch (e) {
+      console.error('Error in version state filter:', e);
     }
   }
 
@@ -757,6 +956,7 @@ export default function Applications() {
                   <TableHead className="w-[120px] text-gray-300">Deployment</TableHead>
                   <TableHead className="w-[80px] text-gray-300">Uptime</TableHead>
                   <TableHead className="w-[100px] text-gray-300">Status</TableHead>
+                  <TableHead className="w-[120px] text-gray-300">Version Status</TableHead>
                   <TableHead className="w-[120px] text-gray-300">Interfaces</TableHead>
                   <TableHead className="w-[100px] text-gray-300">Communications</TableHead>
                   <TableHead className="w-[120px] text-gray-300">Last Changed</TableHead>
@@ -764,13 +964,19 @@ export default function Applications() {
               </TableHeader>
               <TableBody>
                 {filteredApplications.map((app) => (
-                  <ContextMenu key={app.id}>
+                  <ContextMenu key={`${app.id}-${refreshKey}`}>
                     <ContextMenuTrigger asChild>
                       <TableRow
-                        className={cn(
-                          'cursor-pointer',
-                          multiSelect.isSelected(app) && 'bg-accent',
-                        )}
+                        className={(() => {
+                          const state = getApplicationState(app);
+                          const className = getRowClassName(state, multiSelect.isSelected(app));
+                          console.log(`Row class for ${app.name}:`, {
+                            state: state.state,
+                            className,
+                            lock: isApplicationLocked(app.id)
+                          });
+                          return className;
+                        })()}
                         onDoubleClick={() => setViewingApp(app)}
                       >
                         <TableCell className="w-12">
@@ -786,30 +992,16 @@ export default function Applications() {
                           <div className="flex items-center space-x-2">
                             <Box className="h-4 w-4 text-blue-500" />
                             <span>{app.name}</span>
-                            {(() => {
-                              const lock = isApplicationLocked(app.id);
-                              if (!lock) return null;
-                              const isLockedByMe = lock.lock.lockedBy === lock.user?.id;
-                              return (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger>
-                                      {isLockedByMe ? (
-                                        <GitBranch className="h-4 w-4 text-green-500" />
-                                      ) : (
-                                        <Lock className="h-4 w-4 text-yellow-500" />
-                                      )}
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      {isLockedByMe 
-                                        ? `Checked out by you in ${currentInitiative?.name}`
-                                        : `Locked by ${lock.user?.username} in ${currentInitiative?.name}`
-                                      }
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              );
-                            })()}
+                            <ArtifactStatusIndicator 
+                              state={getApplicationState(app)} 
+                              initiativeName={currentInitiative?.name}
+                            />
+                            <ArtifactStatusBadge 
+                              state={getApplicationState(app)} 
+                              showIcon={false}
+                              showText={true}
+                              size="sm"
+                            />
                           </div>
                         </TableCell>
                         <TableCell className="text-gray-300">{app.lob || '-'}</TableCell>
@@ -826,6 +1018,9 @@ export default function Applications() {
                           <Badge className={getStatusColor(app.status)}>
                             {app.status}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <StatusColumn state={getApplicationState(app)} />
                         </TableCell>
                         <TableCell>
                           <TooltipProvider>
@@ -873,14 +1068,26 @@ export default function Applications() {
                         <>
                           {(() => {
                             const lock = isApplicationLocked(app.id);
-                            const isLockedByMe = lock?.lock.lockedBy === lock?.user?.id;
+                            const isLockedByMe = lock && (lock.lock.lockedBy === currentUser?.id || isAdmin);
                             const isLockedByOther = lock && !isLockedByMe;
+                            
+                            console.log(`Context menu for ${app.name}:`, {
+                              hasLock: !!lock,
+                              lockedBy: lock?.lock?.lockedBy,
+                              currentUserId: currentUser?.id,
+                              isLockedByMe,
+                              isLockedByOther,
+                              isAdmin
+                            });
                             
                             return (
                               <>
                                 {!lock && (
                                   <ContextMenuItem 
-                                    onClick={() => checkoutMutation.mutate(app)}
+                                    onClick={() => {
+                                      console.log(`Attempting checkout for app ${app.name} (ID: ${app.id})`);
+                                      checkoutMutation.mutate(app);
+                                    }}
                                     disabled={checkoutMutation.isPending}
                                   >
                                     <GitBranch className="mr-2 h-4 w-4" />
@@ -900,6 +1107,14 @@ export default function Applications() {
                                       <Unlock className="mr-2 h-4 w-4" />
                                       Checkin
                                     </ContextMenuItem>
+                                    <ContextMenuItem 
+                                      onClick={() => cancelCheckoutMutation.mutate(app)}
+                                      disabled={cancelCheckoutMutation.isPending}
+                                      className="text-red-600 hover:text-red-700"
+                                    >
+                                      <X className="mr-2 h-4 w-4" />
+                                      Cancel Checkout
+                                    </ContextMenuItem>
                                   </>
                                 )}
                                 {isLockedByOther && (
@@ -914,10 +1129,18 @@ export default function Applications() {
                           <ContextMenuSeparator />
                         </>
                       )}
+                      {/* Show edit for production view or when no initiative context */}
                       {canUpdate('applications') && (!currentInitiative || isProductionView) && (
                         <ContextMenuItem onClick={() => setEditingApp(app)}>
                           <Edit className="mr-2 h-4 w-4" />
                           Edit
+                        </ContextMenuItem>
+                      )}
+                      {/* Show help when in initiative mode but item not checked out */}
+                      {currentInitiative && !isProductionView && !isApplicationLocked(app.id) && canUpdate('applications') && (
+                        <ContextMenuItem disabled>
+                          <Info className="mr-2 h-4 w-4" />
+                          Checkout required to edit
                         </ContextMenuItem>
                       )}
                       <ContextMenuItem onClick={() => setViewingApp(app)}>
@@ -1020,12 +1243,12 @@ export default function Applications() {
                     console.log('Edit complete - checking lock status:', {
                       hasLock: !!lock,
                       lockDetails: lock,
-                      currentUserId: lock?.user?.id,
-                      isLockedByMe: lock?.lock.lockedBy === lock?.user?.id,
+                      currentUserId: currentUser?.id,
+                      isLockedByMe: lock?.lock.lockedBy === currentUser?.id,
                       initiativeId: currentInitiative?.initiativeId
                     });
                     
-                    if (lock?.lock.lockedBy === lock?.user?.id) {
+                    if (lock?.lock.lockedBy === currentUser?.id) {
                       // App is checked out by current user, do checkin
                       // Note: The form has already saved the changes to the server
                       console.log('Attempting checkin...');

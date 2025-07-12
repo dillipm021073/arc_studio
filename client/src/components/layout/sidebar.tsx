@@ -38,6 +38,7 @@ const navigation = [
   { name: "Business Processes", href: "/business-processes", icon: Workflow, section: "Management" },
   { name: "Internal Activities", href: "/internal-activities", icon: CheckCircle, section: "Management" },
   { name: "Technical Processes", href: "/technical-processes", icon: Cpu, section: "Management" },
+  { name: "Change Requests", href: "/change-requests", icon: GitBranch, section: "Management" },
   { name: "Communications", href: "/communications", icon: MessageSquare, section: "Management" },
   { name: "Impact Analysis", href: "/impact-analysis", icon: Network, section: "Analysis" },
   { name: "Enhanced Analysis", href: "/impact-analysis-enhanced", icon: Network, section: "Analysis" },

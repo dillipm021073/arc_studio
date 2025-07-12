@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInitiative } from "@/components/initiatives/initiative-context";
+import { api } from "@/lib/api";
 import ReactFlow, {
   Node,
   Edge,
@@ -21,7 +23,7 @@ import "reactflow/dist/style.css";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, ArrowLeft, Undo2, Redo2, Type, Download, FileBox, RefreshCw } from "lucide-react";
+import { Save, Plus, ArrowLeft, Undo2, Redo2, Type, Download, FileBox, RefreshCw, SplitSquareHorizontal, History } from "lucide-react";
 import { toPng } from 'html-to-image';
 import SequenceDiagramNode from "@/components/diagram/sequence-diagram-node";
 import SequenceDiagramBottomNode from "@/components/diagram/sequence-diagram-bottom-node";
@@ -72,6 +74,7 @@ function BusinessProcessDiagramInner() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currentInitiative, isProductionView } = useInitiative();
   const businessProcessId = parseInt(params.id as string);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -172,6 +175,36 @@ function BusinessProcessDiagramInner() {
       return response.json();
     },
   });
+
+  // Fetch changed artifacts in current initiative
+  const { data: changedArtifacts } = useQuery({
+    queryKey: ["initiative-changes", currentInitiative?.initiativeId],
+    queryFn: async () => {
+      if (!currentInitiative) return { interfaces: [], businessProcesses: [] };
+      
+      try {
+        const response = await api.get(`/api/version-control/initiative/${currentInitiative.initiativeId}/changes`);
+        return response.data;
+      } catch (error) {
+        console.error('Failed to fetch initiative changes:', error);
+        return { interfaces: [], businessProcesses: [] };
+      }
+    },
+    enabled: !!currentInitiative && !isProductionView,
+  });
+
+  // Helper function to check if an interface has changed
+  const isInterfaceChanged = (interfaceId: number) => {
+    if (!changedArtifacts || !currentInitiative || isProductionView) return null;
+    
+    const change = changedArtifacts.interfaces?.find((c: any) => c.artifactId === interfaceId);
+    if (!change) return null;
+    
+    return {
+      changeType: change.changeType, // 'create', 'update', 'delete'
+      changedFields: change.changedFields || []
+    };
+  };
 
   // Generate nodes and edges from interfaces (UML Sequence Diagram)
   const generateSequenceDiagram = (interfaces: any[], extendHandler: (applicationId: number, newHeight: number) => void) => {
@@ -410,6 +443,31 @@ function BusinessProcessDiagramInner() {
           targetId = `seq-${iface.providerApplicationId}`;
         }
 
+        // Check if interface has changed in initiative
+        const changeInfo = isInterfaceChanged(iface.interfaceId);
+        let strokeColor = iface.status === 'active' ? '#10b981' : '#6b7280';
+        let strokeWidth = 2;
+        let strokeDasharray = undefined;
+        
+        if (changeInfo) {
+          switch (changeInfo.changeType) {
+            case 'create':
+              strokeColor = '#3b82f6'; // Blue for new
+              strokeWidth = 3;
+              break;
+            case 'update':
+              strokeColor = '#f59e0b'; // Yellow/Orange for modified
+              strokeWidth = 3;
+              strokeDasharray = '5,5';
+              break;
+            case 'delete':
+              strokeColor = '#ef4444'; // Red for deleted
+              strokeWidth = 3;
+              strokeDasharray = '2,2';
+              break;
+          }
+        }
+
         edges.push({
           id: `seq-edge-${iface.id}`,
           source: sourceId,
@@ -441,11 +499,13 @@ function BusinessProcessDiagramInner() {
             },
             sequenceNumber: iface.sequenceNumber || index + 1,
             yPosition: yOffset,
-            businessProcessLevel: 'A'
+            businessProcessLevel: 'A',
+            changeInfo: changeInfo // Pass change info to edge component
           },
           style: {
-            strokeWidth: 2,
-            stroke: iface.status === 'active' ? '#10b981' : '#6b7280'
+            strokeWidth,
+            stroke: strokeColor,
+            strokeDasharray
           },
           zIndex: 1000, // Ensure interface arrows are above everything
           markerEnd: iface.status === 'active' ? 'url(#arrowclosed)' : 'url(#arrowclosed-inactive)'
@@ -537,6 +597,30 @@ function BusinessProcessDiagramInner() {
             targetId = `seq-${iface.providerApplicationId}`;
           }
 
+          // Check if interface has changed in initiative
+          const changeInfo = isInterfaceChanged(iface.interfaceId);
+          let strokeColor = iface.status === 'active' ? '#3b82f6' : '#6b7280'; // Default blue for Level B
+          let strokeWidth = 2;
+          let strokeDasharray = '5,5'; // Default dashed for Level B
+          
+          if (changeInfo) {
+            switch (changeInfo.changeType) {
+              case 'create':
+                strokeColor = '#3b82f6'; // Blue for new
+                strokeWidth = 3;
+                break;
+              case 'update':
+                strokeColor = '#f59e0b'; // Yellow/Orange for modified
+                strokeWidth = 3;
+                break;
+              case 'delete':
+                strokeColor = '#ef4444'; // Red for deleted
+                strokeWidth = 3;
+                strokeDasharray = '2,2';
+                break;
+            }
+          }
+
           edges.push({
             id: `seq-edge-${iface.id}`,
             source: sourceId,
@@ -569,12 +653,13 @@ function BusinessProcessDiagramInner() {
               sequenceNumber: iface.sequenceNumber || index + 1,
               yPosition: groupYOffset,
               businessProcessLevel: group.process.level,
-              businessProcessId: processId
+              businessProcessId: processId,
+              changeInfo: changeInfo // Pass change info to edge component
             },
             style: {
-              strokeWidth: 2,
-              stroke: iface.status === 'active' ? '#3b82f6' : '#6b7280', // Different color for Level B
-              strokeDasharray: '5,5' // Dashed line to show it's within a process group
+              strokeWidth,
+              stroke: strokeColor,
+              strokeDasharray
             },
             zIndex: 1000, // Ensure interface arrows are above everything
             markerEnd: iface.status === 'active' ? 'url(#arrowclosed-blue)' : 'url(#arrowclosed-inactive)'
@@ -820,6 +905,31 @@ function BusinessProcessDiagramInner() {
             targetId = `seq-${iface.providerApplicationId}`;
           }
 
+          // Check if interface has changed in initiative
+          const changeInfo = isInterfaceChanged(iface.interfaceId);
+          let strokeColor = iface.status === 'active' ? '#3b82f6' : '#6b7280';
+          let strokeWidth = 2;
+          let strokeDasharray = undefined;
+          
+          if (changeInfo) {
+            switch (changeInfo.changeType) {
+              case 'create':
+                strokeColor = '#3b82f6'; // Blue for new
+                strokeWidth = 3;
+                break;
+              case 'update':
+                strokeColor = '#f59e0b'; // Yellow/Orange for modified
+                strokeWidth = 3;
+                strokeDasharray = '5,5';
+                break;
+              case 'delete':
+                strokeColor = '#ef4444'; // Red for deleted
+                strokeWidth = 3;
+                strokeDasharray = '2,2';
+                break;
+            }
+          }
+
           edges.push({
             id: `seq-edge-${iface.id}`,
             source: sourceId,
@@ -852,11 +962,13 @@ function BusinessProcessDiagramInner() {
               sequenceNumber: item.sequenceNumber,
               yPosition: yOffset,
               businessProcessId: businessProcessId,
-              businessProcessLevel: businessProcess?.level || 'B'
+              businessProcessLevel: businessProcess?.level || 'B',
+              changeInfo: changeInfo // Pass change info to edge component
             },
             style: {
-              strokeWidth: 2,
-              stroke: iface.status === 'active' ? '#3b82f6' : '#6b7280'
+              strokeWidth,
+              stroke: strokeColor,
+              strokeDasharray
             },
             zIndex: 900,
             markerEnd: iface.status === 'active' ? 'url(#arrowclosed-blue)' : 'url(#arrowclosed-inactive)'
@@ -2072,6 +2184,24 @@ function BusinessProcessDiagramInner() {
               <Download className="mr-2 h-4 w-4" />
               Download
             </Button>
+            {currentInitiative && !isProductionView && (
+              <Button
+                onClick={() => navigate(`/business-processes/${businessProcessId}/compare`)}
+                title="Compare with Production"
+                className="bg-purple-600 text-white hover:bg-purple-700"
+              >
+                <SplitSquareHorizontal className="mr-2 h-4 w-4" />
+                Compare
+              </Button>
+            )}
+            <Button
+              onClick={() => navigate(`/business-processes/${businessProcessId}/timeline`)}
+              title="View Timeline"
+              className="bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              <History className="mr-2 h-4 w-4" />
+              Timeline
+            </Button>
             {diagramMode === 'sequence' && (
               <Button onClick={handleSave} disabled={saveMutation.isPending} className="bg-blue-600 text-white hover:bg-blue-700">
                 <Save className="mr-2 h-4 w-4" />
@@ -2080,6 +2210,36 @@ function BusinessProcessDiagramInner() {
             )}
           </div>
         </div>
+
+        {/* Initiative Change Legend */}
+        {currentInitiative && !isProductionView && changedArtifacts && (
+          <div className="bg-gray-800 border-b border-gray-700 px-4 py-2">
+            <div className="flex items-center gap-6 text-sm">
+              <span className="text-gray-400 font-medium">Initiative Changes:</span>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-blue-500"></div>
+                  <span className="text-gray-300">New Interface</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-orange-500" style={{ borderTop: '2px dashed #f59e0b' }}></div>
+                  <span className="text-gray-300">Modified Interface</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-red-500" style={{ borderTop: '2px dashed #ef4444' }}></div>
+                  <span className="text-gray-300">Deleted Interface</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-0.5 bg-green-500"></div>
+                  <span className="text-gray-300">Unchanged</span>
+                </div>
+              </div>
+              <div className="ml-auto text-blue-400">
+                Working in: {currentInitiative.name}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex-1 relative">
           <DiagramContextMenu

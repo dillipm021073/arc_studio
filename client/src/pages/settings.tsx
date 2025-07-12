@@ -6,15 +6,17 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Key, User, Save, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Settings, Key, User, Save, Eye, EyeOff, AlertCircle, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { AdminOverridePanel } from "@/components/admin/admin-override-panel";
 
 interface UserSettings {
   id: number;
   username: string;
   email: string;
   name: string;
+  role?: string;
   autoXApiKey?: string | null;
   autoXUsername?: string | null;
 }
@@ -102,6 +104,9 @@ export function SettingsPage() {
         <TabsList>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
           <TabsTrigger value="profile">Profile</TabsTrigger>
+          {userSettings?.role === 'admin' && (
+            <TabsTrigger value="admin">Admin Controls</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="integrations" className="space-y-4">
@@ -220,6 +225,25 @@ export function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {userSettings?.role === 'admin' && (
+          <TabsContent value="admin" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Admin Override Controls
+                </CardTitle>
+                <CardDescription>
+                  Administrative tools for managing version control locks and overriding user checkouts.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AdminOverridePanel userRole={userSettings?.role} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

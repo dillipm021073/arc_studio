@@ -94,7 +94,7 @@ export function AuditTrail({
   });
 
   // Extract unique users for filter
-  const uniqueUsers = Array.from(
+  const uniqueUsers: string[] = Array.from(
     new Set(auditData?.entries?.map((e: AuditEntry) => e.userName) || [])
   );
 
@@ -430,14 +430,14 @@ export function AuditTrail({
       </Dialog>
 
       {/* Version Comparison Dialog */}
-      {selectedEntry && showComparison && (
+      {selectedEntry && showComparison && selectedEntry.versionFrom != null && selectedEntry.versionTo != null && (
         <VersionComparisonDialog
           open={showComparison}
           onOpenChange={setShowComparison}
           artifactType={selectedEntry.artifactType}
           artifactId={selectedEntry.artifactId}
-          versionFrom={selectedEntry.versionFrom!}
-          versionTo={selectedEntry.versionTo!}
+          versionFrom={selectedEntry.versionFrom}
+          versionTo={selectedEntry.versionTo}
         />
       )}
     </div>

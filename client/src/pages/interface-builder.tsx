@@ -1562,6 +1562,7 @@ export default function InterfaceBuilder() {
       <SaveAsDialog
         isOpen={showSaveAsDialog}
         onClose={() => setShowSaveAsDialog(false)}
+        currentFolderPath="/" // Default to root for now
         onSave={async (projectData) => {
           setSaveStatus('saving');
           try {
@@ -1597,7 +1598,8 @@ export default function InterfaceBuilder() {
               // Save to team storage (database)
               savedProject = await interfaceBuilderApi.createProject({
                 ...newProject,
-                isTeamProject: true
+                isTeamProject: true,
+                folderPath: projectData.folderPath || '/'
               });
               toast({
                 title: 'Project Created',

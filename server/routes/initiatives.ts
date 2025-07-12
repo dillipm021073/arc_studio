@@ -7,9 +7,16 @@ import {
   artifactVersions,
   versionConflicts,
   initiativeComments,
-  initiativeApprovals
+  initiativeApprovals,
+  artifactLocks,
+  users,
+  applications,
+  interfaces,
+  businessProcesses,
+  technicalProcesses,
+  internalActivities
 } from "@db/schema";
-import { eq, and, desc, or, sql, like } from "drizzle-orm";
+import { eq, and, desc, or, sql, like, inArray } from "drizzle-orm";
 import { VersionControlService, ArtifactType } from "../services/version-control.service";
 import { DependencyTrackingService } from "../services/dependency-tracking.service";
 import { requireAuth } from "../auth";
@@ -76,6 +83,57 @@ initiativesRouter.get("/", requireAuth, async (req, res) => {
   } catch (error) {
     console.error("Error fetching initiatives:", error);
     res.status(500).json({ error: "Failed to fetch initiatives" });
+  }
+});
+
+// Get changes for an initiative
+initiativesRouter.get("/:id/changes", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get all artifact versions for this initiative
+    const versions = await db.select({
+      id: artifactVersions.id,
+      artifactType: artifactVersions.artifactType,
+      artifactId: artifactVersions.artifactId,
+      versionNumber: artifactVersions.versionNumber,
+      changeType: artifactVersions.changeType,
+      changeReason: artifactVersions.changeReason,
+      createdAt: artifactVersions.createdAt,
+      createdBy: artifactVersions.createdBy,
+      isBaseline: artifactVersions.isBaseline,
+      artifactData: artifactVersions.artifactData
+    })
+    .from(artifactVersions)
+    .where(eq(artifactVersions.initiativeId, id))
+    .orderBy(artifactVersions.createdAt);
+
+    // Count changes by type
+    const created = versions.filter(v => v.changeType === 'created').length;
+    const modified = versions.filter(v => v.changeType === 'modified' || v.changeType === 'update').length;
+    const deleted = versions.filter(v => v.changeType === 'deleted').length;
+
+    // Group changes by artifact type
+    const changesByType = versions.reduce((acc, version) => {
+      if (!acc[version.artifactType]) {
+        acc[version.artifactType] = [];
+      }
+      acc[version.artifactType].push(version);
+      return acc;
+    }, {} as Record<string, typeof versions>);
+
+    res.json({
+      totalChanges: versions.length,
+      created,
+      modified,
+      deleted,
+      versions,
+      changesByType,
+      hasChanges: versions.length > 0
+    });
+  } catch (error) {
+    console.error("Error fetching initiative changes:", error);
+    res.status(500).json({ error: "Failed to fetch initiative changes" });
   }
 });
 
@@ -411,15 +469,23 @@ initiativesRouter.post("/:id/transfer-ownership", requireAuth, async (req, res) 
   try {
     const { id } = req.params;
     const userId = req.user!.id;
+    const userRole = req.user!.role;
     const { newOwnerId } = req.body;
 
-    // Check if user is the current owner (creator)
+    // Check if user is the current owner (creator) or admin
     const [initiative] = await db.select()
       .from(initiatives)
-      .where(eq(initiatives.id, parseInt(id)));
+      .where(eq(initiatives.initiativeId, id));
 
-    if (!initiative || initiative.createdBy !== userId) {
-      return res.status(403).json({ error: "Only the initiative owner can transfer ownership" });
+    if (!initiative) {
+      return res.status(404).json({ error: "Initiative not found" });
+    }
+
+    const isAdmin = userRole === 'admin';
+    const isOwner = initiative.createdBy === userId;
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: "Only the initiative owner or admin can transfer ownership" });
     }
 
     // Update the initiative creator and add new owner as lead participant
@@ -431,7 +497,7 @@ initiativesRouter.post("/:id/transfer-ownership", requireAuth, async (req, res) 
           updatedBy: userId,
           updatedAt: new Date()
         })
-        .where(eq(initiatives.id, parseInt(id)));
+        .where(eq(initiatives.initiativeId, id));
 
       // Remove old owner as lead if they are a participant
       await tx.update(initiativeParticipants)
@@ -664,5 +730,480 @@ initiativesRouter.get("/:id/conflicts/:conflictId/analysis", requireAuth, async 
   } catch (error) {
     console.error("Error fetching conflict analysis:", error);
     res.status(500).json({ error: "Failed to fetch conflict analysis" });
+  }
+});
+
+// Get checked out artifacts for an initiative (for closure process)
+initiativesRouter.get("/:id/checked-out-artifacts", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const checkedOutArtifacts = await db.select({
+      id: artifactLocks.id,
+      artifactType: artifactLocks.artifactType,
+      artifactId: artifactLocks.artifactId,
+      lockedBy: artifactLocks.lockedBy,
+      lockedAt: artifactLocks.lockedAt,
+      userName: users.name,
+      userEmail: users.email,
+      artifactName: sql<string>`
+        CASE 
+          WHEN ${artifactLocks.artifactType} = 'application' THEN 
+            (SELECT name FROM applications WHERE id = ${artifactLocks.artifactId})
+          WHEN ${artifactLocks.artifactType} = 'interface' THEN 
+            (SELECT iml_number FROM interfaces WHERE id = ${artifactLocks.artifactId})
+          WHEN ${artifactLocks.artifactType} = 'business_process' THEN 
+            (SELECT business_process FROM business_processes WHERE id = ${artifactLocks.artifactId})
+          WHEN ${artifactLocks.artifactType} = 'technical_process' THEN 
+            (SELECT name FROM technical_processes WHERE id = ${artifactLocks.artifactId})
+          WHEN ${artifactLocks.artifactType} = 'internal_process' THEN 
+            (SELECT activity_name FROM internal_activities WHERE id = ${artifactLocks.artifactId})
+          ELSE 'Unknown'
+        END
+      `,
+      hasChanges: sql<boolean>`
+        EXISTS(
+          SELECT 1 FROM artifact_versions 
+          WHERE artifact_type = ${artifactLocks.artifactType}
+          AND artifact_id = ${artifactLocks.artifactId}
+          AND initiative_id = ${artifactLocks.initiativeId}
+          AND is_baseline = false
+        )
+      `,
+      conflictCount: sql<number>`
+        (SELECT COUNT(*) FROM version_conflicts 
+         WHERE artifact_type = ${artifactLocks.artifactType}
+         AND artifact_id = ${artifactLocks.artifactId}
+         AND initiative_id = ${artifactLocks.initiativeId}
+         AND resolution_status = 'pending'
+        )
+      `
+    })
+    .from(artifactLocks)
+    .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
+    .where(
+      and(
+        eq(artifactLocks.initiativeId, id),
+        sql`${artifactLocks.lockExpiry} > NOW()`
+      )
+    );
+
+    res.json(checkedOutArtifacts);
+  } catch (error) {
+    console.error("Error fetching checked out artifacts:", error);
+    res.status(500).json({ error: "Failed to fetch checked out artifacts" });
+  }
+});
+
+// Get impact analysis for initiative
+initiativesRouter.get("/:id/impact-analysis", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get all artifacts modified in this initiative
+    const modifiedArtifacts = await db.select({
+      artifactType: artifactVersions.artifactType,
+      artifactId: artifactVersions.artifactId,
+      versionNumber: artifactVersions.versionNumber,
+      changeType: artifactVersions.changeType,
+      changeReason: artifactVersions.changeReason,
+      artifactData: artifactVersions.artifactData
+    })
+    .from(artifactVersions)
+    .where(
+      and(
+        eq(artifactVersions.initiativeId, id),
+        eq(artifactVersions.isBaseline, false)
+      )
+    );
+
+    if (modifiedArtifacts.length === 0) {
+      return res.json({
+        modifiedArtifacts: [],
+        impactedApplications: [],
+        impactedInterfaces: [],
+        relatedBusinessProcesses: [],
+        riskLevel: 'low'
+      });
+    }
+
+    // Build comprehensive impact analysis
+    let allImpactedApplications = new Set<number>();
+    let allImpactedInterfaces = new Set<number>();
+    let allRelatedBusinessProcesses = new Set<number>();
+
+    // Process each modified artifact
+    for (const artifact of modifiedArtifacts) {
+      if (artifact.artifactType === 'application') {
+        allImpactedApplications.add(artifact.artifactId);
+        
+        // Find interfaces provided/consumed by this application
+        const relatedInterfaces = await db.select({
+          id: interfaces.id,
+          imlNumber: interfaces.imlNumber,
+          interfaceType: interfaces.interfaceType,
+          providerApplicationId: interfaces.providerApplicationId,
+          consumerApplicationId: interfaces.consumerApplicationId,
+          status: interfaces.status,
+          relationship: sql<string>`
+            CASE 
+              WHEN ${interfaces.providerApplicationId} = ${artifact.artifactId} THEN 'provider'
+              WHEN ${interfaces.consumerApplicationId} = ${artifact.artifactId} THEN 'consumer'
+              ELSE 'unknown'
+            END
+          `
+        })
+        .from(interfaces)
+        .where(
+          or(
+            eq(interfaces.providerApplicationId, artifact.artifactId),
+            eq(interfaces.consumerApplicationId, artifact.artifactId)
+          )
+        );
+
+        relatedInterfaces.forEach(iface => allImpactedInterfaces.add(iface.id));
+
+        // Find other applications connected through these interfaces
+        for (const iface of relatedInterfaces) {
+          // Add the other application (provider or consumer)
+          if (iface.providerApplicationId && iface.providerApplicationId !== artifact.artifactId) {
+            allImpactedApplications.add(iface.providerApplicationId);
+          }
+          if (iface.consumerApplicationId && iface.consumerApplicationId !== artifact.artifactId) {
+            allImpactedApplications.add(iface.consumerApplicationId);
+          }
+        }
+      } else if (artifact.artifactType === 'interface') {
+        allImpactedInterfaces.add(artifact.artifactId);
+        
+        // Find applications using this interface
+        const [interfaceDetails] = await db.select({
+          id: interfaces.id,
+          providerApplicationId: interfaces.providerApplicationId,
+          consumerApplicationId: interfaces.consumerApplicationId
+        })
+          .from(interfaces)
+          .where(eq(interfaces.id, artifact.artifactId));
+
+        if (interfaceDetails) {
+          // Add provider and consumer applications
+          if (interfaceDetails.providerApplicationId) {
+            allImpactedApplications.add(interfaceDetails.providerApplicationId);
+          }
+          if (interfaceDetails.consumerApplicationId) {
+            allImpactedApplications.add(interfaceDetails.consumerApplicationId);
+          }
+        }
+      }
+    }
+
+    // Find business processes using the impacted interfaces
+    let businessProcessesResult = [];
+    if (allImpactedInterfaces.size > 0) {
+      const interfaceIds = Array.from(allImpactedInterfaces);
+      
+      // First get the interface details with business process names
+      const interfacesWithBP = await db.select({
+        id: interfaces.id,
+        businessProcessName: interfaces.businessProcessName
+      })
+      .from(interfaces)
+      .where(inArray(interfaces.id, interfaceIds));
+
+      // Get unique business process names
+      const businessProcessNames = [...new Set(interfacesWithBP
+        .map(i => i.businessProcessName)
+        .filter(name => name !== null && name !== undefined))];
+
+      if (businessProcessNames.length > 0) {
+        businessProcessesResult = await db.select({
+          id: businessProcesses.id,
+          businessProcess: businessProcesses.businessProcess,
+          lob: businessProcesses.lob,
+          product: businessProcesses.product,
+          domainOwner: businessProcesses.domainOwner,
+          itOwner: businessProcesses.itOwner
+        })
+        .from(businessProcesses)
+        .where(inArray(businessProcesses.businessProcess, businessProcessNames));
+
+        businessProcessesResult.forEach(bp => allRelatedBusinessProcesses.add(bp.id));
+      }
+    }
+
+    // Get detailed information for impacted artifacts
+    let impactedApplicationsDetails = [];
+    if (allImpactedApplications.size > 0) {
+      const applicationIds = Array.from(allImpactedApplications);
+      impactedApplicationsDetails = await db.select({
+        id: applications.id,
+        name: applications.name,
+        description: applications.description,
+        os: applications.os,
+        deployment: applications.deployment,
+        uptime: applications.uptime,
+        status: applications.status,
+        providesExtInterface: applications.providesExtInterface,
+        consumesExtInterfaces: applications.consumesExtInterfaces
+      })
+      .from(applications)
+      .where(inArray(applications.id, applicationIds));
+    }
+
+    let impactedInterfacesDetails = [];
+    if (allImpactedInterfaces.size > 0) {
+      const interfaceIds = Array.from(allImpactedInterfaces);
+      impactedInterfacesDetails = await db.select({
+        id: interfaces.id,
+        imlNumber: interfaces.imlNumber,
+        interfaceType: interfaces.interfaceType,
+        providerApplicationId: interfaces.providerApplicationId,
+        consumerApplicationId: interfaces.consumerApplicationId,
+        businessProcessName: interfaces.businessProcessName,
+        status: interfaces.status,
+        version: interfaces.version,
+        providerApplicationName: sql<string>`
+          (SELECT name FROM applications WHERE id = ${interfaces.providerApplicationId})
+        `,
+        consumerApplicationName: sql<string>`
+          (SELECT name FROM applications WHERE id = ${interfaces.consumerApplicationId})
+        `
+      })
+      .from(interfaces)
+      .where(inArray(interfaces.id, interfaceIds));
+    }
+
+    let relatedBusinessProcessesDetails = [];
+    if (allRelatedBusinessProcesses.size > 0) {
+      const businessProcessIds = Array.from(allRelatedBusinessProcesses);
+      relatedBusinessProcessesDetails = await db.select()
+        .from(businessProcesses)
+        .where(inArray(businessProcesses.id, businessProcessIds));
+    }
+
+    // Calculate risk level based on impact scope
+    let riskLevel = 'low';
+    const totalImpactedArtifacts = allImpactedApplications.size + allImpactedInterfaces.size + allRelatedBusinessProcesses.size;
+    
+    if (totalImpactedArtifacts > 10) {
+      riskLevel = 'high';
+    } else if (totalImpactedArtifacts > 5) {
+      riskLevel = 'medium';
+    }
+
+    res.json({
+      modifiedArtifacts,
+      impactedApplications: impactedApplicationsDetails,
+      impactedInterfaces: impactedInterfacesDetails,
+      relatedBusinessProcesses: relatedBusinessProcessesDetails,
+      riskLevel,
+      summary: {
+        applicationsCount: allImpactedApplications.size,
+        interfacesCount: allImpactedInterfaces.size,
+        businessProcessesCount: allRelatedBusinessProcesses.size,
+        totalImpactedArtifacts
+      }
+    });
+  } catch (error) {
+    console.error("Error generating initiative impact analysis:", error);
+    res.status(500).json({ error: "Failed to generate impact analysis" });
+  }
+});
+
+// Cancel initiative
+initiativesRouter.post("/:id/cancel", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+    const { reason } = req.body;
+
+    // Get initiative details to check creator
+    const [initiative] = await db.select()
+      .from(initiatives)
+      .where(eq(initiatives.initiativeId, id));
+
+    if (!initiative) {
+      return res.status(404).json({ error: "Initiative not found" });
+    }
+
+    // Check if user is authorized (admin OR initiative creator)
+    const userRole = req.user!.role;
+    const isAdmin = userRole === 'admin';
+    const isCreator = initiative.createdBy === userId;
+
+    if (!isAdmin && !isCreator) {
+      return res.status(403).json({ 
+        error: "Only admin users or the initiative creator can cancel this initiative" 
+      });
+    }
+
+    // Check if initiative is already completed or cancelled
+    if (initiative.status === 'completed' || initiative.status === 'cancelled') {
+      return res.status(400).json({ 
+        error: `Cannot cancel an initiative that is already ${initiative.status}` 
+      });
+    }
+
+    // Release all locks for this initiative
+    await db.delete(artifactLocks)
+      .where(eq(artifactLocks.initiativeId, id));
+
+    // Delete all non-baseline versions for this initiative
+    await db.delete(artifactVersions)
+      .where(
+        and(
+          eq(artifactVersions.initiativeId, id),
+          eq(artifactVersions.isBaseline, false)
+        )
+      );
+
+    // Update initiative status to cancelled
+    await db.update(initiatives)
+      .set({
+        status: 'cancelled',
+        actualCompletionDate: new Date(),
+        updatedBy: userId,
+        updatedAt: new Date(),
+        metadata: {
+          ...(initiative.metadata as any || {}),
+          cancellationReason: reason || 'No reason provided'
+        }
+      })
+      .where(eq(initiatives.initiativeId, id));
+
+    res.json({ 
+      success: true, 
+      message: "Initiative cancelled successfully"
+    });
+  } catch (error) {
+    console.error("Error cancelling initiative:", error);
+    res.status(500).json({ error: error.message || "Failed to cancel initiative" });
+  }
+});
+
+// Create baseline and close initiative
+initiativesRouter.post("/:id/baseline", requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user!.id;
+    const { description } = req.body;
+
+    // Get initiative details to check creator
+    const [initiative] = await db.select()
+      .from(initiatives)
+      .where(eq(initiatives.initiativeId, id));
+
+    if (!initiative) {
+      return res.status(404).json({ error: "Initiative not found" });
+    }
+
+    // Check if user is authorized (admin OR initiative creator)
+    const userRole = req.user!.role;
+    const isAdmin = userRole === 'admin';
+    const isCreator = initiative.createdBy === userId;
+
+    console.log('Baseline authorization check:', {
+      userId,
+      userRole,
+      isAdmin,
+      initiativeCreatedBy: initiative.createdBy,
+      isCreator
+    });
+
+    if (!isAdmin && !isCreator) {
+      return res.status(403).json({ 
+        error: "Only admin users or the initiative creator can baseline and close this initiative" 
+      });
+    }
+
+    // Check if there are any checked out artifacts
+    const checkedOutCount = await db.select({ count: sql<number>`COUNT(*)` })
+      .from(artifactLocks)
+      .where(
+        and(
+          eq(artifactLocks.initiativeId, id),
+          sql`${artifactLocks.lockExpiry} > NOW()`
+        )
+      );
+
+    const checkedOutNum = Number(checkedOutCount[0].count);
+    console.log('Checked out artifacts count:', checkedOutNum);
+
+    if (checkedOutNum > 0) {
+      return res.status(400).json({ 
+        error: "Cannot close initiative with checked out artifacts. Please checkin all artifacts first." 
+      });
+    }
+
+    // Check if there are unresolved conflicts
+    const conflictCount = await db.select({ count: sql`COUNT(*)` })
+      .from(versionConflicts)
+      .where(
+        and(
+          eq(versionConflicts.initiativeId, id),
+          eq(versionConflicts.resolutionStatus, 'pending')
+        )
+      );
+
+    const conflictNum = Number(conflictCount[0].count);
+    console.log('Unresolved conflicts count:', conflictNum);
+
+    if (conflictNum > 0) {
+      return res.status(400).json({ 
+        error: "Cannot close initiative with unresolved conflicts. Please resolve all conflicts first." 
+      });
+    }
+
+    // Check if there are any versions to baseline
+    const versionsToBaseline = await db.select({ count: sql<number>`COUNT(*)` })
+      .from(artifactVersions)
+      .where(
+        and(
+          eq(artifactVersions.initiativeId, id),
+          eq(artifactVersions.isBaseline, false)
+        )
+      );
+
+    const versionCount = Number(versionsToBaseline[0].count);
+    console.log('Versions to baseline:', versionCount);
+
+    if (versionCount === 0) {
+      return res.status(400).json({ 
+        error: "No changes found to baseline. The initiative must have at least one artifact version to complete. Consider canceling this initiative instead if no changes are needed." 
+      });
+    }
+
+    // Create baseline for all versions in this initiative
+    await db.execute(sql`
+      UPDATE artifact_versions 
+      SET is_baseline = true, 
+          baseline_date = NOW(), 
+          baselined_by = ${userId}
+      WHERE initiative_id = ${id} 
+      AND is_baseline = false
+    `);
+
+    // Remove all locks for this initiative
+    await db.delete(artifactLocks)
+      .where(eq(artifactLocks.initiativeId, id));
+
+    // Update initiative status to completed
+    await db.update(initiatives)
+      .set({
+        status: 'completed',
+        actualCompletionDate: new Date(),
+        updatedBy: userId,
+        updatedAt: new Date()
+      })
+      .where(eq(initiatives.initiativeId, id));
+
+    res.json({ 
+      success: true, 
+      message: "Initiative successfully baselined and closed",
+      baselineDescription: description
+    });
+  } catch (error) {
+    console.error("Error creating baseline:", error);
+    res.status(500).json({ error: error.message || "Failed to create baseline" });
   }
 });

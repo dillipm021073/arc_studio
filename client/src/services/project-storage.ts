@@ -75,7 +75,7 @@ function toClientFormat(serverProject: any): Project {
 
 export interface ProjectStorageService {
   // Common Team Projects (Database)
-  getTeamProjects(): Promise<Project[]>;
+  getTeamProjects(folderPath?: string): Promise<Project[]>;
   saveTeamProject(project: Project): Promise<Project>;
   updateTeamProject(id: string, project: Partial<Project>): Promise<Project>;
   deleteTeamProject(id: string): Promise<void>;
@@ -99,9 +99,17 @@ export class ProjectStorageServiceImpl implements ProjectStorageService {
   private baseUrl = "/api";
 
   // Common Team Projects (Database)
-  async getTeamProjects(): Promise<Project[]> {
-    // Add cache busting to ensure fresh data
-    const response = await fetch(`${this.baseUrl}/interface-builder/projects?t=${Date.now()}`, {
+  async getTeamProjects(folderPath?: string): Promise<Project[]> {
+    // Build URL with query parameters
+    const params = new URLSearchParams();
+    params.set('t', Date.now().toString());
+    if (folderPath) {
+      params.set('folderPath', folderPath);
+    }
+    
+    const url = `${this.baseUrl}/interface-builder/projects?${params.toString()}`;
+    
+    const response = await fetch(url, {
       headers: {
         'Cache-Control': 'no-cache',
       }

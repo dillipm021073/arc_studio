@@ -10,7 +10,7 @@ export interface StoredInterfaceProject extends InterfaceProject {
 }
 
 // Convert client project to server format
-function toServerFormat(project: InterfaceProject & { isTeamProject?: boolean }) {
+function toServerFormat(project: InterfaceProject & { isTeamProject?: boolean; folderPath?: string }) {
   return {
     name: project.name,
     description: project.description,
@@ -18,7 +18,8 @@ function toServerFormat(project: InterfaceProject & { isTeamProject?: boolean })
     nodes: project.nodes,
     edges: project.edges,
     metadata: project.metadata,
-    isTeamProject: project.isTeamProject
+    isTeamProject: project.isTeamProject,
+    folderPath: project.folderPath
   };
 }
 

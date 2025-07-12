@@ -27,16 +27,23 @@ import {
   Edit,
   UserPlus,
   CheckSquare,
-  MoreVertical
+  MoreVertical,
+  FileText
 } from "lucide-react";
 import { ConflictList } from "@/components/conflicts/conflict-list";
 import { AuditTrail } from "@/components/audit/audit-trail";
 import { CreateInitiativeDialog } from "@/components/initiatives/create-initiative-dialog";
 import { EditInitiativeDialog } from "@/components/initiatives/edit-initiative-dialog";
 import { TransferOwnershipDialog } from "@/components/initiatives/transfer-ownership-dialog";
+import { InitiativeClosureDialog } from "@/components/initiatives/initiative-closure-dialog";
+import { InitiativeImpactAnalysis } from "@/components/initiatives/initiative-impact-analysis";
+import { InitiativeChangeSummary } from "@/components/initiatives/initiative-change-summary";
+import { ImpactAssessmentDialog } from "@/components/initiatives/impact-assessment-dialog";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/auth-context";
+import { usePermissions } from "@/hooks/use-permissions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,9 +58,13 @@ export default function InitiativesPage() {
   const [selectedInitiative, setSelectedInitiative] = useState<any>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showTransferDialog, setShowTransferDialog] = useState(false);
+  const [showClosureDialog, setShowClosureDialog] = useState(false);
+  const [showImpactAssessmentDialog, setShowImpactAssessmentDialog] = useState(false);
   const [editingInitiative, setEditingInitiative] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { isAdmin } = usePermissions();
 
   const completeInitiativeMutation = useMutation({
     mutationFn: async (initiative: any) => {
@@ -77,6 +88,30 @@ export default function InitiativesPage() {
     },
   });
 
+  const cancelInitiativeMutation = useMutation({
+    mutationFn: async (initiative: any) => {
+      const response = await api.post(`/api/initiatives/${initiative.initiativeId || initiative.id}/cancel`, {
+        reason: "No changes to deploy"
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['initiatives'] });
+      toast({
+        title: "Initiative cancelled",
+        description: "The initiative has been cancelled successfully.",
+      });
+      setSelectedInitiative(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to cancel initiative",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleCompleteInitiative = async (initiative: any) => {
     if (!window.confirm(
       `Are you sure you want to complete "${initiative.name}"?\n\n` +
@@ -85,6 +120,16 @@ export default function InitiativesPage() {
       return;
     }
     completeInitiativeMutation.mutate(initiative);
+  };
+
+  const handleCancelInitiative = async (initiative: any) => {
+    if (!window.confirm(
+      `Are you sure you want to cancel "${initiative.name}"?\n\n` +
+      "This will discard all changes and cannot be undone."
+    )) {
+      return;
+    }
+    cancelInitiativeMutation.mutate(initiative);
   };
 
   const { data: initiatives, isLoading } = useQuery({
@@ -158,23 +203,65 @@ export default function InitiativesPage() {
                 >
                   Edit Initiative
                 </Button>
+                {(isAdmin || selectedInitiative.createdBy === user?.id) && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setEditingInitiative(selectedInitiative);
+                      setShowTransferDialog(true);
+                    }}
+                  >
+                    Transfer Ownership
+                  </Button>
+                )}
                 <Button 
                   variant="outline"
                   onClick={() => {
                     setEditingInitiative(selectedInitiative);
-                    setShowTransferDialog(true);
+                    setShowImpactAssessmentDialog(true);
                   }}
                 >
-                  Transfer Ownership
+                  <FileText className="h-4 w-4 mr-2" />
+                  Generate Impact Assessment
                 </Button>
                 {selectedInitiative.status === 'active' && (
-                  <Button 
-                    variant="default"
-                    onClick={() => handleCompleteInitiative(selectedInitiative)}
-                    disabled={completeInitiativeMutation.isPending}
-                  >
-                    {completeInitiativeMutation.isPending ? "Completing..." : "Complete Initiative"}
-                  </Button>
+                  <>
+                    {(isAdmin || selectedInitiative.createdBy === user?.id) ? (
+                      <>
+                        <Button 
+                          variant="default"
+                          onClick={() => handleCompleteInitiative(selectedInitiative)}
+                          disabled={completeInitiativeMutation.isPending}
+                        >
+                          {completeInitiativeMutation.isPending ? "Completing..." : "Complete Initiative"}
+                        </Button>
+                        <Button 
+                          variant="destructive"
+                          onClick={() => handleCancelInitiative(selectedInitiative)}
+                          disabled={cancelInitiativeMutation.isPending}
+                        >
+                          {cancelInitiativeMutation.isPending ? "Cancelling..." : "Cancel Initiative"}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button 
+                          variant="default"
+                          disabled
+                          title="Only admin users or the initiative creator can complete initiatives"
+                        >
+                          Complete Initiative (No Permission)
+                        </Button>
+                        <Button 
+                          variant="destructive"
+                          disabled
+                          title="Only admin users or the initiative creator can cancel initiatives"
+                        >
+                          Cancel Initiative (No Permission)
+                        </Button>
+                      </>
+                    )}
+                  </>
                 )}
                 <Button variant="outline" onClick={() => setSelectedInitiative(null)}>
                   Back to List
@@ -233,12 +320,17 @@ export default function InitiativesPage() {
             <Tabs defaultValue="conflicts" className="space-y-4">
               <TabsList>
                 <TabsTrigger value="conflicts">Conflicts</TabsTrigger>
+                <TabsTrigger value="impact">Impact Analysis</TabsTrigger>
                 <TabsTrigger value="audit">Audit Trail</TabsTrigger>
                 <TabsTrigger value="details">Details</TabsTrigger>
               </TabsList>
 
               <TabsContent value="conflicts" className="space-y-4">
                 <ConflictList initiativeId={selectedInitiative.initiativeId} />
+              </TabsContent>
+
+              <TabsContent value="impact" className="space-y-4">
+                <InitiativeImpactAnalysis initiativeId={selectedInitiative.initiativeId} />
               </TabsContent>
 
               <TabsContent value="audit" className="space-y-4">
@@ -248,41 +340,50 @@ export default function InitiativesPage() {
               </TabsContent>
 
               <TabsContent value="details" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Initiative Details</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <label className="text-sm font-medium text-muted-foreground">
-                        Business Justification
-                      </label>
-                      <p className="mt-1">{selectedInitiative.businessJustification || 'N/A'}</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-6">
+                  {/* Initiative Basic Details */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Initiative Details</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
                       <div>
                         <label className="text-sm font-medium text-muted-foreground">
-                          Created
+                          Business Justification
                         </label>
-                        <p className="mt-1">
-                          {format(new Date(selectedInitiative.createdAt), 'PPP')}
-                        </p>
+                        <p className="mt-1">{selectedInitiative.businessJustification || 'N/A'}</p>
                       </div>
 
-                      <div>
-                        <label className="text-sm font-medium text-muted-foreground">
-                          Target Completion
-                        </label>
-                        <p className="mt-1">
-                          {selectedInitiative.targetCompletionDate 
-                            ? format(new Date(selectedInitiative.targetCompletionDate), 'PPP')
-                            : 'Not set'}
-                        </p>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">
+                            Created
+                          </label>
+                          <p className="mt-1">
+                            {format(new Date(selectedInitiative.createdAt), 'PPP')}
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">
+                            Target Completion
+                          </label>
+                          <p className="mt-1">
+                            {selectedInitiative.targetCompletionDate 
+                              ? format(new Date(selectedInitiative.targetCompletionDate), 'PPP')
+                              : 'Not set'}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+
+                  {/* Change Summary Section */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Change Summary</h3>
+                    <InitiativeChangeSummary initiativeId={selectedInitiative.initiativeId || selectedInitiative.id} />
+                  </div>
+                </div>
               </TabsContent>
             </Tabs>
           </div>
@@ -406,10 +507,13 @@ export default function InitiativesPage() {
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
-                                        onClick={() => handleCompleteInitiative(item.initiative)}
+                                        onClick={() => {
+                                          setEditingInitiative(item.initiative);
+                                          setShowClosureDialog(true);
+                                        }}
                                       >
                                         <CheckSquare className="h-4 w-4 mr-2" />
-                                        Complete Initiative
+                                        Close Initiative
                                       </DropdownMenuItem>
                                     </>
                                   )}
@@ -443,6 +547,20 @@ export default function InitiativesPage() {
         open={showTransferDialog}
         onOpenChange={setShowTransferDialog}
         initiative={editingInitiative}
+      />
+
+      <InitiativeClosureDialog
+        open={showClosureDialog}
+        onOpenChange={setShowClosureDialog}
+        initiativeId={editingInitiative?.initiativeId || editingInitiative?.id || ''}
+        initiativeName={editingInitiative?.name || ''}
+      />
+
+      <ImpactAssessmentDialog
+        open={showImpactAssessmentDialog}
+        onOpenChange={setShowImpactAssessmentDialog}
+        initiativeId={editingInitiative?.initiativeId || editingInitiative?.id || ''}
+        initiativeName={editingInitiative?.name || ''}
       />
     </div>
   );

@@ -3,6 +3,10 @@ import { usePersistentFilters } from "@/hooks/use-persistent-filters";
 import { useCommunicationCounts } from "@/hooks/use-communication-counts";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useMultiSelect } from "@/hooks/use-multi-select";
+import { useInitiative } from "@/components/initiatives/initiative-context";
+import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
+import { useAuth } from "@/contexts/auth-context";
+import { api } from "@/lib/api";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,8 +37,10 @@ import {
   Database,
   CalendarCheck,
   FileJson,
-  Network
-} from "lucide-react";
+  Network,
+  Lock,
+  Unlock
+, X} from "lucide-react";
 import { Link, useLocation } from "wouter";
 import TechnicalProcessForm from "@/components/technical-processes/technical-process-form";
 import { ImportExportDialog } from "@/components/import-export-dialog";
@@ -72,6 +78,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { 
+  getArtifactState, 
+  getRowClassName, 
+  ArtifactState 
+} from "@/lib/artifact-state-utils";
+import { 
+  ArtifactStatusBadge, 
+  ArtifactStatusIndicator, 
+  StatusColumn 
+} from "@/components/ui/artifact-status-badge";
 
 interface TechnicalProcess {
   id: number;
@@ -102,7 +118,9 @@ export default function TechnicalProcesses() {
     hasActiveFilters
   } = usePersistentFilters('technical-processes');
   
-  const { canCreate, canUpdate, canDelete } = usePermissions();
+  const { canCreate, canUpdate, canDelete, isAdmin } = usePermissions();
+  const { currentInitiative, isProductionView } = useInitiative();
+  const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedProcess, setSelectedProcess] = useState<TechnicalProcess | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -117,6 +135,60 @@ export default function TechnicalProcesses() {
   const { data: processes = [], isLoading } = useQuery({
     queryKey: ["/api/technical-processes"],
   });
+
+  // Fetch locks for version control
+  const { data: locks } = useQuery({
+    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryFn: async () => {
+      if (!currentInitiative) return [];
+      try {
+        const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
+        return response.data;
+      } catch (error) {
+        console.error('Failed to fetch locks:', error);
+        return [];
+      }
+    },
+    enabled: !!currentInitiative,
+  });
+
+  // Fetch current user for version control
+  const { data: currentUser } = useQuery({
+    queryKey: ['/api/auth/me'],
+    queryFn: async () => {
+      const response = await api.get('/api/auth/me');
+      return response.data.user;
+    }
+  });
+
+  // Helper function to check if process is locked
+  const isProcessLocked = (processId: number) => {
+    if (!locks || !Array.isArray(locks)) return null;
+    
+    const lock = locks.find((l: any) => 
+      l.lock.artifactType === 'technical_process' && 
+      l.lock.artifactId === processId
+    );
+    
+    return lock || null;
+  };
+
+  // Helper to get process state for visual indicators
+  const getProcessState = (process: TechnicalProcess): ArtifactState => {
+    const lock = isProcessLocked(process.id);
+    // TODO: Add logic to detect initiative changes and conflicts
+    const hasInitiativeChanges = false; // This would check if process has versions in current initiative
+    const hasConflicts = false; // This would check for version conflicts
+    
+    return getArtifactState(
+      process.id,
+      'technical_process',
+      lock,
+      currentUser?.id,
+      hasInitiativeChanges,
+      hasConflicts
+    );
+  };
 
   // Get communication counts
   const processIds = Array.isArray(processes) ? processes.map((p: TechnicalProcess) => p.id) : [];
@@ -149,7 +221,89 @@ export default function TechnicalProcesses() {
     },
   });
 
+  // Version Control mutations
+  const checkoutMutation = useMutation({
+    mutationFn: async (process: TechnicalProcess) => {
+      const response = await api.post('/api/version-control/technical-processes/' + process.id + '/checkout', {
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: (data, process) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      toast({
+        title: "Process checked out",
+        description: `${process.name} is now locked for editing in ${currentInitiative?.name}`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to checkout process",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const checkinMutation = useMutation({
+    mutationFn: async ({ process, data }: { process: TechnicalProcess; data: any }) => {
+      const response = await api.post('/api/version-control/technical-processes/' + process.id + '/checkin', {
+        initiativeId: currentInitiative?.initiativeId,
+        data,
+        changeReason: `Updated ${process.name} via UI`
+      });
+      return response.data;
+    },
+    onSuccess: (data, { process }) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/technical-processes'] });
+      toast({
+        title: "Changes checked in",
+        description: `${process.name} has been updated in ${currentInitiative?.name}`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.response?.data?.error || "Failed to checkin changes",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const cancelCheckoutMutation = useMutation({
+    mutationFn: async (process: TechnicalProcess) => {
+      const response = await api.post('/api/version-control/cancel-checkout', {
+        artifactType: 'technical_process',
+        artifactId: process.id,
+        initiativeId: currentInitiative?.initiativeId
+      });
+      return response.data;
+    },
+    onSuccess: (data, process) => {
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/technical-processs'] });
+      toast({
+        title: "Checkout cancelled",
+        description: `${process.name} checkout has been cancelled and changes discarded`
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Cancel checkout failed",
+        description: error.response?.data?.error || "Failed to cancel checkout",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleEdit = (process: TechnicalProcess) => {
+    // Check if we're in initiative mode and need to checkout first
+    const lock = isProcessLocked(process.id);
+    if (currentInitiative && !isProductionView && !lock) {
+      // Need to checkout first
+      checkoutMutation.mutate(process);
+    }
     setSelectedProcess(process);
     setIsFormOpen(true);
   };
@@ -187,15 +341,33 @@ export default function TechnicalProcesses() {
     setDuplicatingProcess(duplicatedProcess);
   };
 
-  // Apply filters
-  const filteredProcesses = applyFilters(
+  // Separate version state filter from other filters
+  const versionStateFilter = filters.find(f => f.column === 'versionState');
+  const otherFilters = filters.filter(f => f.column !== 'versionState');
+
+  // Apply search and standard filters
+  let filteredByConditions = applyFilters(
     processes.filter((process: TechnicalProcess) =>
       process.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       process.jobName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (process.description && process.description.toLowerCase().includes(searchTerm.toLowerCase()))
     ),
-    filters
+    otherFilters
   );
+
+  // Apply version state filter if present
+  if (versionStateFilter && currentInitiative && !isProductionView) {
+    try {
+      filteredByConditions = filteredByConditions.filter((process: TechnicalProcess) => {
+        const processState = getProcessState(process);
+        return processState.state === versionStateFilter.value;
+      });
+    } catch (e) {
+      console.error('Error in version state filter:', e);
+    }
+  }
+
+  const filteredProcesses = filteredByConditions;
 
   // Initialize multi-select hook
   const multiSelect = useMultiSelect({
@@ -247,6 +419,13 @@ export default function TechnicalProcesses() {
     { key: "status", label: "Status", type: "select", options: ["new", "active", "inactive", "deprecated"] },
     { key: "owner", label: "Owner", type: "text" },
     { key: "technicalOwner", label: "Technical Owner", type: "text" },
+    { key: "versionState", label: "Version State", type: "select", options: [
+      { value: "production", label: "Production Baseline" },
+      { value: "checked_out_me", label: "Checked Out by Me" },
+      { value: "checked_out_other", label: "Locked by Others" },
+      { value: "initiative_changes", label: "Initiative Changes" },
+      { value: "conflicted", label: "Conflicted" }
+    ]},
   ];
 
   return (
@@ -312,6 +491,13 @@ export default function TechnicalProcesses() {
           />
         </div>
       </div>
+
+      {/* View Mode Indicator */}
+      {currentInitiative && (
+        <div className="px-6 py-2 bg-gray-900">
+          <ViewModeIndicator />
+        </div>
+      )}
 
       {/* Bulk Actions Toolbar */}
       {multiSelect.selectedItems.length > 0 && (
@@ -388,6 +574,7 @@ export default function TechnicalProcesses() {
                 <TableHead className="text-gray-300">Owner</TableHead>
                 <TableHead className="text-gray-300">Last Run</TableHead>
                 <TableHead className="text-gray-300">Next Run</TableHead>
+                <TableHead className="text-gray-300">Version Status</TableHead>
                 <TableHead className="text-gray-300 text-center">Comms</TableHead>
                 <TableHead className="text-gray-300 w-10"></TableHead>
               </TableRow>
@@ -397,7 +584,7 @@ export default function TechnicalProcesses() {
                 <ContextMenu key={process.id}>
                   <ContextMenuTrigger asChild>
                     <TableRow 
-                      className={`border-gray-700 hover:bg-gray-800/50 cursor-pointer group ${multiSelect.isSelected(process) ? 'bg-blue-900/20' : ''}`}
+                      className={getRowClassName(getProcessState(process), multiSelect.isSelected(process))}
                       onDoubleClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -414,24 +601,37 @@ export default function TechnicalProcesses() {
                         />
                       </TableCell>
                       <TableCell className="font-medium text-white">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span 
-                                className="hover:text-purple-400 transition-colors cursor-pointer"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setViewingProcess(process);
-                                }}
-                              >
-                                {process.name}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p className="max-w-xs">{process.description || "No description"}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                        <div className="flex items-center space-x-2">
+                          <Cpu className="h-4 w-4 text-purple-600" />
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span 
+                                  className="hover:text-purple-400 transition-colors cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setViewingProcess(process);
+                                  }}
+                                >
+                                  {process.name}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p className="max-w-xs">{process.description || "No description"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <ArtifactStatusIndicator 
+                            state={getProcessState(process)} 
+                            initiativeName={currentInitiative?.name}
+                          />
+                          <ArtifactStatusBadge 
+                            state={getProcessState(process)} 
+                            showIcon={false}
+                            showText={true}
+                            size="sm"
+                          />
+                        </div>
                       </TableCell>
                       <TableCell className="text-gray-300">{process.jobName}</TableCell>
                       <TableCell className="text-gray-300">
@@ -493,6 +693,9 @@ export default function TechnicalProcesses() {
                         ) : (
                           <span className="text-gray-500">-</span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <StatusColumn state={getProcessState(process)} />
                       </TableCell>
                       <TableCell className="text-center">
                         <CommunicationBadge
@@ -572,6 +775,81 @@ export default function TechnicalProcesses() {
                       <Copy className="mr-2 h-4 w-4" />
                       Duplicate and Edit
                     </ContextMenuItem>
+                    
+                    {/* Version Control Options */}
+                    {currentInitiative && !isProductionView && (
+                      <>
+                        <ContextMenuSeparator className="bg-gray-700" />
+                        {(() => {
+                          const lock = isProcessLocked(process.id);
+                          const isLockedByMe = lock?.lock.lockedBy === currentUser?.id || isAdmin;
+                          const isLockedByOther = lock && !isLockedByMe;
+                          
+                          return (
+                            <>
+                              {!lock && (
+                                <ContextMenuItem 
+                                  onClick={() => checkoutMutation.mutate(process)}
+                                  className="text-gray-300 hover:text-white hover:bg-gray-700"
+                                >
+                                  <GitBranch className="mr-2 h-4 w-4" />
+                                  Checkout
+                                </ContextMenuItem>
+                              )}
+                              {isLockedByMe && (
+                                <>
+                                  <ContextMenuItem 
+                                    onClick={() => handleEdit(process)}
+                                    className="text-gray-300 hover:text-white hover:bg-gray-700"
+                                  >
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit (Checked Out)
+                                  </ContextMenuItem>
+                                  <ContextMenuItem 
+                                    onClick={() => {
+                                      const data = {
+                                        name: process.name,
+                                        jobName: process.jobName,
+                                        applicationId: process.applicationId,
+                                        description: process.description,
+                                        frequency: process.frequency,
+                                        schedule: process.schedule,
+                                        criticality: process.criticality,
+                                        status: process.status,
+                                        owner: process.owner,
+                                        technicalOwner: process.technicalOwner,
+                                        lastRunDate: process.lastRunDate,
+                                        nextRunDate: process.nextRunDate
+                                      };
+                                      checkinMutation.mutate({ process, data });
+                                    }}
+                                    className="text-gray-300 hover:text-white hover:bg-gray-700"
+                                  >
+                                    <Unlock className="mr-2 h-4 w-4" />
+                                    Checkin
+                                  </ContextMenuItem>
+                                  <ContextMenuItem 
+                                    onClick={() => cancelCheckoutMutation.mutate(process)}
+                                    disabled={cancelCheckoutMutation.isPending}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <X className="mr-2 h-4 w-4" />
+                                    Cancel Checkout
+                                  </ContextMenuItem>
+                                </>
+                              )}
+                              {isLockedByOther && (
+                                <ContextMenuItem disabled>
+                                  <Lock className="mr-2 h-4 w-4" />
+                                  Locked by {lock.user?.username}
+                                </ContextMenuItem>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </>
+                    )}
+                    
                     <ContextMenuSeparator className="bg-gray-700" />
                     <ContextMenuItem
                       onClick={() => handleDelete(process.id)}
