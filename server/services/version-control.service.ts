@@ -231,9 +231,6 @@ export class VersionControlService {
       )
       .returning();
       
-    console.log(`Deleted ${deletedLocks.length} existing locks for ${type} ${artifactId}`);
-    
-    console.log(`Creating lock for ${type} ${artifactId} in initiative ${initiativeId} by user ${userId}`);
     
     // Then create new lock
     try {
@@ -245,8 +242,6 @@ export class VersionControlService {
         lockExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
         lockReason: `Checked out for editing in initiative ${initiativeId}`
       }).returning();
-      
-      console.log('Lock created in service:', newLock);
       
       if (!newLock) {
         throw new Error('Failed to create artifact lock - no lock returned');

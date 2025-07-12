@@ -84,37 +84,10 @@ versionControlRouter.post("/checkout", requireAuth, async (req, res) => {
       userId
     );
     
-    console.log(`Checkout successful:`, {
-      artifactType,
-      artifactId,
-      initiativeId,
-      userId,
-      versionId: version.id
-    });
-    
-    // Verify lock was created - join with user for complete lock info
-    const [newLockResult] = await db.select({
-      lock: artifactLocks,
-      user: users
-    })
-      .from(artifactLocks)
-      .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
-      .where(
-        and(
-          eq(artifactLocks.artifactType, artifactType),
-          eq(artifactLocks.artifactId, artifactId),
-          eq(artifactLocks.initiativeId, initiativeId)
-        )
-      )
-      .orderBy(sql`${artifactLocks.id} DESC`)
-      .limit(1);
-    
-    console.log('Lock created:', newLockResult);
 
     res.json({ 
       message: "Artifact checked out successfully",
-      version,
-      lock: newLockResult
+      version
     });
   } catch (error) {
     console.error("Error checking out artifact:", error);
