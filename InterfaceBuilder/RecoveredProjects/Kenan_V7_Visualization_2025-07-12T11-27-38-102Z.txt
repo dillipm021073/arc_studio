@@ -1,0 +1,82 @@
+KENAN PROJECT VISUALIZATION
+===========================
+
+Project: Kenan Upgrade - Integration Scope
+Created: Wed Jul 09 2025 00:44:51 GMT+0530 (India Standard Time)
+
+NODES BY TYPE:
+--------------
+
+RECTANGLE (42):
+  - header: Kenan Upgrade - Integration Scope
+  - kenan-main: KENAN
+  - cap-ap: CAP-AP
+  - clarity: Clarity
+  - clarity-2: Clarity
+  - cap-ob: CAP-OB
+  - order-manager: Order Manager
+  - kenan-ix: Kenan IX
+  - fleet-maps: Fleet Maps
+  - c-omni: C-OMNI
+  - ssm: SSM
+  - file-ftp-1: FILE/FTP/SFTP
+  - file-ftp-2: FILE/FTP/SFTP
+  - file-ftp-3: FILE/FTP/SFTP
+  - file-ftp-4: FILE/FTP/SFTP
+  - file-ftp-5: FILE/FTP/SFTP
+  - file-ftp-6: FILE/FTP/SFTP
+  - file-ftp-7: FILE/FTP/SFTP
+  - file-ftp-8: FILE/FTP/SFTP
+  - file-ftp-9: FILE/FTP/SFTP
+  - middleware: Middleware
+  - middleware-sw: MIDDLEWARE-SW
+  - nbn-api: NBN-API
+  - sync-bc-cap: SYNC BC-CAP
+  - ea1: EA1
+  - ms-sql: MS SQL
+  - cap: CAP
+  - caps: CAPS
+  - cmma: CMMA
+  - viya: Viya
+  - paynet: Paynet
+  - pims: PIMS
+  - bnc-ms: BNC-MS
+  - file-ftp-r1: FILE/FTP/SFTP
+  - file-ftp-r2: FILE/FTP/SFTP
+  - file-ftp-r3: FILE/FTP/SFTP
+  - file-ftp-r4: FILE/FTP/SFTP
+  - file-ftp-r5: FILE/FTP/SFTP
+  - file-ftp-r6: FILE/FTP/SFTP
+  - file-ftp-r7: FILE/FTP/SFTP
+  - file-ftp-r8: FILE/FTP/SFTP
+  - file-ftp-r9: FILE/FTP/SFTP
+
+
+CONNECTIONS:
+------------
+CAP-AP --> FILE/FTP/SFTP
+Clarity --> FILE/FTP/SFTP
+Clarity --> FILE/FTP/SFTP
+CAP-OB --> FILE/FTP/SFTP
+Order Manager --> FILE/FTP/SFTP
+Kenan IX --> FILE/FTP/SFTP
+Fleet Maps --> FILE/FTP/SFTP
+C-OMNI --> FILE/FTP/SFTP
+SSM --> FILE/FTP/SFTP
+FILE/FTP/SFTP --> Middleware
+FILE/FTP/SFTP --> MIDDLEWARE-SW
+FILE/FTP/SFTP --> NBN-API
+FILE/FTP/SFTP --> SYNC BC-CAP
+Middleware --> FILE/FTP/SFTP
+MIDDLEWARE-SW --> FILE/FTP/SFTP
+NBN-API --> FILE/FTP/SFTP
+SYNC BC-CAP --> FILE/FTP/SFTP
+FILE/FTP/SFTP --> EA1
+FILE/FTP/SFTP --> MS SQL
+FILE/FTP/SFTP --> CAP
+FILE/FTP/SFTP --> CAPS
+FILE/FTP/SFTP --> CMMA
+FILE/FTP/SFTP --> Viya
+FILE/FTP/SFTP --> Paynet
+FILE/FTP/SFTP --> PIMS
+FILE/FTP/SFTP --> BNC-MS

@@ -25,6 +25,8 @@ import { Edit, Eye, Network, Copy, Trash2, UserPlus, Clipboard, ClipboardPaste }
 import { useLocation } from "wouter";
 import CommunicationBadge from "@/components/communications/communication-badge";
 import { useToast } from "@/hooks/use-toast";
+import { getProcessLevelIcon, getProcessIconProps, getProcessLevelDescription } from "@/lib/business-process-utils";
+import { ProcessLevelBadge } from "@/components/ui/process-level-badge";
 import {
   DndContext,
   DragOverlay,
@@ -259,11 +261,19 @@ function SortableTreeNode({
               {currentSequence}
             </Badge>
             
+            {(() => {
+              const ProcessIcon = getProcessLevelIcon(process.level);
+              return (
+                <ProcessIcon 
+                  {...getProcessIconProps("h-4 w-4 text-blue-600")} 
+                  aria-label={getProcessLevelDescription(process.level)}
+                />
+              );
+            })()}
+            
             <span className="font-medium text-white truncate">{process.businessProcess}</span>
             
-            <Badge className="bg-gray-700 text-white" variant="outline">
-              Level {process.level}
-            </Badge>
+            <ProcessLevelBadge level={process.level} />
             
             {getStatusBadge(process.status)}
             

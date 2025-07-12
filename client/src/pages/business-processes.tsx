@@ -8,6 +8,8 @@ import { useLocation } from "wouter";
 import { useInitiative } from "@/components/initiatives/initiative-context";
 import { api } from "@/lib/api";
 import { Plus, Search, Edit, Trash2, Network, MoreVertical, Info, FileJson, Copy, Eye, TableIcon, UserPlus, FileDown, ChevronDown, Layers, GitBranch, Lock, Unlock, AlertTriangle , X} from "lucide-react";
+import { getProcessLevelIcon, getProcessIconProps, getProcessLevelDescription } from "@/lib/business-process-utils";
+import { ProcessLevelBadge } from "@/components/ui/process-level-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -870,7 +872,15 @@ export default function BusinessProcesses() {
                       </TableCell>
                       <TableCell className="font-medium text-white">
                         <div className="flex items-center space-x-2">
-                          <Network className="h-4 w-4 text-blue-600" />
+                          {(() => {
+                            const ProcessIcon = getProcessLevelIcon(bp.level);
+                            return (
+                              <ProcessIcon 
+                                {...getProcessIconProps("h-4 w-4 text-blue-600")} 
+                                aria-label={getProcessLevelDescription(bp.level)}
+                              />
+                            );
+                          })()}
                           <span>{bp.businessProcess}</span>
                           <ArtifactStatusIndicator 
                             state={getBusinessProcessState(bp)} 
@@ -888,9 +898,7 @@ export default function BusinessProcesses() {
                   <TableCell className="text-gray-300">{bp.product}</TableCell>
                   <TableCell className="text-gray-300">{bp.version}</TableCell>
                   <TableCell className="text-gray-300">
-                    <Badge className="bg-gray-700 text-white" variant="outline">
-                      Level {bp.level || "A"}
-                    </Badge>
+                    <ProcessLevelBadge level={bp.level || "A"} />
                   </TableCell>
                   <TableCell className="text-gray-300">{bp.domainOwner || "-"}</TableCell>
                   <TableCell className="text-gray-300">{bp.itOwner || "-"}</TableCell>

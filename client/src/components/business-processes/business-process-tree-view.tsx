@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Edit, Eye, Network, Copy, Trash2, UserPlus } from "lucide-react";
 import { useLocation } from "wouter";
 import CommunicationBadge from "@/components/communications/communication-badge";
+import { getProcessLevelIcon, getProcessIconProps, getProcessLevelDescription } from "@/lib/business-process-utils";
+import { ProcessLevelBadge } from "@/components/ui/process-level-badge";
 
 interface BusinessProcess {
   id: number;
@@ -231,11 +233,19 @@ export default function BusinessProcessTreeView({
                     {currentSequence}
                   </Badge>
                   
+                  {(() => {
+                    const ProcessIcon = getProcessLevelIcon(process.level);
+                    return (
+                      <ProcessIcon 
+                        {...getProcessIconProps("h-4 w-4 text-blue-600")} 
+                        aria-label={getProcessLevelDescription(process.level)}
+                      />
+                    );
+                  })()}
+                  
                   <span className="font-medium text-white truncate">{process.businessProcess}</span>
                   
-                  <Badge className="bg-gray-700 text-white" variant="outline">
-                    Level {process.level}
-                  </Badge>
+                  <ProcessLevelBadge level={process.level} />
                   
                   {getStatusBadge(process.status)}
                   

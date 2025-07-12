@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { getProcessLevelIcon, getProcessIconProps } from "@/lib/business-process-utils";
 
 const childBusinessProcessSchema = z.object({
   businessProcess: z.string().min(1, "Business process name is required"),
@@ -112,12 +113,20 @@ export default function ChildBusinessProcessForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle className="text-white">
+        <DialogTitle className="text-white flex items-center gap-2">
+          {(() => {
+            const ProcessIcon = getProcessLevelIcon(childTemplate.level);
+            return <ProcessIcon {...getProcessIconProps("h-5 w-5 text-blue-600")} />;
+          })()}
           Add Level {childTemplate.level} Process to {parentBP.businessProcess}
         </DialogTitle>
         <div className="flex items-center gap-2 mt-2">
           <span className="text-sm text-gray-400">Parent:</span>
           <Badge className="bg-blue-600 text-white">
+            {(() => {
+              const ParentIcon = getProcessLevelIcon(parentBP.level);
+              return <ParentIcon {...getProcessIconProps("h-3 w-3 mr-1")} />;
+            })()}
             Level {parentBP.level}
           </Badge>
           <span className="text-sm text-white">{parentBP.businessProcess}</span>
