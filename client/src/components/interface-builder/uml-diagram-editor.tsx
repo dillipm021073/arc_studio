@@ -146,6 +146,14 @@ export function UmlDiagramEditor({ open, onOpenChange, diagram, onSave }: UmlDia
   const [isMaximized, setIsMaximized] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Update state when diagram prop changes
+  useEffect(() => {
+    setName(diagram.name);
+    setDescription(diagram.description || '');
+    setContent(diagram.content);
+    setDiagramType(diagram.diagramType);
+  }, [diagram]);
 
   // Load preview on content change
   useEffect(() => {

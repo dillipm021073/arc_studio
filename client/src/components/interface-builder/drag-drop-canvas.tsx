@@ -59,6 +59,7 @@ import RectangleNode from './nodes/rectangle-node';
 import ContainerNode from './nodes/container-node';
 import RoundedRectangleNode from './nodes/rounded-rectangle-node';
 import { ImageNode } from './nodes/ImageNode';
+import UmlNode from './nodes/uml-node';
 import SmartEdge from './edges/smart-edge';
 import { ComponentTemplate } from './component-library';
 import EdgeEditDialog from './edge-edit-dialog';
@@ -78,6 +79,7 @@ const nodeTypes: NodeTypes = {
   container: ContainerNode,
   roundedRectangle: RoundedRectangleNode,
   image: ImageNode,
+  uml: UmlNode,
 };
 
 // Custom edge types

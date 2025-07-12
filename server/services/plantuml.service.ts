@@ -33,7 +33,6 @@ export class PlantUmlService {
       return undefined;
     }
 
-    console.log(`Using proxy: ${proxyUrl} for URL: ${url}`);
     
     if (url.startsWith('https:')) {
       return new HttpsProxyAgent(proxyUrl);
@@ -52,8 +51,10 @@ export class PlantUmlService {
     // 3. Encode to base64-like format using custom alphabet
     
     const utf8Bytes = Buffer.from(text, 'utf-8');
-    const compressed = await deflateAsync(utf8Bytes);
+    const compressed = await deflateAsync(utf8Bytes, { level: 9 }); // Use maximum compression
     
+    // Encode the compressed data without the ~1 header
+    // The PlantUML server seems to handle it automatically
     return this.encode64(compressed);
   }
 
@@ -101,9 +102,18 @@ export class PlantUmlService {
    * Get the URL for a PlantUML diagram
    */
   static async getDiagramUrl(text: string, format: 'svg' | 'png' = 'svg', serverIndex: number = 0): Promise<string> {
-    const encoded = await this.encode(text);
-    const server = this.PLANTUML_SERVERS[serverIndex] || this.PLANTUML_SERVERS[0];
-    return `${server}/${format}/${encoded}`;
+    try {
+      // Try the proper encoding first
+      const encoded = await this.encode(text);
+      const server = this.PLANTUML_SERVERS[serverIndex] || this.PLANTUML_SERVERS[0];
+      return `${server}/${format}/${encoded}`;
+    } catch (error) {
+      // If encoding fails, fall back to simple text approach
+      console.log('PlantUML encoding failed, trying simple approach:', error.message);
+      const encoded = this.simpleEncode(text);
+      const server = this.PLANTUML_SERVERS[serverIndex] || this.PLANTUML_SERVERS[0];
+      return `${server}/txt/${encoded}`;
+    }
   }
 
   /**
@@ -166,102 +176,57 @@ export class PlantUmlService {
    * Fetch SVG content from PlantUML server
    */
   static async renderSvg(text: string): Promise<string> {
-    const encoded = await this.encode(text);
+    console.log('PlantUML text to render:', text);
+    console.log('Text length:', text.length);
     
-    // First try with native HTTP client (better proxy support)
-    for (let i = 0; i < this.DIRECT_PLANTUML_PATTERNS.length; i++) {
-      try {
-        const url = this.DIRECT_PLANTUML_PATTERNS[i]
-          .replace('{format}', 'svg')
-          .replace('{encoded}', encoded);
-        
-        console.log(`Attempting native HTTP client ${i + 1}/${this.DIRECT_PLANTUML_PATTERNS.length}:`, url);
-        
-        const svgContent = await this.fetchWithNativeHttp(url);
-        
+    // First, always try the encoded URL approach with ~1 prefix
+    try {
+      console.log('Attempting encoded URL approach');
+      const encoded = await this.encode(text);
+      // Add ~1 prefix to indicate DEFLATE encoding as per PlantUML documentation
+      const url = `https://www.plantuml.com/plantuml/svg/~1${encoded}`;
+      console.log('Encoded URL length:', url.length);
+      
+      const svgContent = await this.fetchWithNativeHttp(url);
+      if (svgContent && (svgContent.includes('<svg') || svgContent.includes('<?xml'))) {
+        // Check if it's an error diagram
+        if (svgContent.includes('bad URL') || svgContent.includes('DEFLATE')) {
+          console.log('PlantUML returned encoding error, trying simple base64');
+          throw new Error('Encoding error from PlantUML');
+        }
+        console.log('Success with encoded URL approach');
+        return this.cleanSvg(svgContent);
+      }
+    } catch (error) {
+      console.log('Encoded URL approach failed:', error.message);
+    }
+    
+    // Fallback to simple base64 encoding for text endpoint
+    try {
+      console.log('Attempting simple base64 encoding');
+      const encoded = this.simpleEncode(text);
+      const url = `https://www.plantuml.com/plantuml/txt/${encoded}`;
+      console.log('Simple encoded URL length:', url.length);
+      
+      const textContent = await this.fetchWithNativeHttp(url);
+      if (textContent) {
+        console.log('Got text diagram, converting to SVG format request');
+        // Extract the diagram ID from the response if possible
+        // Otherwise, use the svg endpoint with simple encoding
+        const svgUrl = url.replace('/txt/', '/svg/');
+        const svgContent = await this.fetchWithNativeHttp(svgUrl);
         if (svgContent && (svgContent.includes('<svg') || svgContent.includes('<?xml'))) {
-          console.log(`Success with native HTTP client ${i + 1}`);
+          console.log('Success with simple encoding');
           return this.cleanSvg(svgContent);
         }
-        
-        console.log(`Native HTTP client ${i + 1} returned non-SVG content`);
-      } catch (error) {
-        console.log(`Native HTTP client ${i + 1} error:`, error.message);
       }
-    }
-    
-    // Fallback to fetch API
-    for (let i = 0; i < this.DIRECT_PLANTUML_PATTERNS.length; i++) {
-      try {
-        const url = this.DIRECT_PLANTUML_PATTERNS[i]
-          .replace('{format}', 'svg')
-          .replace('{encoded}', encoded);
-        
-        console.log(`Attempting fetch API ${i + 1}/${this.DIRECT_PLANTUML_PATTERNS.length}:`, url);
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
-        const response = await fetch(url, {
-          signal: controller.signal,
-          redirect: 'follow',
-          headers: {
-            'User-Agent': 'StudioArchitect-PlantUML-Client/1.0'
-          }
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
-          const svgContent = await response.text();
-          if (svgContent.includes('<svg') || svgContent.includes('<?xml')) {
-            console.log(`Success with fetch API ${i + 1}`);
-            return this.cleanSvg(svgContent);
-          }
-        }
-        
-        console.log(`Fetch API ${i + 1} failed: ${response.status}`);
-      } catch (error) {
-        console.log(`Fetch API ${i + 1} error:`, error.message);
-      }
-    }
-    
-    // Fallback to regular server attempts
-    for (let i = 0; i < this.PLANTUML_SERVERS.length; i++) {
-      try {
-        const url = await this.getDiagramUrl(text, 'svg', i);
-        console.log(`Attempting PlantUML server ${i + 1}/${this.PLANTUML_SERVERS.length}:`, url);
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
-        const response = await fetch(url, {
-          signal: controller.signal,
-          redirect: 'follow',
-          headers: {
-            'User-Agent': 'StudioArchitect-PlantUML-Client/1.0'
-          }
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
-          const svgContent = await response.text();
-          if (svgContent.includes('<svg') || svgContent.includes('<?xml')) {
-            console.log(`Success with server ${i + 1}`);
-            return this.cleanSvg(svgContent);
-          }
-        }
-        
-        console.log(`Server ${i + 1} failed: ${response.status}`);
-      } catch (error) {
-        console.log(`Server ${i + 1} error:`, error.message);
-      }
+    } catch (error) {
+      console.log('Simple encoding approach failed:', error.message);
     }
     
     // All attempts failed, return fallback
     console.error('All PlantUML attempts failed, using fallback');
-    return this.generateFallbackSvg(text, 'All PlantUML servers are currently unavailable');
+    return this.generateFallbackSvg(text, 'Unable to connect to PlantUML server. Please check your internet connection and proxy settings.');
   }
 
   /**

@@ -55,6 +55,7 @@ import { useToast } from '@/hooks/use-toast';
 import { InterfaceProject } from '@/data/example-projects';
 import { interfaceBuilderApi } from '@/services/interface-builder-api';
 import { logEdgeDetails, validateEdges } from '@/utils/test-edge-persistence';
+import { api } from '@/lib/api';
 
 interface ValidationResult {
   type: 'error' | 'warning' | 'info';
@@ -205,8 +206,11 @@ export default function InterfaceBuilder() {
 
   // Handle component selection from library
   const handleComponentSelect = useCallback((component: ComponentTemplate) => {
+    console.log('Component selected:', component.type, component.id);
+    
     // Check if it's a UML component
-    if (component.type === 'uml') {
+    if (component.type === 'uml' || component.id === 'uml-folder') {
+      console.log('Opening UML manager');
       setShowUmlManager(true);
       return;
     }
@@ -1839,12 +1843,191 @@ export default function InterfaceBuilder() {
       <UmlManagerDialog
         open={showUmlManager}
         onOpenChange={setShowUmlManager}
-        onRenderDiagram={(diagram) => {
-          // TODO: Implement rendering UML diagram on canvas
-          toast({
-            title: 'Render UML Diagram',
-            description: `Rendering ${diagram.name} on canvas`,
-          });
+        onRenderDiagram={async (diagram) => {
+          try {
+            // First render the PlantUML to SVG
+            const response = await api.post('/api/uml/render', {
+              content: diagram.content,
+              format: 'svg'
+            });
+
+            // Convert SVG to data URL
+            const svgString = response.data.svg;
+            console.log('SVG Response received, length:', svgString.length);
+            
+            // Check if we got a fallback response
+            if (response.data.isFallback) {
+              toast({
+                title: 'PlantUML Server Unavailable',
+                description: 'Using fallback view for the diagram',
+                variant: 'default'
+              });
+            }
+            
+            // For complex SVGs, we'll use the UML node type which handles SVG better
+            // For simpler SVGs, we can use image node
+            const useUmlNode = svgString.length > 50000 || response.data.isFallback;
+            
+            if (useUmlNode) {
+              // Use UML node for complex diagrams
+              const newNode = {
+                id: `uml-${diagram.id}-${Date.now()}`,
+                type: 'uml',
+                position: { 
+                  x: Math.random() * 300 + 100, 
+                  y: Math.random() * 300 + 100 
+                },
+                style: {
+                  width: 600,
+                  height: 400
+                },
+                data: {
+                  id: `uml-${diagram.id}`,
+                  name: diagram.name,
+                  description: diagram.description || '',
+                  diagramType: diagram.diagramType,
+                  content: diagram.content,
+                  svg: svgString,
+                  metadata: response.data.metadata,
+                  isFallback: response.data.isFallback || false,
+                  category: 'UML',
+                  color: '#9333ea',
+                  width: 600,
+                  height: 400,
+                  isResizing: true
+                }
+              };
+              
+              console.log('Adding UML node to canvas (complex diagram)');
+              
+              setCanvasData(prev => ({
+                ...prev,
+                nodes: [...prev.nodes, newNode]
+              }));
+              
+              setShowUmlManager(false);
+              
+              toast({
+                title: 'UML Diagram Added',
+                description: `${diagram.name} has been added to the canvas`,
+              });
+              
+              return;
+            }
+            
+            // For simpler diagrams, continue with image node approach
+            // Clean and encode the SVG
+            const cleanedSvg = svgString
+              .replace(/^\uFEFF/, '') // Remove BOM if present
+              .trim();
+            
+            // Create data URL directly without blob for better compatibility
+            const svgDataUrl = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(cleanedSvg)));
+            
+            console.log('Created SVG data URL');
+            
+            // Try to get dimensions with error handling
+            let width = 400; // Default width
+            let height = 300; // Default height
+            
+            try {
+              // Create a temporary image to get dimensions
+              const img = new Image();
+              img.src = svgDataUrl;
+              
+              await new Promise((resolve, reject) => {
+                img.onload = () => {
+                  console.log('Image loaded successfully, dimensions:', img.naturalWidth, 'x', img.naturalHeight);
+                  resolve(true);
+                };
+                img.onerror = (error) => {
+                  console.error('Image failed to load:', error);
+                  reject(error);
+                };
+                // Timeout after 5 seconds
+                setTimeout(() => reject(new Error('Image load timeout')), 5000);
+              }).catch(err => {
+                console.warn('Could not load image for dimensions, using defaults:', err);
+              });
+
+              if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                // Calculate appropriate size
+                const maxWidth = 800;
+                const maxHeight = 600;
+                width = img.naturalWidth;
+                height = img.naturalHeight;
+                
+                // Scale if too large
+                if (width > maxWidth || height > maxHeight) {
+                  const scale = Math.min(maxWidth / width, maxHeight / height);
+                  width = Math.round(width * scale);
+                  height = Math.round(height * scale);
+                }
+                
+                // Ensure minimum size
+                width = Math.max(width, 400);
+                height = Math.max(height, 300);
+              }
+            } catch (error) {
+              console.warn('Error getting image dimensions, using defaults:', error);
+            }
+
+            console.log('Final dimensions:', width, 'x', height);
+
+            // Create an image node with explicit dimensions
+            const newNode = {
+              id: `uml-image-${diagram.id}-${Date.now()}`,
+              type: 'image',
+              position: { 
+                x: Math.random() * 300 + 100, 
+                y: Math.random() * 300 + 100 
+              },
+              style: {
+                width: width,
+                height: height
+              },
+              data: {
+                label: diagram.name,
+                imageUrl: svgDataUrl,
+                alt: `${diagram.name} - ${diagram.diagramType} diagram`,
+                width: width,  // Pass dimensions in data
+                height: height,
+                maintainAspectRatio: true,
+                opacity: 1,
+                borderStyle: 'solid',
+                borderWidth: 2,
+                borderColor: '#9333ea'
+              }
+            };
+
+            console.log('Adding node to canvas:', newNode);
+
+            // Add the node to the canvas
+            setCanvasData(prev => {
+              const updated = {
+                ...prev,
+                nodes: [...prev.nodes, newNode]
+              };
+              console.log('Canvas updated with new node count:', updated.nodes.length);
+              return updated;
+            });
+
+            // Close the UML manager
+            setShowUmlManager(false);
+
+            toast({
+              title: 'UML Diagram Added',
+              description: `${diagram.name} has been added to the canvas as an image`,
+            });
+            
+          } catch (error) {
+            console.error('Failed to render UML diagram:', error);
+            toast({
+              title: 'Error',
+              description: 'Failed to render UML diagram on canvas',
+              variant: 'destructive'
+            });
+          }
         }}
       />
     </div>

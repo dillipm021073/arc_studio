@@ -34,7 +34,7 @@ export default function Login() {
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold text-white">Login</CardTitle>
           <CardDescription className="text-gray-400">
-            Enter your credentials to access the Application Interface Tracker
+            Enter your credentials to access the Architect Studio
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
