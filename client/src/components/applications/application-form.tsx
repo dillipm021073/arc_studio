@@ -12,6 +12,7 @@ import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { insertApplicationSchema, type InsertApplication } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { useInitiative } from "@/components/initiatives/initiative-context";
 
 interface ApplicationFormProps {
   onSuccess?: () => void;
@@ -23,6 +24,7 @@ interface ApplicationFormProps {
 export default function ApplicationForm({ onSuccess, initialData, applicationId, isEditing = false }: ApplicationFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { activeInitiative } = useInitiative();
 
   const form = useForm<InsertApplication>({
     resolver: zodResolver(insertApplicationSchema),
@@ -40,6 +42,10 @@ export default function ApplicationForm({ onSuccess, initialData, applicationId,
       consumesExtInterfaces: initialData?.consumesExtInterfaces || false,
       consInterfaceType: initialData?.consInterfaceType || "",
       status: initialData?.status || "active",
+      // Set artifactState based on initiative context for new applications
+      artifactState: initialData?.artifactState || (!isEditing && activeInitiative ? "pending" : "active"),
+      // Set initiativeOrigin if creating within an initiative
+      initiativeOrigin: initialData?.initiativeOrigin || (!isEditing && activeInitiative ? activeInitiative.id : undefined),
       firstActiveDate: initialData?.firstActiveDate || undefined,
       decommissionDate: initialData?.decommissionDate || undefined,
       tmfDomain: initialData?.tmfDomain || "",
