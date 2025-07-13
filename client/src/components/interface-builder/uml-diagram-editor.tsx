@@ -282,72 +282,73 @@ export function UmlDiagramEditor({ open, onOpenChange, diagram, onSave }: UmlDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={`bg-gray-900 text-white ${isMaximized ? 'max-w-full h-screen m-0' : 'max-w-7xl h-[90vh]'}`}>
-        <DialogHeader>
+      <DialogContent className={`bg-gray-900 text-white flex flex-col ${isMaximized ? 'max-w-full h-screen m-0' : 'max-w-7xl h-[90vh]'}`}>
+        <DialogHeader className="shrink-0">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex items-center gap-4">
               <DialogTitle>PlantUML Diagram Editor</DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="sr-only">
                 Create and edit PlantUML diagrams with live preview
               </DialogDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setIsMaximized(!isMaximized)}
-              >
-                {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setIsMaximized(!isMaximized)}
+            >
+              {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
           </div>
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-4 h-full">
-          {/* Editor Panel */}
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Diagram Name</Label>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Enter diagram name"
-                  className="bg-gray-800 border-gray-700"
-                />
-              </div>
-              <div>
-                <Label>Diagram Type</Label>
-                <Select value={diagramType} onValueChange={setDiagramType}>
-                  <SelectTrigger className="bg-gray-800 border-gray-700">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DIAGRAM_TYPES.map(type => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
+        {/* Compact header with form fields */}
+        <div className="shrink-0 space-y-2 pb-2">
+          <div className="grid grid-cols-3 gap-2">
             <div>
-              <Label>Description (Optional)</Label>
+              <Label className="text-xs">Name</Label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Diagram name"
+                className="h-8 bg-gray-800 border-gray-700 text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Type</Label>
+              <Select value={diagramType} onValueChange={setDiagramType}>
+                <SelectTrigger className="h-8 bg-gray-800 border-gray-700 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DIAGRAM_TYPES.map(type => (
+                    <SelectItem key={type.value} value={type.value}>
+                      {type.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Description (Optional)</Label>
               <Input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief description of the diagram"
-                className="bg-gray-800 border-gray-700"
+                placeholder="Brief description"
+                className="h-8 bg-gray-800 border-gray-700 text-sm"
               />
             </div>
+          </div>
+        </div>
 
+        {/* Main content area */}
+        <div className="grid grid-cols-2 gap-2 flex-1 min-h-0">
+          {/* Editor Panel */}
+          <div className="flex flex-col gap-2 min-h-0">
             <div className="flex items-center justify-between">
-              <Label>PlantUML Content</Label>
-              <div className="flex items-center gap-2">
+              <Label className="text-sm">PlantUML Content</Label>
+              <div className="flex items-center gap-1">
                 <Select onValueChange={handleInsertTemplate}>
-                  <SelectTrigger className="w-40 h-8 bg-gray-800 border-gray-700">
+                  <SelectTrigger className="w-32 h-7 bg-gray-800 border-gray-700 text-xs">
                     <SelectValue placeholder="Templates" />
                   </SelectTrigger>
                   <SelectContent>
@@ -357,65 +358,73 @@ export function UmlDiagramEditor({ open, onOpenChange, diagram, onSave }: UmlDia
                     <SelectItem value="usecase">Use Case</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button size="sm" variant="ghost" onClick={handleCopyToClipboard}>
-                  <Copy className="h-4 w-4" />
+                <Button size="sm" variant="ghost" onClick={handleCopyToClipboard} className="h-7 w-7 p-0">
+                  <Copy className="h-3 w-3" />
                 </Button>
-                <Button size="sm" variant="ghost" onClick={handleClearAll}>
-                  <Trash2 className="h-4 w-4" />
+                <Button size="sm" variant="ghost" onClick={handleClearAll} className="h-7 w-7 p-0">
+                  <Trash2 className="h-3 w-3" />
                 </Button>
               </div>
             </div>
 
-            <Textarea
-              ref={textareaRef}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="@startuml\n...\n@enduml"
-              className="flex-1 font-mono text-sm bg-gray-800 border-gray-700 resize-none"
-              style={{ minHeight: '400px' }}
-            />
+            {/* Scrollable text editor container */}
+            <div className="flex-1 min-h-0 bg-gray-800 rounded-lg border border-gray-700 overflow-auto">
+              <Textarea
+                ref={textareaRef}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="@startuml\n...\n@enduml"
+                className="w-full h-full font-mono text-sm bg-transparent border-0 resize-none focus:ring-0 p-3"
+                style={{ minHeight: 'max-content' }}
+              />
+            </div>
 
-            <div className="flex items-center justify-between">
+            {/* Static button container */}
+            <div className="flex items-center justify-between pt-1">
               <div className="flex items-center gap-2">
-                <Button onClick={handleSave} disabled={loading}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Save Diagram
+                <Button size="sm" onClick={handleSave} disabled={loading} className="h-8">
+                  <Save className="h-3 w-3 mr-1" />
+                  Save
                 </Button>
-                <Button variant="outline" onClick={() => handleExport('png')} disabled={loading}>
-                  <Download className="h-4 w-4 mr-2" />
+                <Button size="sm" variant="outline" onClick={() => handleExport('png')} disabled={loading} className="h-8">
+                  <Download className="h-3 w-3 mr-1" />
                   PNG
                 </Button>
-                <Button variant="outline" onClick={() => handleExport('svg')} disabled={loading}>
-                  <Download className="h-4 w-4 mr-2" />
+                <Button size="sm" variant="outline" onClick={() => handleExport('svg')} disabled={loading} className="h-8">
+                  <Download className="h-3 w-3 mr-1" />
                   SVG
                 </Button>
               </div>
               <Button
+                size="sm"
                 variant="ghost"
                 onClick={() => setShowPreview(!showPreview)}
+                className="h-8"
               >
-                {showPreview ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
-                {showPreview ? 'Hide Preview' : 'Show Preview'}
+                {showPreview ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
+                {showPreview ? 'Hide' : 'Show'}
               </Button>
             </div>
           </div>
 
           {/* Preview Panel */}
           {showPreview && (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 min-h-0">
               <div className="flex items-center justify-between">
-                <Label>Live Preview</Label>
+                <Label className="text-sm">Live Preview</Label>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={renderPreview}
                   disabled={loading}
+                  className="h-7 w-7 p-0"
                 >
-                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
                 </Button>
               </div>
 
-              <div className="flex-1 bg-white rounded-lg p-4 overflow-auto">
+              {/* Scrollable preview container */}
+              <div className="flex-1 min-h-0 bg-white rounded-lg p-3 overflow-auto">
                 {loading && (
                   <div className="flex items-center justify-center h-full text-gray-500">
                     <RefreshCw className="h-8 w-8 animate-spin" />
@@ -425,8 +434,8 @@ export function UmlDiagramEditor({ open, onOpenChange, diagram, onSave }: UmlDia
                 {error && (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center">
-                      <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-2" />
-                      <p className="text-red-500">{error}</p>
+                      <AlertCircle className="h-10 w-10 text-red-500 mx-auto mb-2" />
+                      <p className="text-red-500 text-sm">{error}</p>
                     </div>
                   </div>
                 )}
@@ -437,7 +446,7 @@ export function UmlDiagramEditor({ open, onOpenChange, diagram, onSave }: UmlDia
                 
                 {!loading && !error && !preview && (
                   <div className="flex items-center justify-center h-full text-gray-500">
-                    <p>Enter PlantUML code to see preview</p>
+                    <p className="text-sm">Enter PlantUML code to see preview</p>
                   </div>
                 )}
               </div>
