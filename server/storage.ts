@@ -2860,6 +2860,11 @@ export class DatabaseStorage implements IStorage {
               cleanApp.updatedAt = new Date();
               cleanApp.firstActiveDate = app.firstActiveDate ? new Date(app.firstActiveDate) : null;
               cleanApp.lastChangeDate = new Date();
+              cleanApp.plannedActivationDate = app.plannedActivationDate ? new Date(app.plannedActivationDate) : null;
+              
+              // Handle artifact fields
+              cleanApp.artifactState = app.artifactState || 'active';
+              cleanApp.initiativeOrigin = app.initiativeOrigin || null;
               
               // Ensure numeric fields are valid
               if (cleanApp.uptime && isNaN(cleanApp.uptime)) {
@@ -2938,6 +2943,11 @@ export class DatabaseStorage implements IStorage {
               cleanInterface.createdAt = iface.createdAt ? new Date(iface.createdAt) : new Date();
               cleanInterface.updatedAt = new Date();
               cleanInterface.lastChangeDate = new Date();
+              cleanInterface.plannedActivationDate = iface.plannedActivationDate ? new Date(iface.plannedActivationDate) : null;
+              
+              // Handle artifact fields
+              cleanInterface.artifactState = iface.artifactState || 'active';
+              cleanInterface.initiativeOrigin = iface.initiativeOrigin || null;
               
               // Ensure foreign key IDs are valid integers
               if (cleanInterface.providerApplicationId) {

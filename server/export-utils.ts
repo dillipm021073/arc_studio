@@ -40,17 +40,48 @@ function flattenData(data: any[], joinFields?: { [key: string]: string }): any[]
   });
 }
 
-// Export applications with flat structure
+// Export applications with flat structure including new artifact fields
 export async function exportApplicationsToXLSX() {
   try {
     const applicationsData = await db.select().from(applications);
     
-    // Flatten the data
-    const flatData = flattenData(applicationsData);
+    // Map the data to include all fields with proper formatting
+    const mappedData = applicationsData.map(app => ({
+      'ID': app.id,
+      'AML Number': app.amlNumber,
+      'Name': app.name,
+      'Description': app.description || '',
+      'LOB': app.lob || '',
+      'OS': app.os || '',
+      'Deployment': app.deployment || '',
+      'Uptime': app.uptime || '',
+      'Purpose': app.purpose || '',
+      'Provides Ext Interface': app.providesExtInterface ? 'Yes' : 'No',
+      'Prov Interface Type': app.provInterfaceType || '',
+      'Consumes Ext Interfaces': app.consumesExtInterfaces ? 'Yes' : 'No',
+      'Cons Interface Type': app.consInterfaceType || '',
+      'Status': app.status,
+      'Artifact State': app.artifactState || 'active',
+      'Planned Activation Date': app.plannedActivationDate ? new Date(app.plannedActivationDate).toISOString().split('T')[0] : '',
+      'Initiative Origin': app.initiativeOrigin || '',
+      'First Active Date': app.firstActiveDate ? new Date(app.firstActiveDate).toISOString().split('T')[0] : '',
+      'Last Change Date': app.lastChangeDate ? new Date(app.lastChangeDate).toISOString().split('T')[0] : '',
+      'Decommission Date': app.decommissionDate ? new Date(app.decommissionDate).toISOString().split('T')[0] : '',
+      'Decommission Reason': app.decommissionReason || '',
+      'Decommissioned By': app.decommissionedBy || '',
+      'X Position': app.xPosition || '',
+      'Y Position': app.yPosition || '',
+      'Layer': app.layer || '',
+      'Criticality': app.criticality || '',
+      'Team': app.team || '',
+      'TMF Domain': app.tmfDomain || '',
+      'Created At': app.createdAt ? new Date(app.createdAt).toISOString().split('T')[0] : '',
+      'Updated At': app.updatedAt ? new Date(app.updatedAt).toISOString().split('T')[0] : ''
+    }));
     
     // Create workbook and worksheet
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(flatData);
+    const ws = XLSX.utils.json_to_sheet(mappedData);
     
     // Add the worksheet to the workbook
     XLSX.utils.book_append_sheet(wb, ws, "Applications");
@@ -106,11 +137,15 @@ export async function exportInterfacesToXLSX() {
       const consumerApp = iface.consumerApplicationId ? appsMap.get(iface.consumerApplicationId) : null;
       
       return {
+        'ID': iface.id,
         'IML Number': iface.imlNumber,
         'Interface Type': iface.interfaceType,
         'Version': iface.version,
         'LOB': iface.lob || 'TBD',
         'Status': iface.status,
+        'Artifact State': iface.artifactState || 'active',
+        'Planned Activation Date': iface.plannedActivationDate ? new Date(iface.plannedActivationDate).toISOString().split('T')[0] : '',
+        'Initiative Origin': iface.initiativeOrigin || '',
         'Provider Application': providerApp?.name || '',
         'Consumer Application': consumerApp?.name || '',
         'Business Processes': relatedBPs.join('; ') || 'None',
@@ -121,7 +156,8 @@ export async function exportInterfacesToXLSX() {
         'Connectivity Steps': iface.connectivitySteps ? 'Yes' : 'No',
         'Interface Test Steps': iface.interfaceTestSteps ? 'Yes' : 'No',
         'Last Change Date': iface.lastChangeDate ? new Date(iface.lastChangeDate).toISOString().split('T')[0] : '',
-        'Created At': iface.createdAt ? new Date(iface.createdAt).toISOString().split('T')[0] : ''
+        'Created At': iface.createdAt ? new Date(iface.createdAt).toISOString().split('T')[0] : '',
+        'Updated At': iface.updatedAt ? new Date(iface.updatedAt).toISOString().split('T')[0] : ''
       };
     });
     
