@@ -74,6 +74,7 @@ import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { BulkEditDialog, type BulkEditField } from "@/components/bulk-edit-dialog";
 import CommunicationBadge from "@/components/communications/communication-badge";
 import InterfaceDecommissionModal from "@/components/modals/interface-decommission-modal";
+import { LockConflictDialog } from "@/components/version-control/lock-conflict-dialog";
 import { cn } from "@/lib/utils";
 import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
 import { 
@@ -125,6 +126,8 @@ export default function Interfaces() {
   const [decommissioningInterface, setDecommissioningInterface] = useState<Interface | null>(null);
   const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [lockConflictError, setLockConflictError] = useState<any>(null);
+  const [showLockConflictDialog, setShowLockConflictDialog] = useState(false);
 
   // Initiative context
   const { currentInitiative, isProductionView } = useInitiative();
@@ -330,11 +333,18 @@ export default function Interfaces() {
       });
     },
     onError: (error: any) => {
-      toast({
-        title: "Checkout failed",
-        description: error.response?.data?.error || "Failed to checkout interface",
-        variant: "destructive"
-      });
+      // Check if it's a lock conflict error (409 status)
+      if (error.response?.status === 409 && error.response?.data) {
+        setLockConflictError(error.response.data);
+        setShowLockConflictDialog(true);
+      } else {
+        // For other errors, show toast
+        toast({
+          title: "Checkout failed",
+          description: error.response?.data?.error || "Failed to checkout interface",
+          variant: "destructive"
+        });
+      }
     }
   });
 
@@ -516,9 +526,23 @@ export default function Interfaces() {
   }
 
   // Apply version state filter if present
-  if (versionStateFilter && currentInitiative && !isProductionView) {
+  if (versionStateFilter) {
     try {
       filteredByConditions = filteredByConditions.filter(interface_ => {
+        // For initiative_changes filter, check if interface has any initiative-related changes
+        if (versionStateFilter.value === 'initiative_changes') {
+          // Check if the interface is locked (checked out)
+          const isLocked = isInterfaceLocked(interface_.id);
+          
+          return interface_.hasInitiativeChanges || 
+                 interface_.versionState === 'new_in_initiative' || 
+                 interface_.versionState === 'modified_in_initiative' ||
+                 interface_.artifactState === 'pending' ||
+                 interface_.initiativeOrigin ||
+                 isLocked; // Include locked/checked out interfaces
+        }
+        
+        // For other filters, use the interface state
         const interfaceState = getInterfaceState(interface_);
         return interfaceState.state === versionStateFilter.value;
       });
@@ -1169,6 +1193,14 @@ export default function Interfaces() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Lock Conflict Dialog */}
+      <LockConflictDialog
+        open={showLockConflictDialog}
+        onOpenChange={setShowLockConflictDialog}
+        error={lockConflictError}
+        artifactType="interface"
+      />
 
       {/* Edit Interface Dialog */}
       {editingInterface && (

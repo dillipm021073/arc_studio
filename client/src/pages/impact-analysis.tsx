@@ -25,6 +25,8 @@ import { cn } from "@/lib/utils";
 import ApplicationDetailsModal from "@/components/modals/ApplicationDetailsModal";
 import InterfaceDetailsModal from "@/components/modals/InterfaceDetailsModal";
 import BusinessProcessDetailsModal, { BusinessProcessWithContextMenu } from "@/components/modals/BusinessProcessDetailsModal";
+import { CrossCRImpactAnalysis } from "@/components/cross-cr-impact-analysis";
+import type { CrossCRImpact } from "@/types/impact-analysis";
 
 interface Application {
   id: number;
@@ -88,6 +90,7 @@ export default function ImpactAnalysis() {
   const [viewingBusinessProcess, setViewingBusinessProcess] = useState<number | null>(null);
   const [openCRPopover, setOpenCRPopover] = useState(false);
   const [openInterfacePopover, setOpenInterfacePopover] = useState(false);
+  const [showCrossCRAnalysis, setShowCrossCRAnalysis] = useState(false);
 
   const { data: applications } = useQuery<Application[]>({
     queryKey: ["/api/applications"],
@@ -156,6 +159,22 @@ export default function ImpactAnalysis() {
       return response.json();
     },
     enabled: analysisType === "application" && selectedApplicationIds.length > 0,
+  });
+
+  // Fetch Cross-CR analysis when 2+ CRs are selected
+  const { data: crossCRAnalysis, isLoading: crossCRLoading } = useQuery<CrossCRImpact>({
+    queryKey: ["/api/cross-cr-analysis", selectedChangeRequestIds],
+    queryFn: async () => {
+      if (selectedChangeRequestIds.length < 2) return null;
+      const response = await fetch("/api/cross-cr-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ crIds: selectedChangeRequestIds })
+      });
+      if (!response.ok) throw new Error("Failed to fetch cross-CR analysis");
+      return response.json().then(res => res.analysis);
+    },
+    enabled: analysisType === "change-request" && selectedChangeRequestIds.length >= 2 && showCrossCRAnalysis,
   });
 
   const currentImpact = analysisType === "application" ? applicationImpact : 
@@ -371,8 +390,19 @@ export default function ImpactAnalysis() {
                       })}
                     </div>
                   )}
+                  {selectedChangeRequestIds.length >= 2 && (
+                    <Button
+                      onClick={() => setShowCrossCRAnalysis(!showCrossCRAnalysis)}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      <GitBranch className="mr-2 h-4 w-4" />
+                      {showCrossCRAnalysis ? "Hide" : "Show"} Cross-CR Impact Analysis
+                    </Button>
+                  )}
                   <p className="text-sm text-gray-400">
                     Analyze the combined impact of multiple change requests across all affected applications and interfaces.
+                    {selectedChangeRequestIds.length >= 2 && " Use Cross-CR analysis to identify common items and conflicts."}
                   </p>
                 </div>
               </TabsContent>
@@ -535,6 +565,18 @@ export default function ImpactAnalysis() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Cross-CR Impact Analysis */}
+            {analysisType === "change-request" && showCrossCRAnalysis && selectedChangeRequestIds.length >= 2 && (
+              <CrossCRImpactAnalysis
+                analysis={crossCRAnalysis}
+                loading={crossCRLoading}
+                onClose={() => setShowCrossCRAnalysis(false)}
+                onViewApplication={(id) => setViewingApplication(id)}
+                onViewInterface={(id) => setViewingInterface(id)}
+                onViewBusinessProcess={(id) => setViewingBusinessProcess(id)}
+              />
+            )}
 
             {/* Selected Applications Details */}
             {analysisType === "application" && currentImpact?.applications && currentImpact.applications.length > 1 && (

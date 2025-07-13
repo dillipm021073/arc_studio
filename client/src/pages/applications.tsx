@@ -39,7 +39,9 @@ import {
   GitBranch,
   Lock,
   Unlock,
-  X
+  X,
+  CheckCircle,
+  Rocket
 } from "lucide-react";
 import { Link } from "wouter";
 import ApplicationForm from "@/components/applications/application-form";
@@ -49,6 +51,7 @@ import CapabilitiesDocumentsDialog from "@/components/applications/capabilities-
 import CapabilitiesUploadDialog from "@/components/applications/capabilities-upload-dialog";
 import CommunicationBadge from "@/components/communications/communication-badge";
 import { DecommissionWarningModal } from "@/components/modals/decommission-warning-modal";
+import { LockConflictDialog } from "@/components/version-control/lock-conflict-dialog";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -114,8 +117,14 @@ interface Application {
   consumesExtInterfaces: boolean;
   consInterfaceType: string;
   status: string;
+  artifactState?: string;
+  plannedActivationDate?: string;
+  initiativeOrigin?: string;
   firstActiveDate: string;
   lastChangeDate: string;
+  hasInitiativeChanges?: boolean;
+  versionState?: string;
+  initiativeData?: any;
 }
 
 export default function Applications() {
@@ -144,6 +153,10 @@ export default function Applications() {
   const [showCapabilitiesUpload, setShowCapabilitiesUpload] = useState<Application | null>(null);
   const [showCapabilitiesView, setShowCapabilitiesView] = useState<Application | null>(null);
   const [refreshKey, setRefreshKey] = useState(0); // Force refresh key
+  const [artifactViewMode, setArtifactViewMode] = useState<'production' | 'pending' | 'all'>('all'); // View mode for artifacts
+  const [showInitiativeDetails, setShowInitiativeDetails] = useState(false); // Show initiative details for pending artifacts
+  const [lockConflictError, setLockConflictError] = useState<any>(null);
+  const [showLockConflictDialog, setShowLockConflictDialog] = useState(false);
 
   // Initiative context
   const { currentInitiative, isProductionView } = useInitiative();
@@ -156,7 +169,16 @@ export default function Applications() {
   }, [currentInitiative?.initiativeId, isProductionView]);
 
   const { data: applications, isLoading } = useQuery<Application[]>({
-    queryKey: ["/api/applications"],
+    queryKey: ["/api/applications", currentInitiative?.initiativeId, isProductionView, artifactViewMode],
+    queryFn: async () => {
+      let url = '/api/applications';
+      // Include initiative changes in production view when showing pending or all artifacts
+      if (isProductionView && currentInitiative && artifactViewMode !== 'production') {
+        url += `?includeInitiativeChanges=true&initiativeId=${currentInitiative.initiativeId}`;
+      }
+      const response = await api.get(url);
+      return response.data;
+    }
   });
 
   // Fetch current user
@@ -487,11 +509,18 @@ export default function Applications() {
       });
     },
     onError: (error: any) => {
-      toast({
-        title: "Checkout failed",
-        description: error.response?.data?.error || "Failed to checkout application",
-        variant: "destructive"
-      });
+      // Check if it's a lock conflict error (409 status)
+      if (error.response?.status === 409 && error.response?.data) {
+        setLockConflictError(error.response.data);
+        setShowLockConflictDialog(true);
+      } else {
+        // For other errors, show toast
+        toast({
+          title: "Checkout failed",
+          description: error.response?.data?.error || "Failed to checkout application",
+          variant: "destructive"
+        });
+      }
     }
   });
 
@@ -590,10 +619,10 @@ export default function Applications() {
   // Helper to get application state for visual indicators
   const getApplicationState = (app: Application): ArtifactState => {
     const lock = isApplicationLocked(app.id);
-    // TODO: Add logic to detect initiative changes and conflicts
-    // For now, we'll use placeholder values
-    const hasInitiativeChanges = false; // This would check if app has versions in current initiative
+    const hasInitiativeChanges = app.hasInitiativeChanges || false;
     const hasConflicts = false; // This would check for version conflicts
+    const artifactState = app.artifactState;
+    const versionState = app.versionState;
     
     // Debug logging
     console.log(`getApplicationState for ${app.name} (${app.id}):`, {
@@ -603,7 +632,9 @@ export default function Applications() {
       lockedBy: lock?.lock?.lockedBy,
       isMatch: lock?.lock?.lockedBy === currentUser?.id,
       isAdmin: isAdmin,
-      refreshKey: refreshKey
+      refreshKey: refreshKey,
+      artifactState,
+      versionState
     });
     
     return getArtifactState(
@@ -612,7 +643,9 @@ export default function Applications() {
       lock,
       currentUser?.id,
       hasInitiativeChanges,
-      hasConflicts
+      hasConflicts,
+      artifactState,
+      versionState
     );
   };
 
@@ -707,9 +740,23 @@ export default function Applications() {
   }
 
   // Apply version state filter if present
-  if (versionStateFilter && currentInitiative && !isProductionView) {
+  if (versionStateFilter) {
     try {
       filteredByConditions = filteredByConditions.filter(app => {
+        // For initiative_changes filter, check if app has any initiative-related changes
+        if (versionStateFilter.value === 'initiative_changes') {
+          // Check if the application is locked (checked out)
+          const isLocked = isApplicationLocked(app.id);
+          
+          return app.hasInitiativeChanges || 
+                 app.versionState === 'new_in_initiative' || 
+                 app.versionState === 'modified_in_initiative' ||
+                 app.artifactState === 'pending' ||
+                 app.initiativeOrigin ||
+                 isLocked; // Include locked/checked out applications
+        }
+        
+        // For other filters, use the artifact state
         const appState = getApplicationState(app);
         return appState.state === versionStateFilter.value;
       });
@@ -718,8 +765,8 @@ export default function Applications() {
     }
   }
 
-  // Then apply search
-  const filteredApplications = filteredByConditions?.filter(app => {
+  // Apply search filter
+  let searchFiltered = filteredByConditions?.filter(app => {
     if (!searchTerm) return true;
     try {
       const searchLower = (searchTerm || '').toLowerCase();
@@ -738,6 +785,24 @@ export default function Applications() {
       return true;
     }
   }) || [];
+
+  // Apply artifact view mode filter in production view
+  const filteredApplications = searchFiltered.filter(app => {
+    if (!isProductionView || !currentInitiative) return true;
+    
+    const isPending = app.artifactState === 'pending' || app.versionState === 'new_in_initiative';
+    const isProduction = !isPending && app.artifactState !== 'draft';
+    
+    switch (artifactViewMode) {
+      case 'production':
+        return isProduction;
+      case 'pending':
+        return isPending;
+      case 'all':
+      default:
+        return true;
+    }
+  });
 
   // Initialize multi-select hook - ensure no null items
   const multiSelect = useMultiSelect({
@@ -863,6 +928,113 @@ export default function Applications() {
       <div className="flex-1 overflow-auto p-6">
         {/* View Mode Indicator */}
         <ViewModeIndicator />
+        
+        {/* Production View Filter */}
+        {isProductionView && currentInitiative && (
+          <div className="flex items-center gap-4 mt-2 p-3 bg-gray-800 rounded-lg">
+            <span className="text-sm text-gray-300">View:</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setArtifactViewMode('production');
+                  setShowInitiativeDetails(false);
+                }}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  artifactViewMode === 'production' 
+                    ? 'bg-green-600 text-white' 
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                <CheckCircle className="inline h-3 w-3 mr-1" />
+                Production Only
+              </button>
+              <button
+                onClick={() => {
+                  setArtifactViewMode('pending');
+                  setShowInitiativeDetails(true);
+                }}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  artifactViewMode === 'pending' 
+                    ? 'bg-teal-600 text-white' 
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                <Rocket className="inline h-3 w-3 mr-1" />
+                Pending Only
+              </button>
+              <button
+                onClick={() => {
+                  setArtifactViewMode('all');
+                  setShowInitiativeDetails(false);
+                }}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  artifactViewMode === 'all' 
+                    ? 'bg-blue-600 text-white' 
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                <Eye className="inline h-3 w-3 mr-1" />
+                All
+              </button>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <span className="text-xs text-gray-400">
+                Showing: {filteredApplications.length} {filteredApplications.length === 1 ? 'application' : 'applications'}
+              </span>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Info className="h-4 w-4 text-gray-400" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs">
+                    <strong>Production Only:</strong> Shows only active artifacts in production<br/>
+                    <strong>Pending Only:</strong> Shows only new/modified artifacts from {currentInitiative.name}<br/>
+                    <strong>All:</strong> Shows both production and pending artifacts
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+        )}
+        
+        {/* Initiative Details for Pending Artifacts */}
+        {isProductionView && currentInitiative && artifactViewMode === 'pending' && showInitiativeDetails && (
+          <div className="mt-2 p-3 bg-teal-900/20 border border-teal-700 rounded-lg">
+            <div className="flex items-start justify-between">
+              <div>
+                <h4 className="text-sm font-medium text-teal-300 flex items-center gap-2">
+                  <GitBranch className="h-4 w-4" />
+                  Initiative: {currentInitiative.name}
+                </h4>
+                <p className="text-xs text-gray-400 mt-1">
+                  ID: {currentInitiative.initiativeId}
+                </p>
+                {currentInitiative.description && (
+                  <p className="text-sm text-gray-300 mt-2">{currentInitiative.description}</p>
+                )}
+                <div className="mt-2 text-xs text-gray-400">
+                  <p>Status: <span className="text-teal-400">{currentInitiative.status}</span></p>
+                  {currentInitiative.targetCompletionDate && (
+                    <p>Target Completion: <span className="text-teal-400">
+                      {new Date(currentInitiative.targetCompletionDate).toLocaleDateString()}
+                    </span></p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInitiativeDetails(false)}
+                className="text-gray-400 hover:text-gray-300"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mt-3 pt-3 border-t border-gray-700">
+              <p className="text-xs text-gray-400">
+                Showing {filteredApplications.length} pending {filteredApplications.length === 1 ? 'artifact' : 'artifacts'} that will be activated when this initiative is completed.
+              </p>
+            </div>
+          </div>
+        )}
         
         {/* Search and Filter Bar */}
         <div className="mb-6 space-y-4 mt-4">
@@ -1351,6 +1523,14 @@ export default function Applications() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Lock Conflict Dialog */}
+      <LockConflictDialog
+        open={showLockConflictDialog}
+        onOpenChange={setShowLockConflictDialog}
+        error={lockConflictError}
+        artifactType="application"
+      />
 
       {/* Bulk Duplicate Confirmation */}
       <AlertDialog open={showBulkDuplicateConfirm} onOpenChange={setShowBulkDuplicateConfirm}>

@@ -1,4 +1,5 @@
 import { db } from "../db";
+import { LockConflictError } from "../errors/LockConflictError";
 import { 
   artifactVersions, 
   initiatives, 
@@ -11,6 +12,7 @@ import {
   businessProcesses,
   internalActivities,
   technicalProcesses,
+  users,
   ArtifactVersion,
   Initiative,
   VersionConflict
@@ -171,9 +173,13 @@ export class VersionControlService {
       return existingVersion;
     }
 
-    // Check for existing lock
-    const [existingLock] = await db.select()
+    // Check for existing lock with user information
+    const [existingLock] = await db.select({
+      lock: artifactLocks,
+      user: users
+    })
       .from(artifactLocks)
+      .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
       .where(
         and(
           eq(artifactLocks.artifactType, type),
@@ -186,12 +192,26 @@ export class VersionControlService {
       );
 
     // Check if locked by different initiative or different user
-    if (existingLock) {
-      if (existingLock.initiativeId !== initiativeId) {
-        throw new Error(`Artifact is locked by initiative ${existingLock.initiativeId}`);
+    if (existingLock && existingLock.lock) {
+      if (existingLock.lock.initiativeId !== initiativeId) {
+        const userName = existingLock.user?.name || existingLock.user?.username || 'Unknown User';
+        throw new LockConflictError(
+          `Artifact is locked by ${userName} in initiative ${existingLock.lock.initiativeId}`,
+          existingLock.lock.lockedBy,
+          userName,
+          existingLock.lock.initiativeId,
+          existingLock.lock.lockExpiry
+        );
       }
-      if (existingLock.lockedBy !== userId) {
-        throw new Error(`Artifact is locked by another user`);
+      if (existingLock.lock.lockedBy !== userId) {
+        const userName = existingLock.user?.name || existingLock.user?.username || 'Unknown User';
+        throw new LockConflictError(
+          `Artifact is locked by ${userName} in initiative ${existingLock.lock.initiativeId}`,
+          existingLock.lock.lockedBy,
+          userName,
+          existingLock.lock.initiativeId,
+          existingLock.lock.lockExpiry
+        );
       }
       // If locked by same user in same initiative, allow checkout to proceed
     }

@@ -1,4 +1,4 @@
-import { GitBranch, Lock, Zap, AlertTriangle, CheckCircle } from 'lucide-react';
+import { GitBranch, Lock, Zap, AlertTriangle, CheckCircle, Rocket, Trash2 } from 'lucide-react';
 import { cn } from './utils';
 
 export interface ArtifactLock {
@@ -21,7 +21,7 @@ export interface ArtifactState {
   hasConflicts: boolean;
   isProductionBaseline: boolean;
   lockedBy?: string;
-  state: 'production' | 'checked_out_me' | 'checked_out_other' | 'initiative_changes' | 'conflicted';
+  state: 'production' | 'checked_out_me' | 'checked_out_other' | 'initiative_changes' | 'conflicted' | 'pending_new' | 'pending_decommission';
 }
 
 export interface ArtifactVisuals {
@@ -44,7 +44,9 @@ export function getArtifactState(
   lock: ArtifactLock | null,
   currentUserId: number | undefined,
   hasInitiativeChanges: boolean = false,
-  hasConflicts: boolean = false
+  hasConflicts: boolean = false,
+  artifactState?: string,
+  versionState?: string
 ): ArtifactState {
   const isCheckedOut = !!lock;
   const isCheckedOutByMe = isCheckedOut && lock.lock.lockedBy === currentUserId;
@@ -53,7 +55,12 @@ export function getArtifactState(
   // Determine primary state (priority order: conflicts > checked out > initiative changes > production)
   let state: ArtifactState['state'] = 'production';
   
-  if (hasConflicts) {
+  // Check for new pending artifacts
+  if (artifactState === 'pending' || versionState === 'new_in_initiative') {
+    state = 'pending_new';
+  } else if (artifactState === 'decommissioning') {
+    state = 'pending_decommission';
+  } else if (hasConflicts) {
     state = 'conflicted';
   } else if (isCheckedOutByMe) {
     state = 'checked_out_me';
@@ -128,6 +135,30 @@ export function getArtifactVisuals(state: ArtifactState): ArtifactVisuals {
         statusColor: 'bg-purple-600 text-purple-100'
       };
 
+    case 'pending_new':
+      return {
+        rowClassName: 'bg-teal-950/30 border-l-4 border-teal-500 hover:bg-teal-950/40 border-dashed',
+        iconComponent: Rocket,
+        iconColor: 'text-teal-400',
+        badgeText: 'PENDING',
+        badgeColor: 'bg-teal-900 text-teal-200 border-teal-600',
+        tooltip: 'New artifact pending activation',
+        statusText: 'Pending New',
+        statusColor: 'bg-teal-600 text-teal-100'
+      };
+
+    case 'pending_decommission':
+      return {
+        rowClassName: 'bg-gray-950/30 border-l-4 border-gray-500 hover:bg-gray-950/40 line-through opacity-60',
+        iconComponent: Trash2,
+        iconColor: 'text-gray-400',
+        badgeText: 'DECOMMISSIONING',
+        badgeColor: 'bg-gray-900 text-gray-200 border-gray-600',
+        tooltip: 'Scheduled for decommissioning',
+        statusText: 'Decommissioning',
+        statusColor: 'bg-gray-600 text-gray-100'
+      };
+
     case 'production':
     default:
       return {
@@ -169,7 +200,9 @@ export function getStateFilterOptions() {
     { value: 'checked_out_me', label: 'Checked Out by Me', count: 0 },
     { value: 'checked_out_other', label: 'Locked by Others', count: 0 },
     { value: 'initiative_changes', label: 'Initiative Changes', count: 0 },
-    { value: 'conflicted', label: 'Conflicted', count: 0 }
+    { value: 'conflicted', label: 'Conflicted', count: 0 },
+    { value: 'pending_new', label: 'Pending New', count: 0 },
+    { value: 'pending_decommission', label: 'Decommissioning', count: 0 }
   ];
 }
 
@@ -202,7 +235,9 @@ export function countArtifactsByState(
     checked_out_me: 0,
     checked_out_other: 0,
     initiative_changes: 0,
-    conflicted: 0
+    conflicted: 0,
+    pending_new: 0,
+    pending_decommission: 0
   };
 
   artifacts.forEach(artifact => {

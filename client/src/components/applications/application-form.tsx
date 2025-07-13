@@ -24,7 +24,7 @@ interface ApplicationFormProps {
 export default function ApplicationForm({ onSuccess, initialData, applicationId, isEditing = false }: ApplicationFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { activeInitiative } = useInitiative();
+  const { currentInitiative } = useInitiative();
 
   const form = useForm<InsertApplication>({
     resolver: zodResolver(insertApplicationSchema),
@@ -43,9 +43,9 @@ export default function ApplicationForm({ onSuccess, initialData, applicationId,
       consInterfaceType: initialData?.consInterfaceType || "",
       status: initialData?.status || "active",
       // Set artifactState based on initiative context for new applications
-      artifactState: initialData?.artifactState || (!isEditing && activeInitiative ? "pending" : "active"),
+      artifactState: initialData?.artifactState || (!isEditing && currentInitiative ? "pending" : "active"),
       // Set initiativeOrigin if creating within an initiative
-      initiativeOrigin: initialData?.initiativeOrigin || (!isEditing && activeInitiative ? activeInitiative.id : undefined),
+      initiativeOrigin: initialData?.initiativeOrigin || (!isEditing && currentInitiative ? currentInitiative.initiativeId : undefined),
       firstActiveDate: initialData?.firstActiveDate || undefined,
       decommissionDate: initialData?.decommissionDate || undefined,
       tmfDomain: initialData?.tmfDomain || "",

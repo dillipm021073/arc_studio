@@ -113,9 +113,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Applications (AML) routes
   app.get("/api/applications", async (req, res) => {
     try {
+      const includeInitiativeChanges = req.query.includeInitiativeChanges === 'true';
+      const initiativeId = req.query.initiativeId as string;
+      
+      // Get baseline applications
       const applications = await storage.getAllApplications();
-      res.json(applications);
+      
+      if (includeInitiativeChanges && initiativeId) {
+        // Get initiative versions for applications
+        const initiativeVersions = await storage.getInitiativeArtifacts('application', initiativeId);
+        
+        // Merge initiative changes with baseline
+        const mergedApplications = applications.map(app => {
+          const initiativeVersion = initiativeVersions.find(v => v.artifactId === app.id);
+          if (initiativeVersion) {
+            return {
+              ...app,
+              hasInitiativeChanges: true,
+              initiativeData: initiativeVersion.artifactData,
+              versionState: 'modified_in_initiative'
+            };
+          }
+          return app;
+        });
+        
+        // Add new applications created in initiative
+        const newApplications = initiativeVersions
+          .filter(v => v.changeType === 'create')
+          .map(v => ({
+            ...v.artifactData,
+            id: v.artifactId,
+            hasInitiativeChanges: true,
+            versionState: 'new_in_initiative',
+            artifactState: 'pending',
+            initiativeOrigin: initiativeId
+          }));
+        
+        res.json([...mergedApplications, ...newApplications]);
+      } else {
+        res.json(applications);
+      }
     } catch (error) {
+      console.error("Failed to fetch applications:", error);
       res.status(500).json({ message: "Failed to fetch applications" });
     }
   });
@@ -2142,9 +2181,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // app.use("/api", initiativesChangesRouter.default);
   
   // Register Impact Assessment routes
-  // TODO: Fix impact-assessment.service.ts - references non-existent tables
-  // const impactAssessmentRouter = await import("./routes/impact-assessment");
-  // app.use("/api", impactAssessmentRouter.default);
+  // Impact assessment routes
+  const impactAssessmentRouter = await import("./routes/impact-assessment");
+  app.use("/api", impactAssessmentRouter.default);
 
   // Register Version Control routes
   const { versionControlRouter } = await import("./routes/version-control");

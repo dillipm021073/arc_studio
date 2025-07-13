@@ -82,4 +82,36 @@ router.get("/initiatives/:id/impact-assessment/download", requireAuth, async (re
   }
 });
 
+// Generate cross-CR impact analysis
+router.post("/cross-cr-analysis", requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { crIds } = req.body;
+
+    if (!crIds || !Array.isArray(crIds) || crIds.length < 2) {
+      return res.status(400).json({
+        error: "At least 2 CR IDs are required for cross-CR analysis"
+      });
+    }
+
+    // Generate the cross-CR analysis
+    const result = await ImpactAssessmentService.generateCrossCRAnalysis(crIds);
+
+    if (!result.success) {
+      return res.status(400).json({
+        error: result.error || "Failed to generate cross-CR analysis"
+      });
+    }
+
+    res.json({
+      success: true,
+      analysis: result.analysis
+    });
+  } catch (error) {
+    console.error("Error generating cross-CR analysis:", error);
+    res.status(500).json({
+      error: "Failed to generate cross-CR analysis"
+    });
+  }
+});
+
 export default router;

@@ -70,6 +70,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ImportExportDialog } from "@/components/import-export-dialog";
+import { LockConflictDialog } from "@/components/version-control/lock-conflict-dialog";
 import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
 import { 
   getArtifactState, 
@@ -106,6 +107,8 @@ export default function BusinessProcesses() {
   const [creatingChildForBP, setCreatingChildForBP] = useState<any>(null);
   const [showHierarchyDesigns, setShowHierarchyDesigns] = useState(false);
   const [selectedHierarchyDesign, setSelectedHierarchyDesign] = useState<any>(null);
+  const [lockConflictError, setLockConflictError] = useState<any>(null);
+  const [showLockConflictDialog, setShowLockConflictDialog] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
@@ -247,11 +250,18 @@ export default function BusinessProcesses() {
       });
     },
     onError: (error: any) => {
-      toast({
-        title: "Checkout failed",
-        description: error.response?.data?.error || "Failed to checkout business process",
-        variant: "destructive"
-      });
+      // Check if it's a lock conflict error (409 status)
+      if (error.response?.status === 409 && error.response?.data) {
+        setLockConflictError(error.response.data);
+        setShowLockConflictDialog(true);
+      } else {
+        // For other errors, show toast
+        toast({
+          title: "Checkout failed",
+          description: error.response?.data?.error || "Failed to checkout business process",
+          variant: "destructive"
+        });
+      }
     }
   });
 
@@ -614,9 +624,27 @@ export default function BusinessProcesses() {
   }
 
   // Apply version state filter if present
-  if (versionStateFilter && currentInitiative && !isProductionView) {
+  if (versionStateFilter) {
     try {
       filteredByConditions = filteredByConditions.filter((bp: any) => {
+        // For initiative_changes filter, check if BP has any initiative-related changes
+        if (versionStateFilter.value === 'initiative_changes') {
+          // Check if the business process is locked (checked out)
+          const lock = locks?.find((l: any) => 
+            l.lock.artifactType === 'business_process' && 
+            l.lock.artifactId === bp.id
+          );
+          const isLocked = !!lock;
+          
+          return bp.hasInitiativeChanges || 
+                 bp.versionState === 'new_in_initiative' || 
+                 bp.versionState === 'modified_in_initiative' ||
+                 bp.artifactState === 'pending' ||
+                 bp.initiativeOrigin ||
+                 isLocked; // Include locked/checked out business processes
+        }
+        
+        // For other filters, use the business process state
         const bpState = getBusinessProcessState(bp);
         return bpState.state === versionStateFilter.value;
       });
@@ -1351,6 +1379,14 @@ export default function BusinessProcesses() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Lock Conflict Dialog */}
+      <LockConflictDialog
+        open={showLockConflictDialog}
+        onOpenChange={setShowLockConflictDialog}
+        error={lockConflictError}
+        artifactType="business_process"
+      />
 
       {/* Import/Export Dialog */}
       <ImportExportDialog

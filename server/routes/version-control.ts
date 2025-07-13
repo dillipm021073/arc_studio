@@ -6,6 +6,7 @@ import { eq, and, or, gt, sql } from "drizzle-orm";
 import { VersionControlService, ArtifactType } from "../services/version-control.service";
 import { CheckoutImpactService } from "../services/checkout-impact.service";
 import { requireAuth, requireAdmin } from "../auth";
+import { LockConflictError } from "../errors/LockConflictError";
 
 export const versionControlRouter = Router();
 
@@ -32,14 +33,6 @@ versionControlRouter.post("/checkout", requireAuth, async (req, res) => {
     const userRole = req.user!.role;
     const { artifactType, artifactId, initiativeId } = checkoutSchema.parse(req.body);
     
-    console.log('Checkout request received:', {
-      userId,
-      userRole,
-      artifactType,
-      artifactId,
-      initiativeId,
-      requestBody: req.body
-    });
 
     // Check if user is participant in the initiative (admins bypass this check)
     if (userRole !== 'admin') {
@@ -57,9 +50,13 @@ versionControlRouter.post("/checkout", requireAuth, async (req, res) => {
       }
     }
 
-    // Check for existing locks by other users
-    const [existingLock] = await db.select()
+    // Check for existing locks by other users with user information
+    const [existingLock] = await db.select({
+      lock: artifactLocks,
+      user: users
+    })
       .from(artifactLocks)
+      .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
       .where(
         and(
           eq(artifactLocks.artifactType, artifactType),
@@ -68,11 +65,14 @@ versionControlRouter.post("/checkout", requireAuth, async (req, res) => {
         )
       );
 
-    if (existingLock && existingLock.lockedBy !== userId) {
+    if (existingLock && existingLock.lock.lockedBy !== userId) {
+      const userName = existingLock.user?.name || existingLock.user?.username || 'Unknown User';
       return res.status(409).json({ 
-        error: "Artifact is already checked out by another user",
-        lockedBy: existingLock.lockedBy,
-        expiresAt: existingLock.lockExpiry
+        error: `Artifact is already checked out by ${userName} in initiative ${existingLock.lock.initiativeId}`,
+        lockedBy: existingLock.lock.lockedBy,
+        lockedByUser: userName,
+        initiativeId: existingLock.lock.initiativeId,
+        expiresAt: existingLock.lock.lockExpiry
       });
     }
 
@@ -90,6 +90,11 @@ versionControlRouter.post("/checkout", requireAuth, async (req, res) => {
       version
     });
   } catch (error) {
+    // Handle LockConflictError specifically
+    if (error instanceof LockConflictError) {
+      return res.status(error.statusCode).json(error.toJSON());
+    }
+    
     console.error("Error checking out artifact:", error);
     res.status(500).json({ error: error.message || "Failed to checkout artifact" });
   }

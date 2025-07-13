@@ -33,6 +33,9 @@ export const applications = pgTable("applications", {
   consumesExtInterfaces: boolean("consumes_ext_interfaces").default(false),
   consInterfaceType: text("cons_interface_type"),
   status: text("status").notNull().default("active"), // active, inactive, maintenance, deprecated, decommissioned
+  artifactState: text("artifact_state").notNull().default("active"), // active, inactive, pending, draft
+  plannedActivationDate: timestamp("planned_activation_date"), // When pending artifact will go live
+  initiativeOrigin: text("initiative_origin"), // Initiative ID that created this artifact
   firstActiveDate: timestamp("first_active_date"),
   lastChangeDate: timestamp("last_change_date").defaultNow(),
   decommissionDate: timestamp("decommission_date"), // Planned decommission date
@@ -70,6 +73,9 @@ export const interfaces = pgTable("interfaces", {
   providerOwner: text("provider_owner"),
   consumerOwner: text("consumer_owner"),
   status: text("status").notNull().default("active"), // active, inactive, deprecated, under_review
+  artifactState: text("artifact_state").notNull().default("active"), // active, inactive, pending, draft
+  plannedActivationDate: timestamp("planned_activation_date"), // When pending artifact will go live
+  initiativeOrigin: text("initiative_origin"), // Initiative ID that created this artifact
   sampleCode: text("sample_code"), // Sample code for connectivity test
   connectivitySteps: text("connectivity_steps"), // Steps for connectivity test
   interfaceTestSteps: text("interface_test_steps"), // Steps for interface test

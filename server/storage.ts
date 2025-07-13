@@ -35,6 +35,8 @@ import {
   uploadedDocuments,
   capabilities,
   capabilityExtractionHistory,
+  artifactVersions,
+  initiatives,
   type User, 
   type InsertUser,
   type Application,
@@ -4540,6 +4542,22 @@ export class DatabaseStorage implements IStorage {
       .delete(capabilityExtractionHistory)
       .where(eq(capabilityExtractionHistory.filename, fileName));
     return result.rowCount || 0;
+  }
+
+  // Version Control / Initiative Methods
+  async getInitiativeArtifacts(artifactType: string, initiativeId: string): Promise<any[]> {
+    const versions = await db
+      .select()
+      .from(artifactVersions)
+      .where(
+        and(
+          eq(artifactVersions.artifactType, artifactType),
+          eq(artifactVersions.initiativeId, initiativeId)
+        )
+      )
+      .orderBy(desc(artifactVersions.versionNumber));
+    
+    return versions;
   }
 }
 
