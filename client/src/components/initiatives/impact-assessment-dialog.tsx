@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Download, FileText, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -122,7 +122,7 @@ export function ImpactAssessmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh]">
+      <DialogContent className="max-w-4xl h-[90vh] max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Impact Assessment</DialogTitle>
           <DialogDescription>
@@ -130,7 +130,7 @@ export function ImpactAssessmentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
           {!assessment && !generateAssessmentMutation.isPending && (
             <div className="text-center py-8">
               <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -156,7 +156,7 @@ export function ImpactAssessmentDialog({
           )}
 
           {assessment && (
-            <>
+            <div className="flex flex-col gap-4 flex-1 overflow-hidden">
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
@@ -164,7 +164,7 @@ export function ImpactAssessmentDialog({
                 </AlertDescription>
               </Alert>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 flex-shrink-0">
                 <Button variant="outline" onClick={handleDownload}>
                   <Download className="h-4 w-4 mr-2" />
                   Download Document
@@ -180,12 +180,16 @@ export function ImpactAssessmentDialog({
                 </Button>
               </div>
 
-              <ScrollArea className="h-[500px] border rounded-md p-4">
-                <div className="prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown>{assessment}</ReactMarkdown>
+              <ScrollArea className="flex-1 border rounded-md">
+                <div className="p-4">
+                  <div className="prose prose-sm dark:prose-invert min-w-0" style={{ whiteSpace: 'pre-wrap' }}>
+                    <ReactMarkdown>{assessment}</ReactMarkdown>
+                  </div>
                 </div>
+                <ScrollBar orientation="vertical" />
+                <ScrollBar orientation="horizontal" />
               </ScrollArea>
-            </>
+            </div>
           )}
         </div>
       </DialogContent>
