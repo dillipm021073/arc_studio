@@ -30,20 +30,26 @@ export function ImpactAssessmentDialog({
 }: ImpactAssessmentDialogProps) {
   const [assessment, setAssessment] = useState<string>("");
   const [documentPath, setDocumentPath] = useState<string>("");
+  const [documentFilename, setDocumentFilename] = useState<string>("");
   const { toast } = useToast();
 
   const generateAssessmentMutation = useMutation({
-    mutationFn: async () => {
-      const response = await api.post(`/api/initiatives/${initiativeId}/impact-assessment`);
+    mutationFn: async (forceRegenerate = false) => {
+      const response = await api.post(`/api/initiatives/${initiativeId}/impact-assessment`, {
+        forceRegenerate
+      });
       return response.data;
     },
     onSuccess: (data) => {
       if (data.success) {
         setAssessment(data.assessment);
         setDocumentPath(data.documentPath);
+        setDocumentFilename(data.filename || "");
         toast({
-          title: "Impact assessment generated",
-          description: "The assessment has been generated successfully.",
+          title: data.fromCache ? "Impact assessment loaded" : "Impact assessment generated",
+          description: data.fromCache 
+            ? "Loaded existing assessment from cache." 
+            : "The assessment has been generated successfully.",
         });
       }
     },
@@ -58,19 +64,31 @@ export function ImpactAssessmentDialog({
 
   const handleDownload = async () => {
     try {
-      const response = await api.get(
-        `/api/initiatives/${initiativeId}/impact-assessment/download`,
-        {
-          params: { documentPath },
-          responseType: "blob",
-        }
-      );
+      // Construct the download URL
+      const downloadUrl = documentFilename
+        ? `/api/initiatives/${initiativeId}/impact-assessment/download-by-name/${documentFilename}`
+        : `/api/initiatives/${initiativeId}/impact-assessment/download?${new URLSearchParams({ documentPath }).toString()}`;
+      
+      // Use native fetch for blob download
+      const response = await fetch(downloadUrl, {
+        method: 'GET',
+        credentials: 'include',
+      });
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || errorData.error || 'Download failed');
+      }
+
+      // Get the blob from the response
+      const blob = await response.blob();
+      
       // Create a download link
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `impact_assessment_${initiativeName.replace(/[^a-z0-9]/gi, "_")}.md`);
+      const downloadFilename = documentFilename || `impact_assessment_${initiativeName.replace(/[^a-z0-9]/gi, "_")}.md`;
+      link.setAttribute("download", downloadFilename);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -80,10 +98,16 @@ export function ImpactAssessmentDialog({
         title: "Download started",
         description: "The impact assessment document is being downloaded.",
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Download error:", {
+        error: error.message,
+        documentPath,
+        documentFilename
+      });
+      
       toast({
         title: "Download failed",
-        description: "Failed to download the impact assessment document",
+        description: error.message || "Failed to download the impact assessment document. Please try regenerating the assessment.",
         variant: "destructive",
       });
     }
@@ -92,6 +116,7 @@ export function ImpactAssessmentDialog({
   const handleClose = () => {
     setAssessment("");
     setDocumentPath("");
+    setDocumentFilename("");
     onOpenChange(false);
   };
 
@@ -112,7 +137,7 @@ export function ImpactAssessmentDialog({
               <p className="text-muted-foreground mb-4">
                 Click the button below to generate a comprehensive impact assessment using AutoX intelligent analysis.
               </p>
-              <Button onClick={() => generateAssessmentMutation.mutate()}>
+              <Button onClick={() => generateAssessmentMutation.mutate(false)}>
                 Generate Impact Assessment
               </Button>
             </div>
@@ -148,7 +173,7 @@ export function ImpactAssessmentDialog({
                   variant="outline"
                   onClick={() => {
                     setAssessment("");
-                    generateAssessmentMutation.mutate();
+                    generateAssessmentMutation.mutate(true);
                   }}
                 >
                   Regenerate

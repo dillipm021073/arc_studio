@@ -1,5 +1,5 @@
 import { pgTable, text, serial, integer, boolean, timestamp, jsonb, decimal, index, primaryKey, foreignKey, unique } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { applications, interfaces, businessProcesses, users } from "./schema";
 
@@ -208,3 +208,31 @@ export type InsertBaselineHistory = z.infer<typeof insertBaselineHistorySchema>;
 
 export type InitiativeApproval = typeof initiativeApprovals.$inferSelect;
 export type InsertInitiativeApproval = z.infer<typeof insertInitiativeApprovalSchema>;
+
+// Impact Assessment table - stores generated impact assessments
+export const impactAssessments = pgTable("impact_assessments", {
+  id: serial("id").primaryKey(),
+  initiativeId: text("initiative_id").references(() => initiatives.initiativeId),
+  assessmentType: text("assessment_type").notNull(), // 'initiative', 'cross_cr'
+  assessmentContent: text("assessment_content"), // Full markdown content
+  documentPath: text("document_path"), // File path if stored externally
+  documentFilename: text("document_filename"), // Just the filename
+  summary: text("summary"), // Brief summary
+  riskLevel: text("risk_level"), // low, medium, high, critical
+  status: text("status").default("active"), // active, archived
+  generatedBy: integer("generated_by").references(() => users.id),
+  generatedAt: timestamp("generated_at").defaultNow(),
+  metadata: jsonb("metadata"), // Additional structured data (artifact counts, risk factors, etc.)
+  autoXTaskId: text("autox_task_id"), // For tracking AutoX generation
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  initiativeIdx: index("idx_impact_assessments_initiative").on(table.initiativeId),
+  typeIdx: index("idx_impact_assessments_type").on(table.assessmentType),
+  statusIdx: index("idx_impact_assessments_status").on(table.status),
+}));
+
+export const insertImpactAssessmentSchema = createInsertSchema(impactAssessments);
+export const selectImpactAssessmentSchema = createSelectSchema(impactAssessments);
+export type ImpactAssessment = typeof impactAssessments.$inferSelect;
+export type InsertImpactAssessment = z.infer<typeof insertImpactAssessmentSchema>;

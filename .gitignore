@@ -30,3 +30,12 @@ pdf-capabilities-extraction.json
 # Uploads directory (except README)
 uploads/*
 !uploads/.gitkeep
+
+# Documents directory (generated files)
+documents/
+
+# SQL scripts (temporary/migration files)
+*.sql
+
+# Error screenshots
+error.png

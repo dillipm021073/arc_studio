@@ -1,8 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { db } from "../db";
 import { eq, and, inArray } from "drizzle-orm";
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as https from 'https';
 import {
   initiatives,
   artifactVersions,
@@ -10,7 +10,11 @@ import {
   interfaces,
   businessProcesses,
   businessProcessInterfaces,
-  changeRequests
+  changeRequests,
+  changeRequestApplications,
+  changeRequestInterfaces,
+  users,
+  impactAssessments
 } from "@db/schema";
 
 export interface CrossCRImpact {
@@ -45,31 +49,66 @@ export interface CrossCRImpact {
 }
 
 export class ImpactAssessmentService {
-  private static genAI: GoogleGenerativeAI;
-
-  static initialize() {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn("GEMINI_API_KEY not set. Impact assessment generation will be disabled.");
-      return;
-    }
-    this.genAI = new GoogleGenerativeAI(apiKey);
-  }
-
-  static async generateImpactAssessment(initiativeId: string): Promise<{
+  // AutoX service is now used instead of Gemini
+  
+  static async getExistingAssessment(initiativeId: string): Promise<{
     success: boolean;
     assessment?: string;
     documentPath?: string;
+    filename?: string;
+    metadata?: any;
+  }> {
+    try {
+      // Check if we have a recent assessment in the database
+      const [existing] = await db
+        .select()
+        .from(impactAssessments)
+        .where(
+          and(
+            eq(impactAssessments.initiativeId, initiativeId),
+            eq(impactAssessments.assessmentType, 'initiative'),
+            eq(impactAssessments.status, 'active')
+          )
+        )
+        .orderBy(impactAssessments.generatedAt)
+        .limit(1);
+      
+      if (existing && existing.assessmentContent) {
+        // If filename is missing but documentPath exists, extract it
+        let filename = existing.documentFilename;
+        if (!filename && existing.documentPath) {
+          filename = path.basename(existing.documentPath);
+        }
+        
+        return {
+          success: true,
+          assessment: existing.assessmentContent,
+          documentPath: existing.documentPath || undefined,
+          filename: filename || undefined,
+          metadata: existing.metadata
+        };
+      }
+      
+      return { success: false };
+    } catch (error: any) {
+      // If table doesn't exist, just return false (will generate new assessment)
+      if (error.code === '42P01') {
+        console.log("Impact assessments table doesn't exist yet. Will generate new assessment.");
+        return { success: false };
+      }
+      console.error("Error fetching existing assessment:", error);
+      return { success: false };
+    }
+  }
+
+  static async generateImpactAssessment(initiativeId: string, userId?: number): Promise<{
+    success: boolean;
+    assessment?: string;
+    documentPath?: string;
+    filename?: string;
     error?: string;
   }> {
     try {
-      if (!this.genAI) {
-        return {
-          success: false,
-          error: "AutoX service not configured. Please set GEMINI_API_KEY environment variable."
-        };
-      }
-
       // Gather all data needed for assessment
       const assessmentData = await this.gatherAssessmentData(initiativeId);
       
@@ -80,27 +119,76 @@ export class ImpactAssessmentService {
         };
       }
 
-      // Generate the assessment using AutoX (Gemini)
-      const model = this.genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash-exp' // Using same model as capability extraction
-      });
+      // Get user's AutoX credentials if userId provided
+      let credentials = null;
+      if (userId) {
+        const [user] = await db.select().from(users).where(eq(users.id, userId));
+        if (user?.autoXApiKey && user?.autoXUsername) {
+          credentials = {
+            apiKey: user.autoXApiKey,
+            username: user.autoXUsername
+          };
+        }
+      }
 
+      if (!credentials) {
+        return {
+          success: false,
+          error: "AutoX credentials not configured. Please configure them in Settings."
+        };
+      }
+
+      // Generate the assessment using AutoX
       const prompt = this.buildAssessmentPrompt(assessmentData);
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const assessment = response.text();
+      const assessment = await this.callAutoXAPI(prompt, credentials.apiKey, credentials.username);
+      
+      if (!assessment) {
+        return {
+          success: false,
+          error: "Failed to generate assessment from AutoX"
+        };
+      }
 
       // Save the assessment as a document
       const documentPath = await this.saveAssessmentDocument(
-        assessmentData.initiative.id,
+        assessmentData.initiative.initiativeId,
         assessmentData.initiative.name,
         assessment
       );
 
+      // Return both full path and filename for flexibility
+      const filename = path.basename(documentPath);
+      
+      // Save to database
+      try {
+        await db.insert(impactAssessments).values({
+          initiativeId: assessmentData.initiative.initiativeId,
+          assessmentType: 'initiative',
+          assessmentContent: assessment,
+          documentPath,
+          documentFilename: filename,
+          riskLevel: this.extractRiskLevel(assessment),
+          generatedBy: userId,
+          metadata: {
+            artifactCount: assessmentData.artifactCount,
+            changes: assessmentData.changes,
+            changeRequestCount: assessmentData.changeRequests.length
+          }
+        });
+      } catch (dbError: any) {
+        if (dbError.code === '42P01') {
+          console.log("Impact assessments table doesn't exist. Assessment saved to file only.");
+        } else {
+          console.error("Failed to save assessment to database:", dbError);
+        }
+        // Don't fail the whole operation if DB save fails
+      }
+
       return {
         success: true,
         assessment,
-        documentPath
+        documentPath,
+        filename
       };
     } catch (error) {
       console.error("Error generating impact assessment:", error);
@@ -137,7 +225,7 @@ export class ImpactAssessmentService {
     const [initiative] = await db
       .select()
       .from(initiatives)
-      .where(eq(initiatives.id, initiativeId));
+      .where(eq(initiatives.initiativeId, initiativeId));
 
     if (!initiative) return null;
 
@@ -173,7 +261,7 @@ export class ImpactAssessmentService {
         const [app] = await db
           .select()
           .from(applications)
-          .where(eq(applications.id, parseInt(artifact.artifactId)));
+          .where(eq(applications.id, artifact.artifactId));
         
         if (app) {
           const interfaceCount = await this.getApplicationInterfaceCount(app.id);
@@ -196,7 +284,7 @@ export class ImpactAssessmentService {
         const [iface] = await db
           .select()
           .from(interfaces)
-          .where(eq(interfaces.id, parseInt(artifact.artifactId)));
+          .where(eq(interfaces.id, artifact.artifactId));
         
         if (iface) {
           const businessProcessCount = await this.getInterfaceBusinessProcessCount(iface.id);
@@ -216,7 +304,7 @@ export class ImpactAssessmentService {
         const [bp] = await db
           .select()
           .from(businessProcesses)
-          .where(eq(businessProcesses.id, parseInt(artifact.artifactId)));
+          .where(eq(businessProcesses.id, artifact.artifactId));
         
         if (bp) {
           const interfaceCount = await this.getBusinessProcessInterfaceCount(bp.id);
@@ -243,13 +331,7 @@ export class ImpactAssessmentService {
     }
 
     // Get related change requests
-    const changeRequestIds = [...new Set(artifacts.map(a => a.changeRequestId).filter(Boolean))];
-    const changeRequestsList = changeRequestIds.length > 0
-      ? await db
-          .select()
-          .from(changeRequests)
-          .where(inArray(changeRequests.id, changeRequestIds as number[]))
-      : [];
+    const changeRequestsList: any[] = [];
 
     return {
       initiative,
@@ -286,7 +368,7 @@ export class ImpactAssessmentService {
   private static buildAssessmentPrompt(data: any): string {
     const { initiative, changes, changeRequests, artifactCount } = data;
 
-    return `You are an expert business analyst using the AutoX intelligent analysis system to create a comprehensive impact assessment document for a system change initiative. 
+    return `You are an expert business analyst creating a comprehensive impact assessment document for a system change initiative using the Amdocs AutoX intelligent analysis system. 
 
 # Initiative Context
 
@@ -542,63 +624,75 @@ Format the document using clear markdown formatting with proper headings, bullet
         };
 
         // Get application impacts
-        const [appImpacts] = await db.raw(`
-          SELECT ca.*, a.*
-          FROM change_request_applications ca
-          JOIN applications a ON ca.application_id = a.id
-          WHERE ca.change_request_id = ?
-        `, [cr.id]);
+        const appImpacts = await db
+          .select({
+            changeRequestApplication: changeRequestApplications,
+            application: applications
+          })
+          .from(changeRequestApplications)
+          .innerJoin(applications, eq(changeRequestApplications.applicationId, applications.id))
+          .where(eq(changeRequestApplications.changeRequestId, cr.id));
 
-        appImpacts?.forEach((impact: any) => {
-          const appId = impact.application_id;
+        appImpacts?.forEach((impact) => {
+          const appId = impact.application.id;
           if (!impacts.applications.has(appId)) {
             impacts.applications.set(appId, []);
           }
           impacts.applications.get(appId)!.push({
             cr: cr.crNumber,
-            impactType: impact.impact_type,
-            impact
+            impactType: impact.changeRequestApplication.impactType || '',
+            impact: {
+              ...impact.changeRequestApplication,
+              ...impact.application
+            }
           });
         });
 
         // Get interface impacts
-        const [ifaceImpacts] = await db.raw(`
-          SELECT ci.*, i.*
-          FROM change_request_interfaces ci
-          JOIN interfaces i ON ci.interface_id = i.id
-          WHERE ci.change_request_id = ?
-        `, [cr.id]);
+        const ifaceImpacts = await db
+          .select({
+            changeRequestInterface: changeRequestInterfaces,
+            interface: interfaces
+          })
+          .from(changeRequestInterfaces)
+          .innerJoin(interfaces, eq(changeRequestInterfaces.interfaceId, interfaces.id))
+          .where(eq(changeRequestInterfaces.changeRequestId, cr.id));
 
-        ifaceImpacts?.forEach((impact: any) => {
-          const ifaceId = impact.interface_id;
+        ifaceImpacts?.forEach((impact) => {
+          const ifaceId = impact.interface.id;
           if (!impacts.interfaces.has(ifaceId)) {
             impacts.interfaces.set(ifaceId, []);
           }
           impacts.interfaces.get(ifaceId)!.push({
             cr: cr.crNumber,
-            impactType: impact.impact_type,
-            impact
+            impactType: impact.changeRequestInterface.impactType || '',
+            impact: {
+              ...impact.changeRequestInterface,
+              ...impact.interface
+            }
           });
         });
 
         // Get business process impacts (via interfaces)
-        const [bpImpacts] = await db.raw(`
-          SELECT DISTINCT bp.*, ci.impact_type
-          FROM change_request_interfaces ci
-          JOIN business_process_interfaces bpi ON bpi.interface_id = ci.interface_id
-          JOIN business_processes bp ON bp.id = bpi.business_process_id
-          WHERE ci.change_request_id = ?
-        `, [cr.id]);
+        const bpImpacts = await db
+          .selectDistinct({
+            businessProcess: businessProcesses,
+            impactType: changeRequestInterfaces.impactType
+          })
+          .from(changeRequestInterfaces)
+          .innerJoin(businessProcessInterfaces, eq(businessProcessInterfaces.interfaceId, changeRequestInterfaces.interfaceId))
+          .innerJoin(businessProcesses, eq(businessProcesses.id, businessProcessInterfaces.businessProcessId))
+          .where(eq(changeRequestInterfaces.changeRequestId, cr.id));
 
-        bpImpacts?.forEach((impact: any) => {
-          const bpId = impact.id;
+        bpImpacts?.forEach((impact) => {
+          const bpId = impact.businessProcess.id;
           if (!impacts.businessProcesses.has(bpId)) {
             impacts.businessProcesses.set(bpId, []);
           }
           impacts.businessProcesses.get(bpId)!.push({
             cr: cr.crNumber,
-            impactType: impact.impact_type,
-            impact
+            impactType: impact.impactType || '',
+            impact: impact.businessProcess
           });
         });
 
@@ -683,8 +777,8 @@ Format the document using clear markdown formatting with proper headings, bullet
     });
 
     return commonImpacts.sort((a, b) => {
-      const riskOrder = { critical: 0, high: 1, medium: 2, low: 3 };
-      return riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
+      const riskOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+      return (riskOrder[a.riskLevel] || 999) - (riskOrder[b.riskLevel] || 999);
     });
   }
 
@@ -791,7 +885,390 @@ Format the document using clear markdown formatting with proper headings, bullet
       recommendations
     };
   }
+
+  /**
+   * Generate a professional impact report using AutoX
+   */
+  static async generateCrossCRReport(
+    crossCRData: CrossCRImpact,
+    crIds: string[],
+    userId: number
+  ): Promise<{ success: boolean; report?: string; error?: string }> {
+    try {
+      // Fetch user's AutoX credentials
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user?.autoXApiKey || !user?.autoXUsername) {
+        return {
+          success: false,
+          error: "AutoX credentials not configured. Please configure them in Settings."
+        };
+      }
+
+      // Build the prompt for AutoX
+      const prompt = this.buildCrossCRReportPrompt(crossCRData, crIds);
+      
+      // Call AutoX API
+      const report = await this.callAutoXAPI(prompt, user.autoXApiKey, user.autoXUsername);
+      
+      if (!report) {
+        return {
+          success: false,
+          error: "Failed to generate report from AutoX"
+        };
+      }
+
+      return {
+        success: true,
+        report
+      };
+    } catch (error) {
+      console.error("Error generating Cross-CR report:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to generate report"
+      };
+    }
+  }
+
+  private static buildCrossCRReportPrompt(data: CrossCRImpact, crIds: string[]): string {
+    return `You are an expert business analyst creating a professional Cross-Change Request Impact Assessment Report.
+
+# Input Data
+
+**Change Requests Being Analyzed:** ${crIds.join(', ')}
+
+## Common Applications (${data.commonApplications.length})
+${JSON.stringify(data.commonApplications, null, 2)}
+
+## Common Interfaces (${data.commonInterfaces.length})
+${JSON.stringify(data.commonInterfaces, null, 2)}
+
+## Common Business Processes (${data.commonBusinessProcesses.length})
+${JSON.stringify(data.commonBusinessProcesses, null, 2)}
+
+## Overall Risk Assessment
+${JSON.stringify(data.overallRiskAssessment, null, 2)}
+
+## Timeline Conflicts
+${JSON.stringify(data.timeline, null, 2)}
+
+---
+
+# Instructions
+
+Generate a comprehensive Cross-CR Impact Assessment Report with the following structure:
+
+# CROSS-CHANGE REQUEST IMPACT ASSESSMENT REPORT
+
+## EXECUTIVE SUMMARY
+Provide a concise 2-3 paragraph overview that:
+- Summarizes the scope of analysis (which CRs were analyzed)
+- Highlights the key findings (number of common artifacts, risk level)
+- States the most critical risks and conflicts
+- Provides top-level recommendations
+
+## 1. ANALYSIS OVERVIEW
+
+### 1.1 Change Requests Analyzed
+List each CR with its key details and objectives
+
+### 1.2 Analysis Methodology
+Brief description of how cross-CR impacts were identified
+
+### 1.3 Summary Statistics
+- Total common applications: X
+- Total common interfaces: Y
+- Total common business processes: Z
+- Overall risk level: [Level]
+
+## 2. DETAILED IMPACT ANALYSIS
+
+### 2.1 Common Applications Impact
+For each common application:
+- Application name and description
+- CRs affecting this application
+- Type of changes/conflicts
+- Risk level and justification
+- Specific concerns
+
+### 2.2 Common Interfaces Impact
+For each common interface:
+- Interface details (IML number, provider, consumer)
+- CRs affecting this interface
+- Type of changes/conflicts
+- Risk level and justification
+- Integration concerns
+
+### 2.3 Common Business Processes Impact
+For each common business process:
+- Process name and business area
+- CRs affecting this process
+- Type of changes/conflicts
+- Risk level and justification
+- Business impact
+
+## 3. RISK ASSESSMENT
+
+### 3.1 Critical Risks
+Detailed analysis of all critical and high-risk items
+
+### 3.2 Timeline Conflicts
+Analysis of scheduling conflicts between CRs
+
+### 3.3 Technical Dependencies
+Map of technical dependencies between affected artifacts
+
+### 3.4 Business Impact Summary
+Overall business impact assessment
+
+## 4. CONFLICT ANALYSIS
+
+### 4.1 Modification Conflicts
+Where multiple CRs modify the same artifact
+
+### 4.2 Version Conflicts
+Where version incompatibilities may arise
+
+### 4.3 Deletion Conflicts
+Where one CR deletes what another modifies
+
+## 5. RECOMMENDATIONS
+
+### 5.1 Immediate Actions Required
+Critical steps to prevent conflicts
+
+### 5.2 Coordination Requirements
+How CR teams should coordinate
+
+### 5.3 Implementation Sequencing
+Recommended order of CR implementation
+
+### 5.4 Risk Mitigation Strategies
+Specific strategies for each identified risk
+
+## 6. IMPLEMENTATION ROADMAP
+
+### 6.1 Phased Approach
+If applicable, how to phase the implementations
+
+### 6.2 Dependency Management
+How to manage interdependencies
+
+### 6.3 Testing Strategy
+Integrated testing approach for all CRs
+
+## 7. APPENDICES
+
+### Appendix A: Detailed Artifact Lists
+Complete lists of all affected artifacts
+
+### Appendix B: Risk Matrix
+Visual representation of risks by artifact
+
+### Appendix C: Timeline Chart
+Visual timeline showing all CR schedules
+
+---
+
+Format the report using professional markdown with:
+- Clear section numbering
+- Bullet points for lists
+- Tables where appropriate
+- Bold for emphasis
+- Risk level badges using markdown formatting
+- Professional, clear language suitable for executive review`;
+  }
+
+  private static async callAutoXAPI(
+    prompt: string,
+    apiKey: string,
+    username: string
+  ): Promise<string | null> {
+    try {
+      // First, send the request to get a task ID
+      const taskId = await this.sendAutoXRequest(prompt, apiKey, username);
+      if (!taskId) {
+        return null;
+      }
+
+      // Then wait for the task to complete
+      const result = await this.waitForAutoXCompletion(taskId);
+      return result;
+    } catch (error) {
+      console.error('AutoX API error:', error);
+      return null;
+    }
+  }
+
+  private static async sendAutoXRequest(
+    prompt: string,
+    apiKey: string,
+    username: string
+  ): Promise<string | null> {
+    return new Promise((resolve) => {
+      const requestData = {
+        username,
+        apikey: apiKey,
+        conv_id: '',
+        application: 'ait-impact-assessment',
+        messages: [{ user: prompt }],
+        promptfilename: '',
+        promptname: '',
+        prompttype: 'system',
+        promptrole: 'You are a professional business analyst creating impact assessment reports using Amdocs AutoX',
+        prompttask: 'Create a comprehensive impact assessment report for system changes',
+        promptexamples: '',
+        promptformat: 'Return a well-formatted markdown report',
+        promptrestrictions: 'Be thorough, professional, and actionable',
+        promptadditional: 'Focus on business value and risk mitigation',
+        max_tokens: 8000,
+        model_type: 'GPT4o_128K',
+        temperature: 0.3,
+        topKChunks: 5,
+        read_from_your_data: false,
+        data_filenames: [],
+        document_groupname: '',
+        document_grouptags: [],
+        find_the_best_response: false,
+        chat_attr: {},
+        additional_attr: {}
+      };
+
+      const data = JSON.stringify(requestData);
+      
+      const options = {
+        hostname: 'chat.autox.corp.amdocs.azr',
+        path: '/api/v1/chats/send-message',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': 'application/json',
+          'Content-Length': Buffer.byteLength(data)
+        },
+        agent: new https.Agent({
+          rejectUnauthorized: false
+        }),
+        timeout: 120000
+      };
+
+      const req = https.request(options, (res) => {
+        let responseBody = '';
+        
+        res.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+        
+        res.on('end', () => {
+          try {
+            const response = JSON.parse(responseBody);
+            if (response.task_id) {
+              resolve(response.task_id);
+            } else {
+              console.error('No task_id in AutoX response:', response);
+              resolve(null);
+            }
+          } catch (error) {
+            console.error('Failed to parse AutoX response:', error);
+            resolve(null);
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        console.error('AutoX API request error:', error);
+        resolve(null);
+      });
+
+      req.on('timeout', () => {
+        console.error('AutoX API request timeout');
+        req.destroy();
+        resolve(null);
+      });
+
+      req.write(data);
+      req.end();
+    });
+  }
+
+  private static async checkAutoXTaskStatus(taskId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'chat.autox.corp.amdocs.azr',
+        path: `/api/v1/chats/status/${taskId}`,
+        method: 'GET',
+        headers: {
+          'accept': 'application/json'
+        },
+        agent: new https.Agent({
+          rejectUnauthorized: false
+        })
+      };
+
+      const req = https.request(options, (res) => {
+        let responseData = '';
+
+        res.on('data', (chunk) => {
+          responseData += chunk;
+        });
+
+        res.on('end', () => {
+          try {
+            const response = JSON.parse(responseData);
+            resolve(response);
+          } catch (error) {
+            reject(new Error(`Failed to parse status response: ${responseData}`));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        reject(error);
+      });
+
+      req.end();
+    });
+  }
+
+  private static async waitForAutoXCompletion(
+    taskId: string,
+    maxAttempts = 60,
+    delayMs = 2000
+  ): Promise<string | null> {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const status = await this.checkAutoXTaskStatus(taskId);
+        
+        if (status.status === 'Complete' || status.status === 'complete') {
+          return status.result || null;
+        } else if (status.status === 'Failed' || status.status === 'failed') {
+          console.error(`AutoX task failed: ${status.result || 'Unknown error'}`);
+          return null;
+        }
+        
+        // Wait before next attempt
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      } catch (error) {
+        console.error('Error checking AutoX task status:', error);
+        return null;
+      }
+    }
+    
+    console.error(`AutoX task did not complete after ${maxAttempts} attempts`);
+    return null;
+  }
+  
+  private static extractRiskLevel(assessment: string): string {
+    const lowerAssessment = assessment.toLowerCase();
+    if (lowerAssessment.includes('critical risk') || lowerAssessment.includes('risk rating: critical')) {
+      return 'critical';
+    } else if (lowerAssessment.includes('high risk') || lowerAssessment.includes('risk rating: high')) {
+      return 'high';
+    } else if (lowerAssessment.includes('medium risk') || lowerAssessment.includes('risk rating: medium')) {
+      return 'medium';
+    }
+    return 'low';
+  }
 }
 
-// Initialize the service
-ImpactAssessmentService.initialize();
+// Service initialization not needed for AutoX (uses user credentials)
