@@ -69,9 +69,11 @@ interface UmlManagerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onRenderDiagram?: (diagram: UmlDiagram) => void;
+  initialFolderId?: number;
+  openDirectly?: boolean;
 }
 
-export function UmlManagerDialog({ open, onOpenChange, onRenderDiagram }: UmlManagerDialogProps) {
+export function UmlManagerDialog({ open, onOpenChange, onRenderDiagram, initialFolderId, openDirectly }: UmlManagerDialogProps) {
   const { toast } = useToast();
   const [folders, setFolders] = useState<UmlFolder[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<UmlFolder | null>(null);
@@ -99,9 +101,18 @@ export function UmlManagerDialog({ open, onOpenChange, onRenderDiagram }: UmlMan
       const response = await api.get('/api/uml/folders');
       setFolders(response.data);
       
-      // Auto-select first folder if none selected
+      // Auto-select folder based on initialFolderId or first folder
       if (!selectedFolder && response.data.length > 0) {
-        setSelectedFolder(response.data[0]);
+        if (initialFolderId) {
+          const initialFolder = findFolderById(response.data, initialFolderId);
+          if (initialFolder) {
+            setSelectedFolder(initialFolder);
+            // Expand parent folders if needed
+            expandToFolder(response.data, initialFolder);
+          }
+        } else {
+          setSelectedFolder(response.data[0]);
+        }
       }
     } catch (error) {
       console.error('Failed to load folders:', error);
@@ -135,6 +146,32 @@ export function UmlManagerDialog({ open, onOpenChange, onRenderDiagram }: UmlMan
       }
       return folder;
     });
+  };
+
+  const findFolderById = (folders: UmlFolder[], id: number): UmlFolder | null => {
+    for (const folder of folders) {
+      if (folder.id === id) return folder;
+      if (folder.children) {
+        const found = findFolderById(folder.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const expandToFolder = (folders: UmlFolder[], targetFolder: UmlFolder) => {
+    const path = targetFolder.path.split('/').filter(Boolean);
+    let currentFolders = folders;
+    
+    for (const segment of path) {
+      const folder = currentFolders.find(f => f.name === segment);
+      if (folder && !folder.isExpanded) {
+        folder.isExpanded = true;
+        if (folder.children) {
+          currentFolders = folder.children;
+        }
+      }
+    }
   };
 
   const toggleFolder = (folder: UmlFolder) => {

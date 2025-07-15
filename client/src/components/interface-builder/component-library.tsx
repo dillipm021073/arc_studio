@@ -34,12 +34,19 @@ import {
   MoveRight,
   Box,
   Image as ImageIcon,
-  Folder
+  Folder,
+  FolderOpen
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 export interface ComponentTemplate {
   id: string;
@@ -1545,7 +1552,7 @@ export default function ComponentLibrary({ onComponentSelect }: ComponentLibrary
   const ComponentCard = ({ component }: { component: ComponentTemplate }) => {
     const Icon = component.icon;
     
-    return (
+    const cardContent = (
       <Card 
         className="cursor-grab active:cursor-grabbing hover:shadow-lg transition-all duration-200 bg-gray-800 border-gray-700 hover:border-gray-600"
         draggable
@@ -1570,6 +1577,24 @@ export default function ComponentLibrary({ onComponentSelect }: ComponentLibrary
         </CardContent>
       </Card>
     );
+
+    if (component.type === 'uml' || component.id === 'uml-folder') {
+      return (
+        <ContextMenu>
+          <ContextMenuTrigger asChild>
+            {cardContent}
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onClick={() => onComponentSelect(component)}>
+              <FolderOpen className="mr-2 h-4 w-4" />
+              Open UML Repository
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      );
+    }
+
+    return cardContent;
   };
 
   return (
