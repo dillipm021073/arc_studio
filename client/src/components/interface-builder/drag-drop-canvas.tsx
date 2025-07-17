@@ -58,7 +58,7 @@ import DecisionNode from './nodes/decision-node';
 import RectangleNode from './nodes/rectangle-node';
 import ContainerNode from './nodes/container-node';
 import RoundedRectangleNode from './nodes/rounded-rectangle-node';
-import { ImageNode } from './nodes/ImageNode';
+import ImageNode from './nodes/ImageNode';
 import UmlNode from './nodes/uml-node';
 import SvgBackgroundNode from './nodes/svg-background-node';
 import SmartEdge from './edges/smart-edge';
@@ -735,6 +735,16 @@ function DragDropCanvasInner({
           input.onchange = async (e) => {
             const file = (e.target as HTMLInputElement).files?.[0];
             if (file) {
+              // Check file size (50MB limit)
+              const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+              if (file.size > maxSize) {
+                toast({
+                  title: 'File too large',
+                  description: 'Image size exceeds 50MB limit. Please choose a smaller image.',
+                  variant: 'destructive',
+                });
+                return;
+              }
               const reader = new FileReader();
               reader.onload = (event) => {
                 const imageUrl = event.target?.result as string;

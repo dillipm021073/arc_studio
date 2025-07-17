@@ -475,6 +475,7 @@ export default function Interfaces() {
       { value: "IBM MQ", label: "IBM MQ" },
       { value: "Redis", label: "Redis" },
       { value: "WSO2", label: "WSO2" },
+      { value: "MuleSoft", label: "MuleSoft" },
       { value: "PSB", label: "PSB" },
       { value: "PCE", label: "PCE" },
       { value: "Custom", label: "Custom" }
@@ -607,6 +608,7 @@ export default function Interfaces() {
         { value: "IBM MQ", label: "IBM MQ" },
         { value: "Redis", label: "Redis" },
         { value: "WSO2", label: "WSO2" },
+        { value: "MuleSoft", label: "MuleSoft" },
         { value: "PSB", label: "PSB" },
         { value: "PCE", label: "PCE" },
         { value: "Custom", label: "Custom" },

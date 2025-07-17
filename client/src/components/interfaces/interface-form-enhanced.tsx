@@ -363,6 +363,7 @@ export default function InterfaceFormEnhanced({
                       <SelectItem value="IBM MQ" className="text-white hover:bg-gray-700">IBM MQ</SelectItem>
                       <SelectItem value="Redis" className="text-white hover:bg-gray-700">Redis</SelectItem>
                       <SelectItem value="WSO2" className="text-white hover:bg-gray-700">WSO2</SelectItem>
+                      <SelectItem value="MuleSoft" className="text-white hover:bg-gray-700">MuleSoft</SelectItem>
                       <SelectItem value="PSB" className="text-white hover:bg-gray-700">PSB</SelectItem>
                       <SelectItem value="PCE" className="text-white hover:bg-gray-700">PCE</SelectItem>
                       <SelectItem value="Custom" className="text-white hover:bg-gray-700">Custom</SelectItem>

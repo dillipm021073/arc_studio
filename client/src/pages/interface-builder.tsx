@@ -38,7 +38,9 @@ import {
   Copy,
   FileText,
   Eye,
-  Trash2
+  Trash2,
+  Download,
+  Upload
 } from 'lucide-react';
 
 import ComponentLibrary, { ComponentTemplate } from '@/components/interface-builder/component-library';
@@ -51,6 +53,7 @@ import type { ProjectWithStorage } from '@/services/project-storage';
 import SaveAsDialog from '@/components/interface-builder/save-as-dialog';
 import GenerateFromLobDialog from '@/components/interface-builder/generate-from-lob-dialog';
 import { UmlManagerDialog } from '@/components/interface-builder/uml-manager-dialog';
+import ImportProjectDialog from '@/components/interface-builder/import-project-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { InterfaceProject } from '@/data/example-projects';
 import { interfaceBuilderApi } from '@/services/interface-builder-api';
@@ -92,6 +95,7 @@ export default function InterfaceBuilder() {
   const [canvasKey, setCanvasKey] = useState(0);
   const [showHelpDialog, setShowHelpDialog] = useState(false);
   const [showUmlManager, setShowUmlManager] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   
   // Canvas toolbar state
   const [canUndo, setCanUndo] = useState(false);
@@ -1082,6 +1086,59 @@ export default function InterfaceBuilder() {
             <ImageIcon className="h-3 w-3 mr-1" />
             Download PNG
           </Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={async () => {
+              if (currentProject) {
+                try {
+                  const response = await fetch(`/api/interface-builder/projects/${currentProject.id}/export`);
+                  if (!response.ok) {
+                    throw new Error('Export failed');
+                  }
+                  
+                  const blob = await response.blob();
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `${currentProject.name.replace(/[^a-z0-9]/gi, '_')}_export_${Date.now()}.json`;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                  
+                  toast({
+                    title: 'Project Exported',
+                    description: 'Your project has been exported with all referenced data',
+                  });
+                } catch (error) {
+                  console.error('Export error:', error);
+                  toast({
+                    title: 'Export Failed',
+                    description: 'Failed to export project. Please try again.',
+                    variant: 'destructive'
+                  });
+                }
+              } else {
+                toast({
+                  title: 'No Project Loaded',
+                  description: 'Please load a project first before exporting',
+                  variant: 'destructive'
+                });
+              }
+            }}
+            className="border-gray-600 hover:bg-gray-700 h-7 px-2"
+          >
+            <Download className="h-3 w-3 mr-1" />
+            Download Project
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => setShowImportDialog(true)}
+            className="border-gray-600 hover:bg-gray-700 h-7 px-2"
+          >
+            <Upload className="h-3 w-3 mr-1" />
+            Import Project
+          </Button>
           <div className="border-l border-gray-600 h-5" />
           <Button 
             size="sm" 
@@ -1929,6 +1986,32 @@ export default function InterfaceBuilder() {
               variant: 'destructive'
             });
           }
+        }}
+      />
+      
+      {/* Import Project Dialog */}
+      <ImportProjectDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        onImport={async (importedProject) => {
+          // Load the imported project
+          setCurrentProject(importedProject);
+          
+          // Parse and set canvas data
+          const nodes = JSON.parse(importedProject.nodes);
+          const edges = JSON.parse(importedProject.edges);
+          setCanvasData({ nodes, edges });
+          
+          // Force canvas re-render
+          setCanvasKey(prev => prev + 1);
+          
+          // Update save status
+          setSaveStatus('saved');
+          
+          toast({
+            title: 'Project Imported',
+            description: `"${importedProject.name}" has been loaded successfully`,
+          });
         }}
       />
     </div>

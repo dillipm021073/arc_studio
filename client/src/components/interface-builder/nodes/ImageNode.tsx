@@ -28,7 +28,7 @@ interface ImageNodeData {
   onDuplicate?: () => void;
 }
 
-export const ImageNode = memo(({ data, selected, id }: NodeProps<ImageNodeData>) => {
+const ImageNode = memo(({ data, selected, id }: NodeProps<ImageNodeData>) => {
   const {
     label,
     imageUrl,
@@ -86,6 +86,12 @@ export const ImageNode = memo(({ data, selected, id }: NodeProps<ImageNodeData>)
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
+        // Check file size (50MB limit)
+        const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+        if (file.size > maxSize) {
+          alert('File size exceeds 50MB limit. Please choose a smaller image.');
+          return;
+        }
         const reader = new FileReader();
         reader.onload = (event) => {
           if (data.onUpdate) {
@@ -117,6 +123,12 @@ export const ImageNode = memo(({ data, selected, id }: NodeProps<ImageNodeData>)
         const blob = item.getAsFile();
         
         if (blob) {
+          // Check file size (50MB limit)
+          const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+          if (blob.size > maxSize) {
+            alert('Pasted image size exceeds 50MB limit. Please paste a smaller image.');
+            return;
+          }
           const reader = new FileReader();
           reader.onload = (event) => {
             if (data.onUpdate) {
@@ -319,3 +331,5 @@ export const ImageNode = memo(({ data, selected, id }: NodeProps<ImageNodeData>)
 });
 
 ImageNode.displayName = 'ImageNode';
+
+export default ImageNode;

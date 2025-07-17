@@ -534,6 +534,406 @@ router.get("/lobs", async (req, res) => {
   }
 });
 
+// Export project with full data
+router.get("/projects/:id/export", async (req, res) => {
+  try {
+    const projectId = req.params.id;
+    const currentUser = req.user!.username;
+    
+    // Get the project
+    const [project] = await db
+      .select()
+      .from(interfaceBuilderProjects)
+      .where(eq(interfaceBuilderProjects.projectId, projectId));
+    
+    if (!project) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+    
+    // Check permissions
+    const canView = project.author === currentUser || project.isTeamProject;
+    if (!canView) {
+      return res.status(403).json({ error: "You don't have permission to export this project" });
+    }
+    
+    // Parse nodes and edges
+    const nodes = JSON.parse(project.nodes);
+    const edges = JSON.parse(project.edges);
+    
+    // Extract referenced entity IDs from nodes
+    const applicationIds = new Set<number>();
+    const interfaceIds = new Set<number>();
+    const businessProcessIds = new Set<number>();
+    const internalActivityIds = new Set<number>();
+    
+    // Extract IDs from nodes based on their data
+    nodes.forEach((node: any) => {
+      if (node.type === 'application' && node.data) {
+        // Check various possible ID fields
+        if (node.data.applicationId) {
+          applicationIds.add(parseInt(node.data.applicationId));
+        }
+        // Also check if the node ID contains app reference
+        if (node.id && node.id.startsWith('app-')) {
+          const appId = parseInt(node.id.replace('app-', ''));
+          if (!isNaN(appId)) {
+            applicationIds.add(appId);
+          }
+        }
+      } else if (node.type === 'interface' && node.data) {
+        if (node.data.interfaceId) {
+          interfaceIds.add(parseInt(node.data.interfaceId));
+        }
+        // Check node ID for interface reference
+        if (node.id && node.id.startsWith('iface-')) {
+          const ifaceId = parseInt(node.id.replace('iface-', ''));
+          if (!isNaN(ifaceId)) {
+            interfaceIds.add(ifaceId);
+          }
+        }
+      } else if (node.type === 'process' && node.data?.processId) {
+        businessProcessIds.add(parseInt(node.data.processId));
+      } else if (node.type === 'internalActivity' && node.data?.activityId) {
+        internalActivityIds.add(parseInt(node.data.activityId));
+      }
+    });
+    
+    // Also extract interface IDs from edges
+    edges.forEach((edge: any) => {
+      if (edge.id && edge.id.startsWith('iface-')) {
+        const ifaceId = parseInt(edge.id.replace('iface-', ''));
+        if (!isNaN(ifaceId)) {
+          interfaceIds.add(ifaceId);
+        }
+      }
+    });
+    
+    // Fetch referenced data
+    const referencedData: any = {
+      applications: [],
+      interfaces: [],
+      businessProcesses: [],
+      internalActivities: []
+    };
+    
+    if (applicationIds.size > 0) {
+      referencedData.applications = await db
+        .select()
+        .from(applications)
+        .where(inArray(applications.id, Array.from(applicationIds)));
+    }
+    
+    if (interfaceIds.size > 0) {
+      referencedData.interfaces = await db
+        .select()
+        .from(interfaces)
+        .where(inArray(interfaces.id, Array.from(interfaceIds)));
+      
+      // Also get provider/consumer application IDs from interfaces
+      referencedData.interfaces.forEach((iface: any) => {
+        if (iface.providerApplicationId) applicationIds.add(iface.providerApplicationId);
+        if (iface.consumerApplicationId) applicationIds.add(iface.consumerApplicationId);
+      });
+      
+      // Fetch additional applications if needed
+      if (applicationIds.size > referencedData.applications.length) {
+        referencedData.applications = await db
+          .select()
+          .from(applications)
+          .where(inArray(applications.id, Array.from(applicationIds)));
+      }
+    }
+    
+    // Import dependencies
+    const { businessProcesses, internalActivities } = await import("@shared/schema");
+    
+    if (businessProcessIds.size > 0) {
+      referencedData.businessProcesses = await db
+        .select()
+        .from(businessProcesses)
+        .where(inArray(businessProcesses.id, Array.from(businessProcessIds)));
+    }
+    
+    if (internalActivityIds.size > 0) {
+      referencedData.internalActivities = await db
+        .select()
+        .from(internalActivities)
+        .where(inArray(internalActivities.id, Array.from(internalActivityIds)));
+    }
+    
+    // Create export data
+    const exportData = {
+      version: "1.0",
+      exportDate: new Date().toISOString(),
+      exportedBy: currentUser,
+      project: {
+        name: project.name,
+        description: project.description,
+        category: project.category,
+        nodes: nodes,
+        edges: edges,
+        metadata: JSON.parse(project.metadata || '{}'),
+        version: project.version,
+        folderPath: project.folderPath
+      },
+      referencedData,
+      metadata: {
+        nodeCount: nodes.length,
+        edgeCount: edges.length,
+        applicationCount: referencedData.applications.length,
+        interfaceCount: referencedData.interfaces.length,
+        businessProcessCount: referencedData.businessProcesses.length,
+        internalActivityCount: referencedData.internalActivities.length,
+        exportSource: "StudioArchitect",
+        exportVersion: "1.0.0"
+      }
+    };
+    
+    // Set response headers for download
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${project.name.replace(/[^a-z0-9]/gi, '_')}_export_${Date.now()}.json"`);
+    
+    res.json(exportData);
+  } catch (error) {
+    console.error("Error exporting project:", error);
+    res.status(500).json({ error: "Failed to export project" });
+  }
+});
+
+// Import project with ID mapping
+router.post("/projects/import", async (req, res) => {
+  try {
+    const currentUser = req.user!;
+    const importData = req.body;
+    
+    // Validate import data
+    if (!importData || !importData.project || !importData.version) {
+      return res.status(400).json({ error: "Invalid import data format" });
+    }
+    
+    if (importData.version !== "1.0") {
+      return res.status(400).json({ error: "Unsupported export version" });
+    }
+    
+    const { project, referencedData } = importData;
+    
+    // Create ID mapping tables
+    const idMappings = {
+      applications: new Map<number, number>(),
+      interfaces: new Map<number, number>(),
+      businessProcesses: new Map<number, number>(),
+      internalActivities: new Map<number, number>()
+    };
+    
+    // Import referenced data (if requested)
+    const importReferenced = req.query.importReferenced === 'true';
+    
+    if (importReferenced && referencedData) {
+      // Import applications
+      if (referencedData.applications) {
+        for (const app of referencedData.applications) {
+          // Check if application with same AML number exists
+          const [existing] = await db
+            .select()
+            .from(applications)
+            .where(eq(applications.amlNumber, app.amlNumber));
+          
+          if (existing) {
+            idMappings.applications.set(app.id, existing.id);
+          } else {
+            // Create new application
+            const { id, createdAt, updatedAt, ...appData } = app;
+            const [newApp] = await db
+              .insert(applications)
+              .values({
+                ...appData,
+                amlNumber: `${app.amlNumber}_imported_${Date.now()}`
+              })
+              .returning();
+            idMappings.applications.set(app.id, newApp.id);
+          }
+        }
+      }
+      
+      // Import interfaces
+      if (referencedData.interfaces) {
+        for (const iface of referencedData.interfaces) {
+          // Check if interface with same IML number exists
+          const [existing] = await db
+            .select()
+            .from(interfaces)
+            .where(eq(interfaces.imlNumber, iface.imlNumber));
+          
+          if (existing) {
+            idMappings.interfaces.set(iface.id, existing.id);
+          } else {
+            // Create new interface with mapped IDs
+            const { id, createdAt, updatedAt, ...ifaceData } = iface;
+            const [newIface] = await db
+              .insert(interfaces)
+              .values({
+                ...ifaceData,
+                imlNumber: `${iface.imlNumber}_imported_${Date.now()}`,
+                providerApplicationId: ifaceData.providerApplicationId ? 
+                  idMappings.applications.get(ifaceData.providerApplicationId) || null : null,
+                consumerApplicationId: ifaceData.consumerApplicationId ? 
+                  idMappings.applications.get(ifaceData.consumerApplicationId) || null : null
+              })
+              .returning();
+            idMappings.interfaces.set(iface.id, newIface.id);
+          }
+        }
+      }
+      
+      // Import business processes
+      if (referencedData.businessProcesses) {
+        const { businessProcesses } = await import("@shared/schema");
+        for (const bp of referencedData.businessProcesses) {
+          const { id, createdAt, updatedAt, ...bpData } = bp;
+          const [newBP] = await db
+            .insert(businessProcesses)
+            .values(bpData)
+            .returning();
+          idMappings.businessProcesses.set(bp.id, newBP.id);
+        }
+      }
+      
+      // Import internal activities
+      if (referencedData.internalActivities) {
+        const { internalActivities } = await import("@shared/schema");
+        for (const activity of referencedData.internalActivities) {
+          const { id, createdAt, updatedAt, ...activityData } = activity;
+          const [newActivity] = await db
+            .insert(internalActivities)
+            .values({
+              ...activityData,
+              applicationId: activityData.applicationId ? 
+                idMappings.applications.get(activityData.applicationId) || activityData.applicationId : activityData.applicationId
+            })
+            .returning();
+          idMappings.internalActivities.set(activity.id, newActivity.id);
+        }
+      }
+    }
+    
+    // Update nodes with new IDs
+    const updatedNodes = project.nodes.map((node: any) => {
+      const newNode = { ...node };
+      
+      // Update node IDs
+      if (node.id && node.id.startsWith('app-')) {
+        const oldId = parseInt(node.id.replace('app-', ''));
+        const newId = idMappings.applications.get(oldId);
+        if (newId) {
+          newNode.id = `app-${newId}`;
+        }
+      } else if (node.id && node.id.startsWith('iface-')) {
+        const oldId = parseInt(node.id.replace('iface-', ''));
+        const newId = idMappings.interfaces.get(oldId);
+        if (newId) {
+          newNode.id = `iface-${newId}`;
+        }
+      }
+      
+      // Update data IDs
+      if (node.type === 'application' && node.data?.applicationId) {
+        const newId = idMappings.applications.get(node.data.applicationId);
+        if (newId) {
+          newNode.data = { ...node.data, applicationId: newId };
+        }
+      } else if (node.type === 'interface' && node.data?.interfaceId) {
+        const newId = idMappings.interfaces.get(node.data.interfaceId);
+        if (newId) {
+          newNode.data = { ...node.data, interfaceId: newId };
+        }
+      } else if (node.type === 'process' && node.data?.processId) {
+        const newId = idMappings.businessProcesses.get(node.data.processId);
+        if (newId) {
+          newNode.data = { ...node.data, processId: newId };
+        }
+      } else if (node.type === 'internalActivity' && node.data?.activityId) {
+        const newId = idMappings.internalActivities.get(node.data.activityId);
+        if (newId) {
+          newNode.data = { ...node.data, activityId: newId };
+        }
+      }
+      
+      return newNode;
+    });
+    
+    // Update edges with new node IDs
+    const updatedEdges = project.edges.map((edge: any) => {
+      const newEdge = { ...edge };
+      
+      // Update edge ID if it references an interface
+      if (edge.id && edge.id.startsWith('iface-')) {
+        const oldId = parseInt(edge.id.replace('iface-', ''));
+        const newId = idMappings.interfaces.get(oldId);
+        if (newId) {
+          newEdge.id = `iface-${newId}`;
+        }
+      }
+      
+      // Update source and target if they reference mapped nodes
+      if (edge.source && edge.source.startsWith('app-')) {
+        const oldId = parseInt(edge.source.replace('app-', ''));
+        const newId = idMappings.applications.get(oldId);
+        if (newId) {
+          newEdge.source = `app-${newId}`;
+        }
+      }
+      
+      if (edge.target && edge.target.startsWith('app-')) {
+        const oldId = parseInt(edge.target.replace('app-', ''));
+        const newId = idMappings.applications.get(oldId);
+        if (newId) {
+          newEdge.target = `app-${newId}`;
+        }
+      }
+      
+      return newEdge;
+    });
+    
+    // Create the imported project
+    const [importedProject] = await db
+      .insert(interfaceBuilderProjects)
+      .values({
+        projectId: `imported-${Date.now()}`,
+        name: `${project.name} (Imported)`,
+        description: project.description || `Imported on ${new Date().toLocaleDateString()}`,
+        category: project.category || "imported",
+        folderPath: project.folderPath || "/imported",
+        nodes: JSON.stringify(updatedNodes),
+        edges: JSON.stringify(updatedEdges),
+        metadata: JSON.stringify({
+          ...project.metadata,
+          importedFrom: importData.exportedBy,
+          importedDate: new Date().toISOString(),
+          originalExportDate: importData.exportDate
+        }),
+        author: currentUser.username,
+        isTeamProject: false
+      })
+      .returning();
+    
+    res.json({
+      success: true,
+      project: importedProject,
+      importSummary: {
+        mappedApplications: idMappings.applications.size,
+        mappedInterfaces: idMappings.interfaces.size,
+        mappedBusinessProcesses: idMappings.businessProcesses.size,
+        mappedInternalActivities: idMappings.internalActivities.size,
+        totalNodes: updatedNodes.length,
+        totalEdges: updatedEdges.length
+      }
+    });
+  } catch (error) {
+    console.error("Error importing project:", error);
+    res.status(500).json({ error: "Failed to import project" });
+  }
+});
+
 // Create a new folder
 router.post("/folders", async (req, res) => {
   try {

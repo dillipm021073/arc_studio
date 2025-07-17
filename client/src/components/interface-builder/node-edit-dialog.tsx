@@ -212,6 +212,12 @@ export default function NodeEditDialog({ isOpen, onClose, node, onSave }: NodeEd
                                     input.onchange = (e) => {
                                       const file = (e.target as HTMLInputElement).files?.[0];
                                       if (file) {
+                                        // Check file size (50MB limit)
+                                        const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+                                        if (file.size > maxSize) {
+                                          alert('File size exceeds 50MB limit. Please choose a smaller image.');
+                                          return;
+                                        }
                                         const reader = new FileReader();
                                         reader.onload = (event) => {
                                           setEditedData({ 
@@ -240,6 +246,12 @@ export default function NodeEditDialog({ isOpen, onClose, node, onSave }: NodeEd
                                         for (const type of clipboardItem.types) {
                                           if (type.startsWith('image/')) {
                                             const blob = await clipboardItem.getType(type);
+                                            // Check file size (50MB limit)
+                                            const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+                                            if (blob.size > maxSize) {
+                                              alert('Pasted image size exceeds 50MB limit. Please paste a smaller image.');
+                                              return;
+                                            }
                                             const reader = new FileReader();
                                             reader.onload = (event) => {
                                               setEditedData({ 
@@ -276,6 +288,12 @@ export default function NodeEditDialog({ isOpen, onClose, node, onSave }: NodeEd
                                   input.onchange = (e) => {
                                     const file = (e.target as HTMLInputElement).files?.[0];
                                     if (file) {
+                                      // Check file size (50MB limit)
+                                      const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+                                      if (file.size > maxSize) {
+                                        alert('File size exceeds 50MB limit. Please choose a smaller image.');
+                                        return;
+                                      }
                                       const reader = new FileReader();
                                       reader.onload = (event) => {
                                         setEditedData({ 
@@ -304,6 +322,12 @@ export default function NodeEditDialog({ isOpen, onClose, node, onSave }: NodeEd
                                       for (const type of clipboardItem.types) {
                                         if (type.startsWith('image/')) {
                                           const blob = await clipboardItem.getType(type);
+                                          // Check file size (50MB limit)
+                                          const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+                                          if (blob.size > maxSize) {
+                                            alert('Pasted image size exceeds 50MB limit. Please paste a smaller image.');
+                                            return;
+                                          }
                                           const reader = new FileReader();
                                           reader.onload = (event) => {
                                             setEditedData({ 

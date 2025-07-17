@@ -64,7 +64,7 @@ export const interfaces = pgTable("interfaces", {
   providerApplicationId: integer("provider_application_id").references(() => applications.id),
   consumerApplicationId: integer("consumer_application_id").references(() => applications.id),
   interfaceType: text("interface_type").notNull(), // REST, SOAP, GraphQL, messaging, database
-  middleware: text("middleware").default("None"), // None, Apache Kafka, RabbitMQ, IBM MQ, Redis, WSO2, PSB, PCE, Custom
+  middleware: text("middleware").default("None"), // None, Apache Kafka, RabbitMQ, IBM MQ, Redis, WSO2, MuleSoft, PSB, PCE, Custom
   version: text("version").notNull().default("1.0"),
   lob: text("lob"), // Line of Business
   lastChangeDate: timestamp("last_change_date").defaultNow(),

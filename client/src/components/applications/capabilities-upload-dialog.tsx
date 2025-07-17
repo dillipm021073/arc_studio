@@ -263,11 +263,11 @@ export default function CapabilitiesUploadDialog({
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Validate file size (25MB limit)
-      if (file.size > 25 * 1024 * 1024) {
+      // Validate file size (50MB limit)
+      if (file.size > 50 * 1024 * 1024) {
         toast({
           title: "File too large",
-          description: "Please select a file smaller than 25MB",
+          description: "Please select a file smaller than 50MB",
           variant: "destructive",
         });
         return;

@@ -213,6 +213,7 @@ export default function InterfaceForm({ onSuccess, initialData, isEditing = fals
                       <SelectItem value="IBM MQ">IBM MQ</SelectItem>
                       <SelectItem value="Redis">Redis</SelectItem>
                       <SelectItem value="WSO2">WSO2</SelectItem>
+                      <SelectItem value="MuleSoft">MuleSoft</SelectItem>
                       <SelectItem value="PSB">PSB</SelectItem>
                       <SelectItem value="PCE">PCE</SelectItem>
                       <SelectItem value="Custom">Custom</SelectItem>

@@ -8,7 +8,7 @@ const router = Router();
 // Configure simple multer
 const upload = multer({
   dest: 'uploads/temp/',
-  limits: { fileSize: 25 * 1024 * 1024 }
+  limits: { fileSize: 50 * 1024 * 1024 }
 });
 
 // Ultra-simple upload endpoint
