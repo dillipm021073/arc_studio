@@ -84,6 +84,8 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
   const [analysis, setAnalysis] = useState<ImpactAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  console.log('InitiativeImpactAnalysis rendering with initiativeId:', initiativeId);
 
   useEffect(() => {
     fetchImpactAnalysis();
@@ -94,14 +96,36 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
       setLoading(true);
       setError(null);
       
+      console.log('Fetching impact analysis for initiative:', initiativeId);
       const response = await fetch(`/api/initiatives/${initiativeId}/impact-analysis`);
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch impact analysis');
+        const errorText = await response.text();
+        console.error('Failed to fetch impact analysis:', response.status, errorText);
+        throw new Error(`Failed to fetch impact analysis: ${response.status}`);
       }
       
       const data = await response.json();
-      setAnalysis(data);
+      console.log('Impact analysis data received:', data);
+      
+      // Ensure data has the expected structure
+      const analysisData: ImpactAnalysis = {
+        modifiedArtifacts: data.modifiedArtifacts || [],
+        impactedApplications: data.impactedApplications || [],
+        impactedInterfaces: data.impactedInterfaces || [],
+        relatedBusinessProcesses: data.relatedBusinessProcesses || [],
+        riskLevel: data.riskLevel || 'low',
+        summary: {
+          applicationsCount: data.summary?.applicationsCount || 0,
+          interfacesCount: data.summary?.interfacesCount || 0,
+          businessProcessesCount: data.summary?.businessProcessesCount || 0,
+          totalImpactedArtifacts: data.summary?.totalImpactedArtifacts || 0
+        }
+      };
+      
+      setAnalysis(analysisData);
     } catch (err) {
+      console.error('Error in fetchImpactAnalysis:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
@@ -162,8 +186,9 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
 
   if (!analysis) return null;
 
-  return (
-    <div className="space-y-6">
+  try {
+    return (
+      <div className="space-y-6">
       {/* Risk Level Summary */}
       <Card>
         <CardContent className="p-6">
@@ -204,7 +229,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
       </Card>
 
       {/* Modified Artifacts */}
-      {analysis.modifiedArtifacts.length > 0 && (
+      {analysis.modifiedArtifacts && analysis.modifiedArtifacts.length > 0 && (
         <Collapsible defaultOpen>
           <Card>
             <CollapsibleTrigger asChild>
@@ -217,7 +242,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className="space-y-4">
-                {analysis.modifiedArtifacts.map((artifact, index) => (
+                {analysis.modifiedArtifacts && analysis.modifiedArtifacts.map((artifact, index) => (
                   <div key={index} className="flex items-start gap-3 p-3 border rounded-lg">
                     <div className="mt-0.5">
                       {getArtifactTypeIcon(artifact.artifactType)}
@@ -244,7 +269,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
       )}
 
       {/* Impacted Applications */}
-      {analysis.impactedApplications.length > 0 && (
+      {analysis.impactedApplications && analysis.impactedApplications.length > 0 && (
         <Collapsible defaultOpen>
           <Card>
             <CollapsibleTrigger asChild>
@@ -258,7 +283,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
             <CollapsibleContent>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {analysis.impactedApplications.map((app) => (
+                  {analysis.impactedApplications && analysis.impactedApplications.map((app) => (
                     <Card key={app.id} className="border">
                       <CardContent className="p-4">
                         <div className="flex justify-between items-start mb-2">
@@ -301,7 +326,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
       )}
 
       {/* Impacted Interfaces */}
-      {analysis.impactedInterfaces.length > 0 && (
+      {analysis.impactedInterfaces && analysis.impactedInterfaces.length > 0 && (
         <Collapsible defaultOpen>
           <Card>
             <CollapsibleTrigger asChild>
@@ -314,7 +339,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className="space-y-4">
-                {analysis.impactedInterfaces.map((iface) => (
+                {analysis.impactedInterfaces && analysis.impactedInterfaces.map((iface) => (
                   <div key={iface.id} className="flex items-start gap-3 p-4 border rounded-lg">
                     <Cable className="h-5 w-5 mt-0.5 text-purple-600" />
                     <div className="flex-1 space-y-2">
@@ -344,7 +369,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
       )}
 
       {/* Related Business Processes */}
-      {analysis.relatedBusinessProcesses.length > 0 && (
+      {analysis.relatedBusinessProcesses && analysis.relatedBusinessProcesses.length > 0 && (
         <Collapsible defaultOpen>
           <Card>
             <CollapsibleTrigger asChild>
@@ -358,7 +383,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
             <CollapsibleContent>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {analysis.relatedBusinessProcesses.map((bp) => (
+                  {analysis.relatedBusinessProcesses && analysis.relatedBusinessProcesses.map((bp) => (
                     <Card key={bp.id} className="border">
                       <CardContent className="p-4">
                         <h4 className="font-semibold mb-3">{bp.businessProcess}</h4>
@@ -393,6 +418,17 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
           </AlertDescription>
         </Alert>
       )}
-    </div>
-  );
+      </div>
+    );
+  } catch (renderError) {
+    console.error('Error rendering InitiativeImpactAnalysis:', renderError);
+    return (
+      <Alert>
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          An error occurred while rendering the impact analysis. Please refresh the page.
+        </AlertDescription>
+      </Alert>
+    );
+  }
 }
