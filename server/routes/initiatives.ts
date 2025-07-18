@@ -1010,6 +1010,186 @@ initiativesRouter.get("/:id/impact-analysis", requireAuth, async (req, res) => {
   }
 });
 
+// Get initiatives and CRs for a specific artifact
+initiativesRouter.get("/artifact/:artifactType/:artifactId", requireAuth, async (req, res) => {
+  try {
+    const { artifactType, artifactId } = req.params;
+    const artifactIdNum = parseInt(artifactId);
+
+    // Get initiatives in two ways:
+    // 1. Initiatives that have versions of this artifact
+    const versionsWithInitiatives = await db.select({
+      initiative: initiatives,
+      version: artifactVersions,
+      isOrigin: sql<boolean>`false`
+    })
+    .from(artifactVersions)
+    .innerJoin(initiatives, eq(initiatives.initiativeId, artifactVersions.initiativeId))
+    .where(
+      and(
+        eq(artifactVersions.artifactType, artifactType),
+        eq(artifactVersions.artifactId, artifactIdNum),
+        inArray(initiatives.status, ['draft', 'planning', 'in_progress', 'review', 'active'])
+      )
+    )
+    .groupBy(initiatives.id, initiatives.initiativeId, artifactVersions.id);
+
+    // 2. Initiatives where this artifact is the origin (for applications and interfaces only)
+    let originInitiatives = [];
+    if (artifactType === 'application' || artifactType === 'interface') {
+      // First get the artifact to find its initiativeOrigin
+      const tableName = artifactType === 'application' ? applications : interfaces;
+      const [artifact] = await db.select({ initiativeOrigin: tableName.initiativeOrigin })
+        .from(tableName)
+        .where(eq(tableName.id, artifactIdNum));
+      
+      if (artifact?.initiativeOrigin) {
+        const [originInit] = await db.select({
+          initiative: initiatives,
+          version: sql<any>`NULL`,
+          isOrigin: sql<boolean>`true`
+        })
+        .from(initiatives)
+        .where(
+          and(
+            eq(initiatives.initiativeId, artifact.initiativeOrigin),
+            inArray(initiatives.status, ['draft', 'planning', 'in_progress', 'review', 'active'])
+          )
+        );
+        
+        if (originInit) {
+          originInitiatives.push(originInit);
+        }
+      }
+    }
+
+    // Combine results
+    const artifactInitiatives = [...versionsWithInitiatives, ...originInitiatives];
+
+    // Get unique initiatives with their details
+    const uniqueInitiatives = new Map();
+    artifactInitiatives.forEach(item => {
+      if (!uniqueInitiatives.has(item.initiative.initiativeId)) {
+        uniqueInitiatives.set(item.initiative.initiativeId, {
+          initiative: item.initiative,
+          changeType: item.version ? (item.version.changeType || 'modified') : 'created',
+          changeDetails: item.version ? item.version.changeReason : 'Artifact originated in this initiative',
+          isOrigin: item.isOrigin
+        });
+      }
+    });
+
+    // Import required tables for CRs and locks
+    const { changeRequests, changeRequestApplications, changeRequestInterfaces, 
+            changeRequestTechnicalProcesses, changeRequestInternalActivities } = await import("@db/schema");
+
+    // Get related change requests based on artifact type
+    let relatedCRs = [];
+    if (artifactType === 'application') {
+      relatedCRs = await db.select({
+        cr: changeRequests,
+        impact: changeRequestApplications
+      })
+      .from(changeRequestApplications)
+      .innerJoin(changeRequests, eq(changeRequests.id, changeRequestApplications.changeRequestId))
+      .where(
+        and(
+          eq(changeRequestApplications.applicationId, artifactIdNum),
+          inArray(changeRequests.status, ['draft', 'submitted', 'under_review', 'approved', 'in_progress'])
+        )
+      );
+    } else if (artifactType === 'interface') {
+      relatedCRs = await db.select({
+        cr: changeRequests,
+        impact: changeRequestInterfaces
+      })
+      .from(changeRequestInterfaces)
+      .innerJoin(changeRequests, eq(changeRequests.id, changeRequestInterfaces.changeRequestId))
+      .where(
+        and(
+          eq(changeRequestInterfaces.interfaceId, artifactIdNum),
+          inArray(changeRequests.status, ['draft', 'submitted', 'under_review', 'approved', 'in_progress'])
+        )
+      );
+    } else if (artifactType === 'businessProcess') {
+      // Business processes don't have direct CR impact tracking in the current schema
+      relatedCRs = [];
+    } else if (artifactType === 'technicalProcess') {
+      relatedCRs = await db.select({
+        cr: changeRequests,
+        impact: changeRequestTechnicalProcesses
+      })
+      .from(changeRequestTechnicalProcesses)
+      .innerJoin(changeRequests, eq(changeRequests.id, changeRequestTechnicalProcesses.changeRequestId))
+      .where(
+        and(
+          eq(changeRequestTechnicalProcesses.technicalProcessId, artifactIdNum),
+          inArray(changeRequests.status, ['draft', 'submitted', 'under_review', 'approved', 'in_progress'])
+        )
+      );
+    } else if (artifactType === 'internal_process') {
+      relatedCRs = await db.select({
+        cr: changeRequests,
+        impact: changeRequestInternalActivities
+      })
+      .from(changeRequestInternalActivities)
+      .innerJoin(changeRequests, eq(changeRequests.id, changeRequestInternalActivities.changeRequestId))
+      .where(
+        and(
+          eq(changeRequestInternalActivities.internalActivityId, artifactIdNum),
+          inArray(changeRequests.status, ['draft', 'submitted', 'under_review', 'approved', 'in_progress'])
+        )
+      );
+    }
+
+    // Format change requests
+    const changeRequestsData = relatedCRs.map(({ cr, impact }) => ({
+      id: cr.id,
+      crNumber: cr.crNumber,
+      title: cr.title,
+      description: cr.description,
+      status: cr.status,
+      impactType: impact.impactType,
+      impactDescription: impact.impactDescription,
+      createdAt: cr.createdAt
+    }));
+
+    // Get artifact locks
+    const locks = await db.select({
+      lock: artifactLocks,
+      initiative: initiatives,
+      user: users
+    })
+    .from(artifactLocks)
+    .innerJoin(initiatives, eq(initiatives.initiativeId, artifactLocks.initiativeId))
+    .innerJoin(users, eq(users.id, artifactLocks.lockedBy))
+    .where(
+      and(
+        eq(artifactLocks.artifactType, artifactType),
+        eq(artifactLocks.artifactId, artifactIdNum),
+        sql`${artifactLocks.lockExpiry} IS NULL OR ${artifactLocks.lockExpiry} > NOW()`
+      )
+    );
+
+    const locksData = locks.map(({ lock, initiative, user }) => ({
+      initiativeId: lock.initiativeId,
+      initiativeName: initiative.name,
+      lockedBy: lock.lockedBy,
+      lockedByName: user.name,
+      lockedAt: lock.lockedAt
+    }));
+
+    res.json({
+      initiatives: Array.from(uniqueInitiatives.values()),
+      changeRequests: changeRequestsData,
+      locks: locksData
+    });
+  } catch (error) {
+    console.error("Error fetching artifact initiatives:", error);
+    res.status(500).json({ error: "Failed to fetch artifact initiative details" });
+  }
+});
+
 // Cancel initiative
 initiativesRouter.post("/:id/cancel", requireAuth, async (req, res) => {
   try {

@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ArtifactInitiativeTooltip } from "@/components/ui/artifact-initiative-tooltip";
 import { 
   Plus, 
   Edit, 
@@ -57,8 +58,9 @@ import {
   Copy,
   Eye,
   Lock,
-  Unlock
-, X} from "lucide-react";
+  Unlock,
+  X
+} from "lucide-react";
 import { Link } from "wouter";
 import {
   Tooltip,
@@ -106,18 +108,23 @@ interface BusinessProcess {
 }
 
 export default function InternalActivities() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const { currentInitiative, isProductionView } = useInitiative();
-  const { user } = useAuth();
-  const { isAdmin } = usePermissions();
+  try {
+    console.log('InternalActivities component rendering');
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
+    const { currentInitiative, isProductionView } = useInitiative();
+    const { user } = useAuth();
+    const { isAdmin } = usePermissions();
   
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedApplication, setSelectedApplication] = useState<string>("");
-  const [selectedActivityType, setSelectedActivityType] = useState<string>("");
-  const [selectedVersionState, setSelectedVersionState] = useState<string>("");
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [editingActivity, setEditingActivity] = useState<InternalActivity | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedActivity, setSelectedActivity] = useState<InternalActivity | null>(null);
+  const [deletingActivity, setDeletingActivity] = useState<InternalActivity | null>(null);
+  const [duplicatingActivity, setDuplicatingActivity] = useState<InternalActivity | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [applicationFilter, setApplicationFilter] = useState("all");
+  const [processFilter, setProcessFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [viewingActivity, setViewingActivity] = useState<any | null>(null);
   
   // Form state
@@ -133,19 +140,16 @@ export default function InternalActivities() {
     estimatedDurationMs: ""
   });
 
-  // Fetch internal activities
-  const { data: activities, isLoading } = useQuery<InternalActivity[]>({
-    queryKey: ["/api/internal-activities", selectedApplication, selectedActivityType, searchTerm],
+  // Fetch all data
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["internal-activities"],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (selectedApplication && selectedApplication !== "all") params.append("applicationId", selectedApplication);
-      if (selectedActivityType && selectedActivityType !== "all") params.append("activityType", selectedActivityType);
-      if (searchTerm) params.append("search", searchTerm);
-      
-      const response = await fetch(`/api/internal-activities?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch internal activities");
+      const response = await fetch("/api/internal-activities");
+      if (!response.ok) {
+        throw new Error("Failed to fetch internal activities");
+      }
       return response.json();
-    }
+    },
   });
 
   // Fetch locks for version control
@@ -193,25 +197,56 @@ export default function InternalActivities() {
     }
   });
 
-  // Apply version state filtering
-  const filteredActivities = React.useMemo(() => {
-    let filtered = activities || [];
-    
-    // Apply version state filter if in initiative mode
-    if (selectedVersionState && selectedVersionState !== "all" && currentInitiative && !isProductionView) {
-      filtered = filtered.filter((activity: any) => {
-        const activityState = getActivityState(activity);
-        return activityState.state === selectedVersionState;
-      });
-    }
-    
-    return filtered;
-  }, [activities, selectedVersionState, currentInitiative, isProductionView]);
+  // Transform data for display
+  const activities = data || [];
+  console.log('Raw activities data:', activities);
+  
+  let displayActivities = [];
+  try {
+    displayActivities = activities.map((item: any) => {
+      if (!item?.activity) {
+        console.error('Invalid activity item:', item);
+        return null;
+      }
+      return {
+        ...item.activity,
+        applicationName: item.application?.name || '',
+        businessProcessName: item.businessProcess?.businessProcess || ''
+      };
+    }).filter(Boolean);
+  } catch (err) {
+    console.error('Error transforming activities:', err);
+    displayActivities = [];
+  }
+  console.log('Display activities:', displayActivities);
+
+  // Filter activities
+  let filteredActivities = [];
+  try {
+    filteredActivities = displayActivities.filter((activity: InternalActivity & { applicationName: string; businessProcessName: string }) => {
+      if (!activity) return false;
+      
+      const matchesSearch = !searchQuery || 
+        activity.activityName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (activity.description && activity.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        activity.applicationName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        activity.businessProcessName?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesApplication = applicationFilter === "all" || activity.applicationId?.toString() === applicationFilter;
+      const matchesProcess = processFilter === "all" || activity.businessProcessId?.toString() === processFilter;
+      const matchesType = typeFilter === "all" || activity.activityType === typeFilter;
+
+      return matchesSearch && matchesApplication && matchesProcess && matchesType;
+    });
+  } catch (err) {
+    console.error('Error filtering activities:', err);
+    filteredActivities = [];
+  }
 
   // Initialize multi-select hook
   const multiSelect = useMultiSelect({
-    items: filteredActivities,
-    getItemId: (activity) => activity.activity.id,
+    items: filteredActivities || [],
+    getItemId: (activity) => activity?.id || 0,
   });
 
   // Helper function to check if activity is locked
@@ -228,13 +263,13 @@ export default function InternalActivities() {
 
   // Helper to get activity state for visual indicators
   const getActivityState = (activity: any): ArtifactState => {
-    const lock = isActivityLocked(activity.activity.id);
+    const lock = isActivityLocked(activity.id);
     // TODO: Add logic to detect initiative changes and conflicts
     const hasInitiativeChanges = false; // This would check if activity has versions in current initiative
     const hasConflicts = false; // This would check for version conflicts
     
     return getArtifactState(
-      activity.activity.id,
+      activity.id,
       'internal_process',
       lock,
       currentUser?.id,
@@ -255,9 +290,9 @@ export default function InternalActivities() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/internal-activities"] });
+      queryClient.invalidateQueries({ queryKey: ["internal-activities"] });
       toast({ title: "Success", description: "Internal activity created successfully" });
-      setIsCreateDialogOpen(false);
+      setCreateDialogOpen(false);
       resetForm();
     },
     onError: () => {
@@ -281,9 +316,10 @@ export default function InternalActivities() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/internal-activities"] });
+      queryClient.invalidateQueries({ queryKey: ["internal-activities"] });
       toast({ title: "Success", description: "Internal activity updated successfully" });
-      setEditingActivity(null);
+      setEditDialogOpen(false);
+      setSelectedActivity(null);
       resetForm();
     },
     onError: () => {
@@ -305,7 +341,7 @@ export default function InternalActivities() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/internal-activities"] });
+      queryClient.invalidateQueries({ queryKey: ["internal-activities"] });
       toast({ title: "Success", description: "Internal activity deleted successfully" });
     },
     onError: () => {
@@ -320,7 +356,7 @@ export default function InternalActivities() {
   // Version Control mutations
   const checkoutMutation = useMutation({
     mutationFn: async (activity: any) => {
-      const response = await api.post('/api/version-control/internal-activities/' + activity.activity.id + '/checkout', {
+      const response = await api.post('/api/version-control/internal-activities/' + activity.id + '/checkout', {
         initiativeId: currentInitiative?.initiativeId
       });
       return response.data;
@@ -329,7 +365,7 @@ export default function InternalActivities() {
       queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
       toast({
         title: "Activity checked out",
-        description: `${activity.activity.activityName} is now locked for editing in ${currentInitiative?.name}`
+        description: `${activity.activityName} is now locked for editing in ${currentInitiative?.name}`
       });
     },
     onError: (error: any) => {
@@ -343,19 +379,19 @@ export default function InternalActivities() {
 
   const checkinMutation = useMutation({
     mutationFn: async ({ activity, data }: { activity: any; data: any }) => {
-      const response = await api.post('/api/version-control/internal-activities/' + activity.activity.id + '/checkin', {
+      const response = await api.post('/api/version-control/internal-activities/' + activity.id + '/checkin', {
         initiativeId: currentInitiative?.initiativeId,
         data,
-        changeReason: `Updated ${activity.activity.activityName} via UI`
+        changeReason: `Updated ${activity.activityName} via UI`
       });
       return response.data;
     },
     onSuccess: (data, { activity }) => {
       queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/internal-activities'] });
+      queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
       toast({
         title: "Changes checked in",
-        description: `${activity.activity.activityName} has been updated in ${currentInitiative?.name}`
+        description: `${activity.activityName} has been updated in ${currentInitiative?.name}`
       });
     },
     onError: (error: any) => {
@@ -378,7 +414,7 @@ export default function InternalActivities() {
     },
     onSuccess: (data, activity) => {
       queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/internal-processs'] });
+      queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
       toast({
         title: "Checkout cancelled",
         description: `${activity.activityName} checkout has been cancelled and changes discarded`
@@ -416,59 +452,48 @@ export default function InternalActivities() {
       estimatedDurationMs: formData.estimatedDurationMs ? parseInt(formData.estimatedDurationMs) : null
     };
 
-    if (editingActivity) {
-      // Check if we're in initiative mode and activity is locked by current user
-      const lock = isActivityLocked(editingActivity.id);
+    if (selectedActivity) {
+      const lock = isActivityLocked(selectedActivity.id);
       if (currentInitiative && !isProductionView && lock?.lock.lockedBy === user?.id) {
         // Do checkin with the changes
-        const activityData = activities?.find((a: any) => a.activity.id === editingActivity.id);
+        const activityData = filteredActivities?.find((a: any) => a.id === selectedActivity.id);
         if (activityData) {
           checkinMutation.mutate({ activity: activityData, data });
-          setIsCreateDialogOpen(false);
-          setEditingActivity(null);
+          setEditDialogOpen(false);
+          setSelectedActivity(null);
           resetForm();
         }
       } else {
         // Regular update
-        updateMutation.mutate({ id: editingActivity.id, data });
+        updateMutation.mutate({ id: selectedActivity.id, data });
       }
     } else {
       createMutation.mutate(data);
     }
   };
 
-  const handleDuplicate = (activity: any) => {
-    const activityData = activity.activity;
-    setFormData({
-      applicationId: activityData.applicationId.toString(),
-      activityName: `${activityData.activityName} (Copy)`,
-      activityType: activityData.activityType,
-      description: activityData.description || "",
-      sequenceNumber: "",
-      businessProcessId: activityData.businessProcessId ? activityData.businessProcessId.toString() : "",
-      preCondition: activityData.preCondition || "",
-      postCondition: activityData.postCondition || "",
-      estimatedDurationMs: activityData.estimatedDurationMs ? activityData.estimatedDurationMs.toString() : ""
+  const handleDuplicateAndEdit = (activity: InternalActivity & { applicationName: string; businessProcessName: string }) => {
+    setDuplicatingActivity({
+      ...activity,
+      id: 0,
+      activityName: `${activity.activityName} (Copy)`
     });
-    setEditingActivity(null);
-    setIsCreateDialogOpen(true);
   };
 
-  const handleEdit = (activity: any) => {
-    const activityData = activity.activity;
+  const handleEdit = (activity: InternalActivity & { applicationName: string; businessProcessName: string }) => {
     setFormData({
-      applicationId: activityData.applicationId.toString(),
-      activityName: activityData.activityName,
-      activityType: activityData.activityType,
-      description: activityData.description || "",
-      sequenceNumber: activityData.sequenceNumber ? activityData.sequenceNumber.toString() : "",
-      businessProcessId: activityData.businessProcessId ? activityData.businessProcessId.toString() : "",
-      preCondition: activityData.preCondition || "",
-      postCondition: activityData.postCondition || "",
-      estimatedDurationMs: activityData.estimatedDurationMs ? activityData.estimatedDurationMs.toString() : ""
+      applicationId: activity.applicationId.toString(),
+      activityName: activity.activityName,
+      activityType: activity.activityType,
+      description: activity.description || "",
+      sequenceNumber: activity.sequenceNumber ? activity.sequenceNumber.toString() : "",
+      businessProcessId: activity.businessProcessId ? activity.businessProcessId.toString() : "",
+      preCondition: activity.preCondition || "",
+      postCondition: activity.postCondition || "",
+      estimatedDurationMs: activity.estimatedDurationMs ? activity.estimatedDurationMs.toString() : ""
     });
-    setEditingActivity(activityData);
-    setIsCreateDialogOpen(true);
+    setSelectedActivity(activity);
+    setEditDialogOpen(true);
   };
 
   const getActivityTypeIcon = (type: string) => {
@@ -493,6 +518,47 @@ export default function InternalActivities() {
     }
   };
 
+  // Initialize form data when duplicating
+  React.useEffect(() => {
+    try {
+      if (duplicatingActivity) {
+        setFormData({
+          applicationId: duplicatingActivity.applicationId?.toString() || "",
+          activityName: duplicatingActivity.activityName || "",
+          activityType: duplicatingActivity.activityType || "check",
+          description: duplicatingActivity.description || "",
+          sequenceNumber: "",
+          businessProcessId: duplicatingActivity.businessProcessId ? duplicatingActivity.businessProcessId.toString() : "",
+          preCondition: duplicatingActivity.preCondition || "",
+          postCondition: duplicatingActivity.postCondition || "",
+          estimatedDurationMs: duplicatingActivity.estimatedDurationMs ? duplicatingActivity.estimatedDurationMs.toString() : ""
+        });
+        setCreateDialogOpen(true);
+      }
+    } catch (err) {
+      console.error('Error in duplicating activity effect:', err);
+    }
+  }, [duplicatingActivity]);
+
+  if (error) {
+    console.error('Error loading internal activities:', error);
+    return (
+      <div className="flex flex-col h-screen bg-gray-900 items-center justify-center">
+        <div className="text-red-500">
+          <h2 className="text-xl font-bold mb-2">Error loading internal activities</h2>
+          <p>{error.message}</p>
+        </div>
+      </div>
+    );
+  }
+
+  console.log('Rendering with:', {
+    isLoading,
+    activitiesCount: activities.length,
+    displayActivitiesCount: displayActivities.length,
+    filteredCount: filteredActivities.length
+  });
+
   return (
     <div className="flex flex-col h-screen bg-gray-900">
       <header className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex-shrink-0">
@@ -512,286 +578,26 @@ export default function InternalActivities() {
               Manage self-referential activities within applications
             </p>
           </div>
-
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="h-4 w-4 mr-2" />
-                New Internal Activity
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-gray-800 text-white border-gray-700 max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingActivity ? "Edit Internal Activity" : "Create Internal Activity"}
-                </DialogTitle>
-                <DialogDescription className="text-gray-400">
-                  Define an internal activity that occurs within an application
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="grid grid-cols-2 gap-4 mt-4">
-                <div>
-                  <Label>Application</Label>
-                  <Select 
-                    value={formData.applicationId} 
-                    onValueChange={(value) => setFormData({ ...formData, applicationId: value })}
-                  >
-                    <SelectTrigger className="bg-gray-700 border-gray-600">
-                      <SelectValue placeholder="Select application" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-700 border-gray-600">
-                      {applications?.map((app) => (
-                        <SelectItem key={app.id} value={app.id.toString()}>
-                          {app.amlNumber} - {app.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Activity Type</Label>
-                  <Select 
-                    value={formData.activityType} 
-                    onValueChange={(value) => setFormData({ ...formData, activityType: value })}
-                  >
-                    <SelectTrigger className="bg-gray-700 border-gray-600">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-700 border-gray-600">
-                      <SelectItem value="check">Check</SelectItem>
-                      <SelectItem value="validate">Validate</SelectItem>
-                      <SelectItem value="transform">Transform</SelectItem>
-                      <SelectItem value="compute">Compute</SelectItem>
-                      <SelectItem value="decide">Decide</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="col-span-2">
-                  <Label>Activity Name</Label>
-                  <Input
-                    value={formData.activityName}
-                    onChange={(e) => setFormData({ ...formData, activityName: e.target.value })}
-                    className="bg-gray-700 border-gray-600"
-                    placeholder="e.g., Check Reservation ID"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <Label>Description</Label>
-                  <Textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="bg-gray-700 border-gray-600"
-                    rows={3}
-                  />
-                </div>
-
-                <div>
-                  <Label>Pre-Condition</Label>
-                  <Input
-                    value={formData.preCondition}
-                    onChange={(e) => setFormData({ ...formData, preCondition: e.target.value })}
-                    className="bg-gray-700 border-gray-600"
-                    placeholder="e.g., order.status === 'pending'"
-                  />
-                </div>
-
-                <div>
-                  <Label>Post-Condition</Label>
-                  <Input
-                    value={formData.postCondition}
-                    onChange={(e) => setFormData({ ...formData, postCondition: e.target.value })}
-                    className="bg-gray-700 border-gray-600"
-                    placeholder="e.g., reservation.id !== null"
-                  />
-                </div>
-
-                <div>
-                  <Label>Sequence Number</Label>
-                  <Input
-                    type="number"
-                    value={formData.sequenceNumber}
-                    onChange={(e) => setFormData({ ...formData, sequenceNumber: e.target.value })}
-                    className="bg-gray-700 border-gray-600"
-                  />
-                </div>
-
-                <div>
-                  <Label>Estimated Duration (ms)</Label>
-                  <Input
-                    type="number"
-                    value={formData.estimatedDurationMs}
-                    onChange={(e) => setFormData({ ...formData, estimatedDurationMs: e.target.value })}
-                    className="bg-gray-700 border-gray-600"
-                    placeholder="e.g., 500"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <Label>Business Process (Optional)</Label>
-                  <Select 
-                    value={formData.businessProcessId} 
-                    onValueChange={(value) => setFormData({ ...formData, businessProcessId: value })}
-                  >
-                    <SelectTrigger className="bg-gray-700 border-gray-600">
-                      <SelectValue placeholder="Select business process" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-gray-700 border-gray-600">
-                      <SelectItem value="none">None</SelectItem>
-                      {businessProcesses?.map((bp) => (
-                        <SelectItem key={bp.id} value={bp.id.toString()}>
-                          {bp.businessProcess} ({bp.lob})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 mt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsCreateDialogOpen(false);
-                    setEditingActivity(null);
-                    resetForm();
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={!formData.applicationId || !formData.activityName}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {editingActivity ? "Update" : "Create"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* View Details Dialog */}
-          <Dialog open={!!viewingActivity} onOpenChange={() => setViewingActivity(null)}>
-            <DialogContent className="bg-gray-800 text-white border-gray-700 max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Internal Activity Details</DialogTitle>
-                <DialogDescription>
-                  View detailed information about this internal activity
-                </DialogDescription>
-              </DialogHeader>
-              
-              {viewingActivity && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-gray-300">Activity Name</Label>
-                      <p className="text-white font-medium">{viewingActivity.activity.activityName}</p>
-                    </div>
-                    <div>
-                      <Label className="text-gray-300">Application</Label>
-                      <p className="text-white">{viewingActivity.application?.name || 'N/A'}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-gray-300">Activity Type</Label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge className={`${getActivityTypeColor(viewingActivity.activity.activityType)} text-white`}>
-                          <span className="mr-1">{getActivityTypeIcon(viewingActivity.activity.activityType)}</span>
-                          {viewingActivity.activity.activityType}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-gray-300">Sequence Number</Label>
-                      <p className="text-white">{viewingActivity.activity.sequenceNumber || 'Not set'}</p>
-                    </div>
-                  </div>
-
-                  {viewingActivity.activity.description && (
-                    <div>
-                      <Label className="text-gray-300">Description</Label>
-                      <p className="text-white">{viewingActivity.activity.description}</p>
-                    </div>
-                  )}
-
-                  {viewingActivity.businessProcess && (
-                    <div>
-                      <Label className="text-gray-300">Business Process</Label>
-                      <p className="text-white">{viewingActivity.businessProcess.businessProcess} ({viewingActivity.businessProcess.lob})</p>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-gray-300">Pre-Condition</Label>
-                      <p className="text-white font-mono text-sm bg-gray-700 p-2 rounded">
-                        {viewingActivity.activity.preCondition || 'None'}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-gray-300">Post-Condition</Label>
-                      <p className="text-white font-mono text-sm bg-gray-700 p-2 rounded">
-                        {viewingActivity.activity.postCondition || 'None'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {viewingActivity.activity.estimatedDurationMs && (
-                    <div>
-                      <Label className="text-gray-300">Estimated Duration</Label>
-                      <div className="flex items-center gap-1 text-white">
-                        <Clock className="h-4 w-4" />
-                        {viewingActivity.activity.estimatedDurationMs}ms
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-4 text-sm text-gray-400">
-                    <div>
-                      <Label className="text-gray-400">Created</Label>
-                      <p>{new Date(viewingActivity.activity.createdAt).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <Label className="text-gray-400">Last Updated</Label>
-                      <p>{new Date(viewingActivity.activity.updatedAt).toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-3 mt-6">
-                <Button
-                  variant="outline"
-                  onClick={() => setViewingActivity(null)}
-                  className="border-gray-600 text-gray-300 hover:bg-gray-700"
-                >
-                  Close
-                </Button>
-                <Button
-                  onClick={() => {
-                    handleEdit(viewingActivity);
-                    setViewingActivity(null);
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button
+            onClick={() => setCreateDialogOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Internal Activity
+          </Button>
         </div>
       </header>
 
       <div className="flex-1 overflow-auto">
         <div className="p-6">
           {/* View Mode Indicator */}
-          {currentInitiative && <ViewModeIndicator />}
+          {currentInitiative && (
+            <div className="mb-4">
+              {/* Temporarily disabled ViewModeIndicator to debug */}
+              {/* <ViewModeIndicator /> */}
+              <div className="text-white">Initiative: {currentInitiative?.name}</div>
+            </div>
+          )}
           
           {/* Filters */}
           <Card className="bg-gray-800 border-gray-700 mb-6 mt-4">
@@ -804,15 +610,15 @@ export default function InternalActivities() {
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
                     placeholder="Search activities..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10 bg-gray-700 border-gray-600"
                   />
                 </div>
 
                 <Select 
-                  value={selectedApplication} 
-                  onValueChange={setSelectedApplication}
+                  value={applicationFilter} 
+                  onValueChange={setApplicationFilter}
                 >
                   <SelectTrigger className="bg-gray-700 border-gray-600">
                     <SelectValue placeholder="All Applications" />
@@ -828,8 +634,8 @@ export default function InternalActivities() {
                 </Select>
 
                 <Select 
-                  value={selectedActivityType} 
-                  onValueChange={setSelectedActivityType}
+                  value={typeFilter} 
+                  onValueChange={setTypeFilter}
                 >
                   <SelectTrigger className="bg-gray-700 border-gray-600">
                     <SelectValue placeholder="All Activity Types" />
@@ -845,19 +651,19 @@ export default function InternalActivities() {
                 </Select>
 
                 <Select 
-                  value={selectedVersionState} 
-                  onValueChange={setSelectedVersionState}
+                  value={processFilter} 
+                  onValueChange={setProcessFilter}
                 >
                   <SelectTrigger className="bg-gray-700 border-gray-600">
-                    <SelectValue placeholder="All Version States" />
+                    <SelectValue placeholder="All Business Processes" />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-700 border-gray-600">
-                    <SelectItem value="all">All Version States</SelectItem>
-                    <SelectItem value="production">Production Baseline</SelectItem>
-                    <SelectItem value="checked_out_me">Checked Out by Me</SelectItem>
-                    <SelectItem value="checked_out_other">Locked by Others</SelectItem>
-                    <SelectItem value="initiative_changes">Initiative Changes</SelectItem>
-                    <SelectItem value="conflicted">Conflicted</SelectItem>
+                    <SelectItem value="all">All Business Processes</SelectItem>
+                    {businessProcesses?.map((bp) => (
+                      <SelectItem key={bp.id} value={bp.id.toString()}>
+                        {bp.businessProcess} ({bp.lob})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -879,7 +685,7 @@ export default function InternalActivities() {
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        const selectedIds = multiSelect.selectedItems.map(activity => activity.activity.id);
+                        const selectedIds = multiSelect.selectedItems.map(activity => activity.id);
                         selectedIds.forEach(id => deleteMutation.mutate(id));
                         multiSelect.clearSelection();
                       }}
@@ -911,9 +717,9 @@ export default function InternalActivities() {
                   <TableRow className="border-gray-700">
                     <TableHead className="w-12">
                       <Checkbox
-                        checked={activities?.length > 0 && multiSelect.selectedItems.length === activities.length}
+                        checked={filteredActivities?.length > 0 && multiSelect.selectedItems.length === filteredActivities.length}
                         onCheckedChange={(checked) => {
-                          if (checked) {
+                          if (checked && filteredActivities?.length > 0) {
                             multiSelect.selectAll();
                           } else {
                             multiSelect.clearSelection();
@@ -936,19 +742,19 @@ export default function InternalActivities() {
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-gray-400">
+                      <TableCell colSpan={10} className="text-center text-gray-400">
                         Loading...
                       </TableCell>
                     </TableRow>
                   ) : filteredActivities?.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center text-gray-400">
+                      <TableCell colSpan={10} className="text-center text-gray-400">
                         No internal activities found
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredActivities?.map((activity: any) => (
-                      <ContextMenu key={activity.activity.id}>
+                    filteredActivities?.map((activity: InternalActivity & { applicationName: string; businessProcessName: string }) => (
+                      <ContextMenu key={activity.id}>
                         <ContextMenuTrigger asChild>
                           <TableRow className={getRowClassName(getActivityState(activity), multiSelect.isSelected(activity))}>
                             <TableCell className="w-12">
@@ -956,58 +762,49 @@ export default function InternalActivities() {
                                 checked={multiSelect.isSelected(activity)}
                                 onCheckedChange={() => multiSelect.toggleSelection(activity)}
                                 onClick={(e) => e.stopPropagation()}
-                                aria-label={`Select activity ${activity.activity.activityName}`}
+                                aria-label={`Select activity ${activity.activityName}`}
                               />
                             </TableCell>
                             <TableCell className="text-white font-medium">
-                          <div className="flex items-center space-x-2">
-                            <Activity className="h-4 w-4 text-green-600" />
-                            <span>{activity.activity.activityName}</span>
-                            <ArtifactStatusIndicator 
-                              state={getActivityState(activity)} 
-                              initiativeName={currentInitiative?.name}
-                            />
-                            <ArtifactStatusBadge 
-                              state={getActivityState(activity)} 
-                              showIcon={false}
-                              showText={true}
-                              size="sm"
-                            />
-                          </div>
-                          {activity.activity.description && (
-                            <p className="text-sm text-gray-400 mt-1">
-                              {activity.activity.description}
-                            </p>
-                          )}
+                            <div className="flex items-center space-x-2">
+                              <Activity className="h-4 w-4 text-green-600" />
+                              <span>{activity.activityName}</span>
+                            </div>
+                            {activity.description && (
+                              <p className="text-sm text-gray-400 mt-1">
+                                {activity.description}
+                              </p>
+                            )}
                         </TableCell>
                         <TableCell className="text-gray-300">
-                          {activity.application?.name}
+                          {activity.applicationName}
                         </TableCell>
                         <TableCell>
-                          <Badge className={`${getActivityTypeColor(activity.activity.activityType)} text-white`}>
-                            <span className="mr-1">{getActivityTypeIcon(activity.activity.activityType)}</span>
-                            {activity.activity.activityType}
+                          <Badge className={`${getActivityTypeColor(activity.activityType)} text-white`}>
+                            <span className="mr-1">{getActivityTypeIcon(activity.activityType)}</span>
+                            {activity.activityType}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-gray-300">
-                          {activity.activity.sequenceNumber || '-'}
+                          {activity.sequenceNumber || '-'}
                         </TableCell>
                         <TableCell className="text-gray-300">
-                          {activity.activity.estimatedDurationMs ? (
+                          {activity.estimatedDurationMs ? (
                             <div className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {activity.activity.estimatedDurationMs}ms
+                              {activity.estimatedDurationMs}ms
                             </div>
                           ) : '-'}
                         </TableCell>
                         <TableCell className="text-gray-300 text-sm">
-                          {activity.activity.preCondition || '-'}
+                          {activity.preCondition || '-'}
                         </TableCell>
                         <TableCell className="text-gray-300 text-sm">
-                          {activity.activity.postCondition || '-'}
+                          {activity.postCondition || '-'}
                         </TableCell>
                         <TableCell>
-                          <StatusColumn state={getActivityState(activity)} />
+                          {/* Temporarily disabled StatusColumn */}
+                          <span className="text-gray-400">-</span>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -1022,7 +819,7 @@ export default function InternalActivities() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => deleteMutation.mutate(activity.activity.id)}
+                              onClick={() => deleteMutation.mutate(activity.id)}
                               className="text-red-400 hover:text-red-300"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -1047,7 +844,7 @@ export default function InternalActivities() {
                             Edit
                           </ContextMenuItem>
                           <ContextMenuItem
-                            onClick={() => handleDuplicate(activity)}
+                            onClick={() => handleDuplicateAndEdit(activity)}
                             className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
                           >
                             <Copy className="h-4 w-4 mr-2" />
@@ -1059,7 +856,7 @@ export default function InternalActivities() {
                             <>
                               <ContextMenuSeparator className="bg-gray-600" />
                               {(() => {
-                                const lock = isActivityLocked(activity.activity.id);
+                                const lock = isActivityLocked(activity.id);
                                 const isLockedByMe = lock?.lock.lockedBy === currentUser?.id || isAdmin;
                                 const isLockedByOther = lock && !isLockedByMe;
                                 
@@ -1083,15 +880,15 @@ export default function InternalActivities() {
                                         <ContextMenuItem 
                                           onClick={() => {
                                             const data = {
-                                              applicationId: activity.activity.applicationId,
-                                              activityName: activity.activity.activityName,
-                                              activityType: activity.activity.activityType,
-                                              description: activity.activity.description,
-                                              sequenceNumber: activity.activity.sequenceNumber,
-                                              businessProcessId: activity.activity.businessProcessId,
-                                              preCondition: activity.activity.preCondition,
-                                              postCondition: activity.activity.postCondition,
-                                              estimatedDurationMs: activity.activity.estimatedDurationMs
+                                              applicationId: activity.applicationId,
+                                              activityName: activity.activityName,
+                                              activityType: activity.activityType,
+                                              description: activity.description,
+                                              sequenceNumber: activity.sequenceNumber,
+                                              businessProcessId: activity.businessProcessId,
+                                              preCondition: activity.preCondition,
+                                              postCondition: activity.postCondition,
+                                              estimatedDurationMs: activity.estimatedDurationMs
                                             };
                                             checkinMutation.mutate({ activity, data });
                                           }}
@@ -1124,7 +921,7 @@ export default function InternalActivities() {
                           
                           <ContextMenuSeparator className="bg-gray-600" />
                           <ContextMenuItem
-                            onClick={() => deleteMutation.mutate(activity.activity.id)}
+                            onClick={() => deleteMutation.mutate(activity.id)}
                             className="text-red-400 hover:bg-gray-700 focus:bg-gray-700"
                           >
                             <Trash2 className="h-4 w-4 mr-2" />
@@ -1141,6 +938,296 @@ export default function InternalActivities() {
           </Card>
         </div>
       </div>
+
+      {/* Create/Edit Dialog */}
+      <Dialog open={createDialogOpen || editDialogOpen || !!duplicatingActivity} onOpenChange={(open) => {
+        if (!open) {
+          setCreateDialogOpen(false);
+          setEditDialogOpen(false);
+          setDuplicatingActivity(null);
+          setSelectedActivity(null);
+          resetForm();
+        }
+      }}>
+        <DialogContent className="bg-gray-800 text-white border-gray-700 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedActivity ? "Edit Internal Activity" : duplicatingActivity ? "Duplicate Internal Activity" : "Create Internal Activity"}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Define an internal activity that occurs within an application
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            <div>
+              <Label>Application</Label>
+              <Select 
+                value={formData.applicationId} 
+                onValueChange={(value) => setFormData({ ...formData, applicationId: value })}
+              >
+                <SelectTrigger className="bg-gray-700 border-gray-600">
+                  <SelectValue placeholder="Select application" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600">
+                  {applications?.map((app) => (
+                    <SelectItem key={app.id} value={app.id.toString()}>
+                      {app.amlNumber} - {app.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Activity Type</Label>
+              <Select 
+                value={formData.activityType} 
+                onValueChange={(value) => setFormData({ ...formData, activityType: value })}
+              >
+                <SelectTrigger className="bg-gray-700 border-gray-600">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600">
+                  <SelectItem value="check">Check</SelectItem>
+                  <SelectItem value="validate">Validate</SelectItem>
+                  <SelectItem value="transform">Transform</SelectItem>
+                  <SelectItem value="compute">Compute</SelectItem>
+                  <SelectItem value="decide">Decide</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="col-span-2">
+              <Label>Activity Name</Label>
+              <Input
+                value={formData.activityName}
+                onChange={(e) => setFormData({ ...formData, activityName: e.target.value })}
+                className="bg-gray-700 border-gray-600"
+                placeholder="e.g., Check Reservation ID"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label>Description</Label>
+              <Textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className="bg-gray-700 border-gray-600"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <Label>Pre-Condition</Label>
+              <Input
+                value={formData.preCondition}
+                onChange={(e) => setFormData({ ...formData, preCondition: e.target.value })}
+                className="bg-gray-700 border-gray-600"
+                placeholder="e.g., order.status === 'pending'"
+              />
+            </div>
+
+            <div>
+              <Label>Post-Condition</Label>
+              <Input
+                value={formData.postCondition}
+                onChange={(e) => setFormData({ ...formData, postCondition: e.target.value })}
+                className="bg-gray-700 border-gray-600"
+                placeholder="e.g., reservation.id !== null"
+              />
+            </div>
+
+            <div>
+              <Label>Sequence Number</Label>
+              <Input
+                type="number"
+                value={formData.sequenceNumber}
+                onChange={(e) => setFormData({ ...formData, sequenceNumber: e.target.value })}
+                className="bg-gray-700 border-gray-600"
+              />
+            </div>
+
+            <div>
+              <Label>Estimated Duration (ms)</Label>
+              <Input
+                type="number"
+                value={formData.estimatedDurationMs}
+                onChange={(e) => setFormData({ ...formData, estimatedDurationMs: e.target.value })}
+                className="bg-gray-700 border-gray-600"
+                placeholder="e.g., 500"
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label>Business Process (Optional)</Label>
+              <Select 
+                value={formData.businessProcessId} 
+                onValueChange={(value) => setFormData({ ...formData, businessProcessId: value })}
+              >
+                <SelectTrigger className="bg-gray-700 border-gray-600">
+                  <SelectValue placeholder="Select business process" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-700 border-gray-600">
+                  <SelectItem value="none">None</SelectItem>
+                  {businessProcesses?.map((bp) => (
+                    <SelectItem key={bp.id} value={bp.id.toString()}>
+                      {bp.businessProcess} ({bp.lob})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreateDialogOpen(false);
+                setEditDialogOpen(false);
+                setDuplicatingActivity(null);
+                setSelectedActivity(null);
+                resetForm();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={!formData.applicationId || !formData.activityName}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {selectedActivity ? "Update" : "Create"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* View Details Dialog */}
+      <Dialog open={!!viewingActivity} onOpenChange={() => setViewingActivity(null)}>
+        <DialogContent className="bg-gray-800 text-white border-gray-700 max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Internal Activity Details</DialogTitle>
+            <DialogDescription>
+              View detailed information about this internal activity
+            </DialogDescription>
+          </DialogHeader>
+          
+          {viewingActivity && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-300">Activity Name</Label>
+                  <p className="text-white font-medium">{viewingActivity.activityName}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-300">Application</Label>
+                  <p className="text-white">{viewingActivity.applicationName || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-300">Activity Type</Label>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Badge className={`${getActivityTypeColor(viewingActivity.activityType)} text-white`}>
+                      <span className="mr-1">{getActivityTypeIcon(viewingActivity.activityType)}</span>
+                      {viewingActivity.activityType}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-gray-300">Sequence Number</Label>
+                  <p className="text-white">{viewingActivity.sequenceNumber || 'Not set'}</p>
+                </div>
+              </div>
+
+              {viewingActivity.description && (
+                <div>
+                  <Label className="text-gray-300">Description</Label>
+                  <p className="text-white">{viewingActivity.description}</p>
+                </div>
+              )}
+
+              {viewingActivity.businessProcessName && (
+                <div>
+                  <Label className="text-gray-300">Business Process</Label>
+                  <p className="text-white">{viewingActivity.businessProcessName}</p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-gray-300">Pre-Condition</Label>
+                  <p className="text-white font-mono text-sm bg-gray-700 p-2 rounded">
+                    {viewingActivity.preCondition || 'None'}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-gray-300">Post-Condition</Label>
+                  <p className="text-white font-mono text-sm bg-gray-700 p-2 rounded">
+                    {viewingActivity.postCondition || 'None'}
+                  </p>
+                </div>
+              </div>
+
+              {viewingActivity.estimatedDurationMs && (
+                <div>
+                  <Label className="text-gray-300">Estimated Duration</Label>
+                  <div className="flex items-center gap-1 text-white">
+                    <Clock className="h-4 w-4" />
+                    {viewingActivity.estimatedDurationMs}ms
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 text-sm text-gray-400">
+                <div>
+                  <Label className="text-gray-400">Created</Label>
+                  <p>{new Date(viewingActivity.createdAt).toLocaleString()}</p>
+                </div>
+                <div>
+                  <Label className="text-gray-400">Last Updated</Label>
+                  <p>{new Date(viewingActivity.updatedAt).toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setViewingActivity(null)}
+              className="border-gray-600 text-gray-300 hover:bg-gray-700"
+            >
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                handleEdit(viewingActivity);
+                setViewingActivity(null);
+              }}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+  } catch (error) {
+    console.error('Error in InternalActivities component:', error);
+    return (
+      <div className="flex flex-col h-screen bg-gray-900 items-center justify-center">
+        <div className="text-red-500">
+          <h2 className="text-xl font-bold mb-2">Component Error</h2>
+          <p>{error?.message || 'An unexpected error occurred'}</p>
+          <pre className="mt-4 text-xs">{error?.stack}</pre>
+        </div>
+      </div>
+    );
+  }
 }

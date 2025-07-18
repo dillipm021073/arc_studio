@@ -45,6 +45,7 @@ import { DataFilter, FilterCondition, FilterColumn, applyFilters } from "@/compo
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { ArtifactInitiativeTooltip } from "@/components/ui/artifact-initiative-tooltip";
 import { 
   Plus, 
   Search, 
@@ -911,20 +912,26 @@ export default function Interfaces() {
                   return (
                     <>
                       <TableCell className="font-medium text-white">
-                        <div className="flex items-center space-x-2">
-                          <Plug className="h-4 w-4 text-green-600" />
-                          <span>{interface_.imlNumber}</span>
-                          <ArtifactStatusIndicator 
-                            state={getInterfaceState(interface_)} 
-                            initiativeName={currentInitiative?.name}
-                          />
-                          <ArtifactStatusBadge 
-                            state={getInterfaceState(interface_)} 
-                            showIcon={false}
-                            showText={true}
-                            size="sm"
-                          />
-                        </div>
+                        <ArtifactInitiativeTooltip
+                          artifactType="interface"
+                          artifactId={interface_.id}
+                          artifactState={interface_.artifactState}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Plug className="h-4 w-4 text-green-600" />
+                            <span>{interface_.imlNumber}</span>
+                            <ArtifactStatusIndicator 
+                              state={getInterfaceState(interface_)} 
+                              initiativeName={currentInitiative?.name}
+                            />
+                            <ArtifactStatusBadge 
+                              state={getInterfaceState(interface_)} 
+                              showIcon={false}
+                              showText={true}
+                              size="sm"
+                            />
+                          </div>
+                        </ArtifactInitiativeTooltip>
                       </TableCell>
                       <TableCell className="text-gray-300">
                         <div className="max-w-[250px] break-words whitespace-pre-wrap">

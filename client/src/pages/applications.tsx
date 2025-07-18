@@ -52,6 +52,7 @@ import CapabilitiesUploadDialog from "@/components/applications/capabilities-upl
 import CommunicationBadge from "@/components/communications/communication-badge";
 import { DecommissionWarningModal } from "@/components/modals/decommission-warning-modal";
 import { LockConflictDialog } from "@/components/version-control/lock-conflict-dialog";
+import { ArtifactInitiativeTooltip } from "@/components/ui/artifact-initiative-tooltip";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -317,7 +318,13 @@ export default function Applications() {
       id: 0, // New application will get a new ID
       name: `${app.name} (Copy)`,
       firstActiveDate: new Date().toISOString().split('T')[0],
-      lastChangeDate: new Date().toISOString().split('T')[0]
+      lastChangeDate: new Date().toISOString().split('T')[0],
+      // When duplicating within an initiative, set proper status and artifactState
+      ...(currentInitiative && !isProductionView ? {
+        status: "active", // Keep status as active
+        artifactState: "pending", // Set artifactState to pending for initiative
+        initiativeOrigin: currentInitiative.initiativeId
+      } : {})
     };
     setDuplicatingApp(duplicatedApp);
   };
@@ -1161,20 +1168,26 @@ export default function Applications() {
                         </TableCell>
                         <TableCell className="text-gray-300 font-mono">{app.amlNumber}</TableCell>
                         <TableCell className="font-medium text-white">
-                          <div className="flex items-center space-x-2">
-                            <Box className="h-4 w-4 text-blue-500" />
-                            <span>{app.name}</span>
-                            <ArtifactStatusIndicator 
-                              state={getApplicationState(app)} 
-                              initiativeName={currentInitiative?.name}
-                            />
-                            <ArtifactStatusBadge 
-                              state={getApplicationState(app)} 
-                              showIcon={false}
-                              showText={true}
-                              size="sm"
-                            />
-                          </div>
+                          <ArtifactInitiativeTooltip
+                            artifactType="application"
+                            artifactId={app.id}
+                            artifactState={app.artifactState}
+                          >
+                            <div className="flex items-center space-x-2">
+                              <Box className="h-4 w-4 text-blue-500" />
+                              <span>{app.name}</span>
+                              <ArtifactStatusIndicator 
+                                state={getApplicationState(app)} 
+                                initiativeName={currentInitiative?.name}
+                              />
+                              <ArtifactStatusBadge 
+                                state={getApplicationState(app)} 
+                                showIcon={false}
+                                showText={true}
+                                size="sm"
+                              />
+                            </div>
+                          </ArtifactInitiativeTooltip>
                         </TableCell>
                         <TableCell className="text-gray-300">{app.lob || '-'}</TableCell>
                         <TableCell className="text-gray-300">{app.os}</TableCell>

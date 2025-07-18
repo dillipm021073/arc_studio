@@ -19,6 +19,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { ArtifactInitiativeTooltip } from "@/components/ui/artifact-initiative-tooltip";
 import { 
   Plus, 
   Search, 
@@ -601,37 +602,43 @@ export default function TechnicalProcesses() {
                         />
                       </TableCell>
                       <TableCell className="font-medium text-white">
-                        <div className="flex items-center space-x-2">
-                          <Cpu className="h-4 w-4 text-purple-600" />
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span 
-                                  className="hover:text-purple-400 transition-colors cursor-pointer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setViewingProcess(process);
-                                  }}
-                                >
-                                  {process.name}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="max-w-xs">{process.description || "No description"}</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          <ArtifactStatusIndicator 
-                            state={getProcessState(process)} 
-                            initiativeName={currentInitiative?.name}
-                          />
-                          <ArtifactStatusBadge 
-                            state={getProcessState(process)} 
-                            showIcon={false}
-                            showText={true}
-                            size="sm"
-                          />
-                        </div>
+                        <ArtifactInitiativeTooltip
+                          artifactType="technicalProcess"
+                          artifactId={process.id}
+                          artifactState={process.artifactState}
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Cpu className="h-4 w-4 text-purple-600" />
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span 
+                                    className="hover:text-purple-400 transition-colors cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setViewingProcess(process);
+                                    }}
+                                  >
+                                    {process.name}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-xs">{process.description || "No description"}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <ArtifactStatusIndicator 
+                              state={getProcessState(process)} 
+                              initiativeName={currentInitiative?.name}
+                            />
+                            <ArtifactStatusBadge 
+                              state={getProcessState(process)} 
+                              showIcon={false}
+                              showText={true}
+                              size="sm"
+                            />
+                          </div>
+                        </ArtifactInitiativeTooltip>
                       </TableCell>
                       <TableCell className="text-gray-300">{process.jobName}</TableCell>
                       <TableCell className="text-gray-300">

@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { ArtifactInitiativeTooltip } from "@/components/ui/artifact-initiative-tooltip";
 import BusinessProcessForm from "@/components/business-processes/business-process-form";
 import ChildBusinessProcessForm from "@/components/business-processes/child-business-process-form";
 import HierarchyHtmlEditor from "@/components/business-processes/hierarchy-html-editor";
@@ -905,34 +906,40 @@ export default function BusinessProcesses() {
                         />
                       </TableCell>
                       <TableCell className="font-medium text-white">
-                        <div 
-                          className="flex items-center space-x-2" 
-                          style={{ paddingLeft: `${(bp.indentLevel || 0) * 24}px` }}
+                        <ArtifactInitiativeTooltip
+                          artifactType="businessProcess"
+                          artifactId={bp.id}
+                          artifactState={bp.artifactState}
                         >
-                          {bp.indentLevel > 0 && (
-                            <span className="text-gray-500 mr-1">└─</span>
-                          )}
-                          {(() => {
-                            const ProcessIcon = getProcessLevelIcon(bp.level);
-                            return (
-                              <ProcessIcon 
-                                {...getProcessIconProps("h-4 w-4 text-blue-600")} 
-                                aria-label={getProcessLevelDescription(bp.level)}
-                              />
-                            );
-                          })()}
-                          <span className={bp.indentLevel > 0 ? "text-gray-200" : ""}>{bp.businessProcess}</span>
-                          <ArtifactStatusIndicator 
-                            state={getBusinessProcessState(bp)} 
-                            initiativeName={currentInitiative?.name}
-                          />
-                          <ArtifactStatusBadge 
-                            state={getBusinessProcessState(bp)} 
-                            showIcon={false}
-                            showText={true}
-                            size="sm"
-                          />
-                        </div>
+                          <div 
+                            className="flex items-center space-x-2" 
+                            style={{ paddingLeft: `${(bp.indentLevel || 0) * 24}px` }}
+                          >
+                            {bp.indentLevel > 0 && (
+                              <span className="text-gray-500 mr-1">└─</span>
+                            )}
+                            {(() => {
+                              const ProcessIcon = getProcessLevelIcon(bp.level);
+                              return (
+                                <ProcessIcon 
+                                  {...getProcessIconProps("h-4 w-4 text-blue-600")} 
+                                  aria-label={getProcessLevelDescription(bp.level)}
+                                />
+                              );
+                            })()}
+                            <span className={bp.indentLevel > 0 ? "text-gray-200" : ""}>{bp.businessProcess}</span>
+                            <ArtifactStatusIndicator 
+                              state={getBusinessProcessState(bp)} 
+                              initiativeName={currentInitiative?.name}
+                            />
+                            <ArtifactStatusBadge 
+                              state={getBusinessProcessState(bp)} 
+                              showIcon={false}
+                              showText={true}
+                              size="sm"
+                            />
+                          </div>
+                        </ArtifactInitiativeTooltip>
                       </TableCell>
                   <TableCell className="text-gray-300">{bp.lob}</TableCell>
                   <TableCell className="text-gray-300">{bp.product}</TableCell>
