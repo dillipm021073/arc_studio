@@ -1218,4 +1218,141 @@ router.delete("/folders/:folderPath", async (req, res) => {
   }
 });
 
+// API Test Proxy Endpoint
+router.post("/test-api", async (req, res) => {
+  try {
+    const { method, url, headers, body, protocol } = req.body;
+    
+    // Validate input
+    if (!url || !method) {
+      return res.status(400).json({ error: "URL and method are required" });
+    }
+    
+    // Security: Validate URL to prevent SSRF
+    try {
+      const parsedUrl = new URL(url);
+      
+      // Block internal/private IPs in production only
+      const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+      if (process.env.NODE_ENV === 'production' && blockedHosts.includes(parsedUrl.hostname)) {
+        return res.status(400).json({ error: "Testing against localhost is not allowed in production" });
+      }
+      
+      // Only allow HTTP/HTTPS protocols
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        return res.status(400).json({ error: "Only HTTP/HTTPS protocols are supported" });
+      }
+    } catch (urlError) {
+      return res.status(400).json({ error: "Invalid URL format" });
+    }
+    
+    // Handle SOAP requests differently
+    if (protocol === 'SOAP') {
+      // For SOAP, we expect XML body and specific headers
+      const soapHeaders = {
+        'Content-Type': 'text/xml; charset=utf-8',
+        'SOAPAction': headers['SOAPAction'] || '',
+        ...headers
+      };
+      
+      try {
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: soapHeaders,
+          body: body,
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        const responseData = await response.text();
+        const responseHeaders: Record<string, string> = {};
+        response.headers.forEach((value, key) => {
+          responseHeaders[key] = value;
+        });
+        
+        res.json({
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders,
+          data: responseData,
+          isXml: true
+        });
+      } catch (fetchError: any) {
+        if (fetchError.name === 'AbortError') {
+          return res.status(408).json({ error: "Request timeout (30s)" });
+        }
+        return res.status(500).json({ error: fetchError.message || "Failed to make SOAP request" });
+      }
+    } else {
+      // Handle REST/HTTP requests
+      try {
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        
+        const fetchOptions: RequestInit = {
+          method,
+          headers: headers || {},
+          signal: controller.signal
+        };
+        
+        // Only add body for methods that support it
+        if (!['GET', 'HEAD'].includes(method.toUpperCase()) && body) {
+          fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
+        }
+        
+        const response = await fetch(url, fetchOptions);
+        
+        clearTimeout(timeoutId);
+        
+        // Get response headers
+        const responseHeaders: Record<string, string> = {};
+        response.headers.forEach((value, key) => {
+          responseHeaders[key] = value;
+        });
+        
+        // Determine response type
+        const contentType = response.headers.get('content-type') || '';
+        let responseData;
+        
+        if (contentType.includes('application/json')) {
+          responseData = await response.json();
+        } else if (contentType.includes('text/')) {
+          responseData = await response.text();
+        } else if (contentType.includes('xml')) {
+          responseData = await response.text();
+        } else {
+          // For binary data, return base64
+          const buffer = await response.arrayBuffer();
+          responseData = {
+            type: 'binary',
+            size: buffer.byteLength,
+            base64: Buffer.from(buffer).toString('base64').substring(0, 1000) + '...' // Truncate for preview
+          };
+        }
+        
+        res.json({
+          status: response.status,
+          statusText: response.statusText,
+          headers: responseHeaders,
+          data: responseData
+        });
+      } catch (fetchError: any) {
+        if (fetchError.name === 'AbortError') {
+          return res.status(408).json({ error: "Request timeout (30s)" });
+        }
+        return res.status(500).json({ error: fetchError.message || "Failed to make request" });
+      }
+    }
+  } catch (error: any) {
+    console.error("Error in API test proxy:", error);
+    res.status(500).json({ error: error.message || "Internal server error" });
+  }
+});
+
 export { router as interfaceBuilderRouter };

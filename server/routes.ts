@@ -2197,6 +2197,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { umlRouter } = await import("./routes/uml");
   app.use("/api/uml", umlRouter);
   
+  // Register API Test routes
+  const { apiTestRouter } = await import("./routes/api-test");
+  app.use("/api/api-test", apiTestRouter);
+  
   // Register Technical Processes Version Control routes
   const technicalProcessesVersionControlRouter = await import("./routes/technical-processes-version-control");
   app.use("/api/version-control", technicalProcessesVersionControlRouter.default);

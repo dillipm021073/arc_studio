@@ -40,7 +40,8 @@ import {
   Eye,
   Trash2,
   Download,
-  Upload
+  Upload,
+  Globe
 } from 'lucide-react';
 
 import ComponentLibrary, { ComponentTemplate } from '@/components/interface-builder/component-library';
@@ -54,6 +55,7 @@ import SaveAsDialog from '@/components/interface-builder/save-as-dialog';
 import GenerateFromLobDialog from '@/components/interface-builder/generate-from-lob-dialog';
 import { UmlManagerDialog } from '@/components/interface-builder/uml-manager-dialog';
 import ImportProjectDialog from '@/components/interface-builder/import-project-dialog';
+import { ApiTestDialog } from '@/components/interface-builder/api-test-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { InterfaceProject } from '@/data/example-projects';
 import { interfaceBuilderApi } from '@/services/interface-builder-api';
@@ -96,6 +98,8 @@ export default function InterfaceBuilder() {
   const [showHelpDialog, setShowHelpDialog] = useState(false);
   const [showUmlManager, setShowUmlManager] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  const [showApiTestDialog, setShowApiTestDialog] = useState(false);
+  const [apiTestInterfaceData, setApiTestInterfaceData] = useState<any>(null);
   
   // Canvas toolbar state
   const [canUndo, setCanUndo] = useState(false);
@@ -802,6 +806,19 @@ export default function InterfaceBuilder() {
     }
   }, [copiedNodes, copiedEdges, toast]);
 
+  // Listen for API test events from canvas nodes
+  useEffect(() => {
+    const handleApiTestEvent = (event: CustomEvent) => {
+      setApiTestInterfaceData(event.detail);
+      setShowApiTestDialog(true);
+    };
+
+    window.addEventListener('open-api-test', handleApiTestEvent as EventListener);
+    return () => {
+      window.removeEventListener('open-api-test', handleApiTestEvent as EventListener);
+    };
+  }, []);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1138,6 +1155,15 @@ export default function InterfaceBuilder() {
           >
             <Upload className="h-3 w-3 mr-1" />
             Import Project
+          </Button>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => setShowApiTestDialog(true)}
+            className="border-gray-600 hover:bg-gray-700 h-7 px-2"
+          >
+            <Globe className="h-3 w-3 mr-1" />
+            Try HTTP/HTTPS/SOAP
           </Button>
           <div className="border-l border-gray-600 h-5" />
           <Button 
@@ -2013,6 +2039,13 @@ export default function InterfaceBuilder() {
             description: `"${importedProject.name}" has been loaded successfully`,
           });
         }}
+      />
+      
+      {/* API Test Dialog */}
+      <ApiTestDialog
+        open={showApiTestDialog}
+        onOpenChange={setShowApiTestDialog}
+        interfaceData={apiTestInterfaceData}
       />
     </div>
   );

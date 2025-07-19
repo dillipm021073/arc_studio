@@ -865,6 +865,20 @@ function DragDropCanvasInner({
               setNodeEditDialogOpen(true);
             },
             onDelete: () => handleDeleteNode(nodeId),
+            onTestApi: component.type === 'interface' && ['rest-api', 'graphql-api', 'soap-service', 'webhook'].includes(component.id) ? () => {
+              // Pass interface data to parent component to show API test dialog
+              if (window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('open-api-test', { 
+                  detail: {
+                    id: component.id,
+                    imlNumber: component.properties?.imlNumber,
+                    interfaceType: component.name,
+                    endpoint: component.properties?.endpoint || component.properties?.url,
+                    sampleCode: component.properties?.sampleCode
+                  }
+                }));
+              }
+            } : undefined,
             onDuplicate: () => {
               const duplicatedNode = {
                 ...newNode,
@@ -878,6 +892,19 @@ function DragDropCanvasInner({
                   ...newNode.data,
                   onDelete: () => handleDeleteNode(duplicatedNode.id),
                   onDuplicate: () => {},
+                  onTestApi: component.type === 'interface' && ['rest-api', 'graphql-api', 'soap-service', 'webhook'].includes(component.id) ? () => {
+                    if (window.dispatchEvent) {
+                      window.dispatchEvent(new CustomEvent('open-api-test', { 
+                        detail: {
+                          id: component.id,
+                          imlNumber: component.properties?.imlNumber,
+                          interfaceType: component.name,
+                          endpoint: component.properties?.endpoint || component.properties?.url,
+                          sampleCode: component.properties?.sampleCode
+                        }
+                      }));
+                    }
+                  } : undefined,
                   onToggleResize: (component.type === 'text' || component.type === 'shape') ? () => {} : undefined,
                   onUpdate: (component.type === 'text' || component.type === 'shape' || component.type === 'application' || component.type === 'rectangle' || component.type === 'container' || component.type === 'roundedRectangle') ? (updatedData: any) => {
                     setNodes((nds) => {

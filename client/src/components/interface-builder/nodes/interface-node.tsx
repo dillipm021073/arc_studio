@@ -25,7 +25,8 @@ import {
   MoreVertical,
   Edit3,
   Copy,
-  Trash2
+  Trash2,
+  TestTube2
 } from 'lucide-react';
 
 const iconMap = {
@@ -60,6 +61,7 @@ interface InterfaceNodeData {
   onEdit?: () => void;
   onDelete?: () => void;
   onDuplicate?: () => void;
+  onTestApi?: () => void;
 }
 
 export default memo(function InterfaceNode({ data, selected }: NodeProps<InterfaceNodeData>) {
@@ -150,6 +152,16 @@ export default memo(function InterfaceNode({ data, selected }: NodeProps<Interfa
                   <Copy className="h-4 w-4 mr-2" />
                   Duplicate
                 </DropdownMenuItem>
+                {/* Only show Test API for REST, GraphQL, SOAP, and webhook interfaces */}
+                {['rest-api', 'graphql-api', 'soap-service', 'webhook'].includes(data.id) && (
+                  <DropdownMenuItem 
+                    onClick={data.onTestApi}
+                    className="text-gray-300 hover:bg-gray-700 cursor-pointer"
+                  >
+                    <TestTube2 className="h-4 w-4 mr-2" />
+                    Test API
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator className="bg-gray-700" />
                 <DropdownMenuItem 
                   onClick={data.onDelete}

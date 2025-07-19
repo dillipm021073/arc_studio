@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -978,6 +978,105 @@ export const capabilities = pgTable("capabilities", {
   createdAt: timestamp("created_at").defaultNow()
 });
 
+// API Test Collections
+export const apiTestCollections = pgTable('api_test_collections', {
+  id: serial('id').primaryKey(),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  createdBy: varchar('created_by', { length: 255 }).notNull(),
+  sharedWith: text('shared_with').array(),
+  folderStructure: jsonb('folder_structure').default({}),
+  variables: jsonb('variables').default({}),
+  currentEnvironmentId: integer('current_environment_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// API Test Requests
+export const apiTestRequests = pgTable('api_test_requests', {
+  id: serial('id').primaryKey(),
+  collectionId: integer('collection_id').references(() => apiTestCollections.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  description: text('description'),
+  method: varchar('method', { length: 10 }).notNull(),
+  url: text('url').notNull(),
+  headers: jsonb('headers').default({}),
+  queryParams: jsonb('query_params').default([]),
+  body: text('body'),
+  bodyType: varchar('body_type', { length: 50 }).default('raw'),
+  authType: varchar('auth_type', { length: 50 }).default('none'),
+  authConfig: jsonb('auth_config').default({}),
+  preRequestScript: text('pre_request_script'),
+  testScript: text('test_script'),
+  variables: jsonb('variables').default({}),
+  folderPath: varchar('folder_path', { length: 500 }),
+  sortOrder: integer('sort_order').default(0),
+  lastUsedEnvironmentId: integer('last_used_environment_id'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// API Test History
+export const apiTestHistory = pgTable('api_test_history', {
+  id: serial('id').primaryKey(),
+  requestId: integer('request_id').references(() => apiTestRequests.id, { onDelete: 'cascade' }),
+  collectionId: integer('collection_id').references(() => apiTestCollections.id, { onDelete: 'cascade' }),
+  executedBy: varchar('executed_by', { length: 255 }).notNull(),
+  requestSnapshot: jsonb('request_snapshot').notNull(),
+  responseStatus: integer('response_status'),
+  responseStatusText: varchar('response_status_text', { length: 255 }),
+  responseTime: integer('response_time'),
+  responseSize: integer('response_size'),
+  responseHeaders: jsonb('response_headers'),
+  responseBody: text('response_body'),
+  testResults: jsonb('test_results'),
+  error: text('error'),
+  environmentId: integer('environment_id'),
+  resolvedVariables: jsonb('resolved_variables'),
+  executedAt: timestamp('executed_at').defaultNow(),
+});
+
+// API Test Environments
+export const apiTestEnvironments = pgTable('api_test_environments', {
+  id: serial('id').primaryKey(),
+  collectionId: integer('collection_id').notNull().references(() => apiTestCollections.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 50 }).notNull(),
+  displayName: varchar('display_name', { length: 100 }).notNull(),
+  description: text('description'),
+  isActive: boolean('is_active').default(true),
+  isDefault: boolean('is_default').default(false),
+  color: varchar('color', { length: 7 }),
+  sortOrder: integer('sort_order').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// API Test Environment Variables
+export const apiTestEnvironmentVariables = pgTable('api_test_environment_variables', {
+  id: serial('id').primaryKey(),
+  environmentId: integer('environment_id').notNull().references(() => apiTestEnvironments.id, { onDelete: 'cascade' }),
+  key: varchar('key', { length: 255 }).notNull(),
+  value: text('value').notNull(),
+  type: varchar('type', { length: 50 }).default('string'),
+  isSecret: boolean('is_secret').default(false),
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
+// API Test Global Variables
+export const apiTestGlobalVariables = pgTable('api_test_global_variables', {
+  id: serial('id').primaryKey(),
+  collectionId: integer('collection_id').notNull().references(() => apiTestCollections.id, { onDelete: 'cascade' }),
+  key: varchar('key', { length: 255 }).notNull(),
+  value: text('value').notNull(),
+  type: varchar('type', { length: 50 }).default('string'),
+  isSecret: boolean('is_secret').default(false),
+  description: text('description'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Insert Schemas for new tables
 export const insertApplicationCapabilitySchema = createInsertSchema(applicationCapabilities).omit({
   id: true,
@@ -1027,6 +1126,42 @@ export const insertCapabilitySchema = createInsertSchema(capabilities).omit({
   createdAt: true
 });
 
+// Insert schemas for API Test tables
+export const insertApiTestCollectionSchema = createInsertSchema(apiTestCollections).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertApiTestRequestSchema = createInsertSchema(apiTestRequests).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertApiTestHistorySchema = createInsertSchema(apiTestHistory).omit({
+  id: true,
+  executedAt: true
+});
+
+export const insertApiTestEnvironmentSchema = createInsertSchema(apiTestEnvironments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertApiTestEnvironmentVariableSchema = createInsertSchema(apiTestEnvironmentVariables).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
+export const insertApiTestGlobalVariableSchema = createInsertSchema(apiTestGlobalVariables).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
 // Types for new tables
 export type ApplicationCapability = typeof applicationCapabilities.$inferSelect;
 export type InsertApplicationCapability = z.infer<typeof insertApplicationCapabilitySchema>;
@@ -1060,7 +1195,26 @@ export type PermissionAuditLog = typeof permissionAuditLog.$inferSelect;
 export type InsertPermissionAuditLog = z.infer<typeof insertPermissionAuditLogSchema>;
 
 export type UserActivityLog = typeof userActivityLog.$inferSelect;
+export type InsertUserActivityLog = z.infer<typeof insertUserActivityLogSchema>;
+
+// API Test Types
+export type ApiTestCollection = typeof apiTestCollections.$inferSelect;
+export type InsertApiTestCollection = z.infer<typeof insertApiTestCollectionSchema>;
+
+export type ApiTestRequest = typeof apiTestRequests.$inferSelect;
+export type InsertApiTestRequest = z.infer<typeof insertApiTestRequestSchema>;
+
+export type ApiTestHistory = typeof apiTestHistory.$inferSelect;
+export type InsertApiTestHistory = z.infer<typeof insertApiTestHistorySchema>;
+
+export type ApiTestEnvironment = typeof apiTestEnvironments.$inferSelect;
+export type InsertApiTestEnvironment = z.infer<typeof insertApiTestEnvironmentSchema>;
+
+export type ApiTestEnvironmentVariable = typeof apiTestEnvironmentVariables.$inferSelect;
+export type InsertApiTestEnvironmentVariable = z.infer<typeof insertApiTestEnvironmentVariableSchema>;
+
+export type ApiTestGlobalVariable = typeof apiTestGlobalVariables.$inferSelect;
+export type InsertApiTestGlobalVariable = z.infer<typeof insertApiTestGlobalVariableSchema>;
 
 // Re-export version control schema
 export * from './schema-version-control';
-export type InsertUserActivityLog = z.infer<typeof insertUserActivityLogSchema>;
