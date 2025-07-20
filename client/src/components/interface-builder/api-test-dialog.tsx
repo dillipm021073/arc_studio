@@ -73,6 +73,12 @@ interface TestResponse {
   data: any;
   time: number;
   size: number;
+  request?: {
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body?: any;
+  };
 }
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
@@ -317,7 +323,9 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
         value: value as string,
         enabled: true,
       }));
-      setHeaders(headerEntries.length > 0 ? headerEntries : [{ key: 'Content-Type', value: 'application/json', enabled: true }]);
+      setHeaders(headerEntries.length > 0 ? headerEntries : []);
+    } else {
+      setHeaders([]);
     }
     
     // Load query params
@@ -484,14 +492,23 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
       requestHeaders[h.key] = replaceVariables(h.value);
     });
 
-    // Add auth headers
-    if (authType === 'Bearer Token' && authCredentials.token) {
-      requestHeaders['Authorization'] = `Bearer ${authCredentials.token}`;
-    } else if (authType === 'Basic Auth' && authCredentials.username) {
-      const encoded = btoa(`${authCredentials.username}:${authCredentials.password}`);
-      requestHeaders['Authorization'] = `Basic ${encoded}`;
-    } else if (authType === 'API Key' && authCredentials.apiKey) {
-      requestHeaders['X-API-Key'] = authCredentials.apiKey;
+    // Check if Authorization header is already set manually
+    const hasManualAuthHeader = headers.some(h => h.enabled && h.key === 'Authorization' && h.value);
+    
+    // Only add auth headers from Auth tab if no manual Authorization header is set
+    if (!hasManualAuthHeader) {
+      if (authType === 'Bearer Token' && authCredentials.token) {
+        // Replace variables in the token value
+        const processedToken = replaceVariables(authCredentials.token);
+        requestHeaders['Authorization'] = `Bearer ${processedToken}`;
+      } else if (authType === 'Basic Auth' && authCredentials.username) {
+        const encoded = btoa(`${authCredentials.username}:${authCredentials.password}`);
+        requestHeaders['Authorization'] = `Basic ${encoded}`;
+      } else if (authType === 'API Key' && authCredentials.apiKey) {
+        // Replace variables in the API key value
+        const processedApiKey = replaceVariables(authCredentials.apiKey);
+        requestHeaders['X-API-Key'] = processedApiKey;
+      }
     }
 
     return requestHeaders;
@@ -588,6 +605,12 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
         data: responseData.data,
         time: responseTime,
         size: JSON.stringify(responseData.data).length,
+        request: {
+          url: fullUrl,
+          method,
+          headers: requestHeaders,
+          body: ['GET', 'HEAD'].includes(method) ? undefined : replaceVariables(requestBody)
+        }
       });
 
     } catch (error) {
@@ -1063,6 +1086,15 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                   <div className="space-y-3 mb-4">
                     <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Common Headers</div>
                     
+                    {/* Show warning if no environment is selected */}
+                    {selectedCollection && !currentEnvironmentId && headers.some(h => h.value && h.value.includes('{{')) && (
+                      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-2">
+                        <p className="text-xs text-yellow-800 dark:text-yellow-200">
+                          <strong>Note:</strong> Variables like {{TOKEN}} require an environment. Select one from the dropdown above.
+                        </p>
+                      </div>
+                    )}
+                    
                     {/* Content-Type Header */}
                     <div className="flex gap-2 items-center">
                       <input
@@ -1199,14 +1231,14 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                             const index = headers.indexOf(existing);
                             updateHeader(index, 'enabled', e.target.checked);
                           } else if (e.target.checked) {
-                            setHeaders([...headers, { key: 'Authorization', value: 'Bearer ', enabled: true }]);
+                            setHeaders([...headers, { key: 'Authorization', value: 'Bearer {{TOKEN}}', enabled: true }]);
                           }
                         }}
                         className="h-4 w-4"
                       />
                       <div className="font-mono text-sm w-40">Authorization</div>
                       <Input
-                        value={headers.find(h => h.key === 'Authorization')?.value || ''}
+                        value={headers.find(h => h.key === 'Authorization')?.value || 'Bearer {{TOKEN}}'}
                         onChange={(e) => {
                           const existing = headers.find(h => h.key === 'Authorization');
                           if (existing) {
@@ -1265,6 +1297,15 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                 </TabsContent>
 
                 <TabsContent value="auth" className="space-y-4 overflow-auto flex-1">
+                  {headers.some(h => h.enabled && h.key === 'Authorization' && h.value) && (
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-3">
+                      <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                        <strong>Note:</strong> Authorization header is manually set in the Headers tab. 
+                        The settings below will be ignored.
+                      </p>
+                    </div>
+                  )}
+                  
                   <div>
                     <Label>Authentication Type</Label>
                     <Select value={authType} onValueChange={setAuthType}>
@@ -1308,8 +1349,13 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                         value={authCredentials.token}
                         onChange={(e) => setAuthCredentials({...authCredentials, token: e.target.value})}
                         className="mt-2"
-                        placeholder="Enter bearer token"
+                        placeholder="Enter bearer token or {{variable}}"
                       />
+                      {authCredentials.token && authCredentials.token.includes('{{') && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Variables detected. Make sure to select an environment with the required variables.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -1512,9 +1558,10 @@ pm.test("Response has required fields", () => {
                 </div>
 
                 <Tabs value={responseTab} onValueChange={setResponseTab} className="flex-1">
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="body">Body</TabsTrigger>
                     <TabsTrigger value="headers">Headers</TabsTrigger>
+                    <TabsTrigger value="request">Request</TabsTrigger>
                     <TabsTrigger value="raw">Raw</TabsTrigger>
                   </TabsList>
 
@@ -1528,12 +1575,56 @@ pm.test("Response has required fields", () => {
 
                   <TabsContent value="headers" className="p-4">
                     <div className="space-y-2">
+                      <h3 className="text-sm font-semibold mb-2">Response Headers</h3>
                       {Object.entries(response.headers).map(([key, value]) => (
                         <div key={key} className="flex">
                           <span className="font-mono font-semibold text-sm w-1/3">{key}:</span>
                           <span className="font-mono text-sm text-muted-foreground">{value}</span>
                         </div>
                       ))}
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="request" className="p-4">
+                    <div className="space-y-4">
+                      {response.request && (
+                        <>
+                          <div>
+                            <h3 className="text-sm font-semibold mb-2">Request URL</h3>
+                            <p className="font-mono text-sm text-muted-foreground break-all">{response.request.url}</p>
+                          </div>
+                          
+                          <div>
+                            <h3 className="text-sm font-semibold mb-2">Request Method</h3>
+                            <Badge variant="outline" className="font-mono">{response.request.method}</Badge>
+                          </div>
+                          
+                          <div>
+                            <h3 className="text-sm font-semibold mb-2">Request Headers</h3>
+                            <div className="space-y-1">
+                              {Object.entries(response.request.headers).map(([key, value]) => (
+                                <div key={key} className="flex">
+                                  <span className="font-mono font-semibold text-sm w-1/3">{key}:</span>
+                                  <span className="font-mono text-sm text-muted-foreground break-all">{value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          {response.request.body && (
+                            <div>
+                              <h3 className="text-sm font-semibold mb-2">Request Body</h3>
+                              <ScrollArea className="h-[200px]">
+                                <pre className="text-sm font-mono whitespace-pre-wrap break-all">
+                                  {typeof response.request.body === 'string' 
+                                    ? response.request.body 
+                                    : JSON.stringify(response.request.body, null, 2)}
+                                </pre>
+                              </ScrollArea>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   </TabsContent>
 
