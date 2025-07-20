@@ -1163,7 +1163,7 @@ export default function InterfaceBuilder() {
             className="border-gray-600 hover:bg-gray-700 h-7 px-2"
           >
             <Globe className="h-3 w-3 mr-1" />
-            Try HTTP/HTTPS/SOAP
+            Test Interface
           </Button>
           <div className="border-l border-gray-600 h-5" />
           <Button 

@@ -1227,15 +1227,6 @@ router.post("/test-api", async (req, res) => {
   try {
     const { method, url, headers, body, protocol, insecureSkipVerify, proxy } = req.body;
     
-    // Debug logging
-    console.log("API Test Request:", {
-      method,
-      url,
-      protocol,
-      insecureSkipVerify,
-      hasProxy: !!proxy,
-      proxyUrl: proxy?.url
-    });
     
     // Validate input
     if (!url || !method) {

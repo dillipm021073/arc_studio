@@ -7,9 +7,6 @@ const requestHandler = (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
   const pathname = parsedUrl.pathname;
   const method = req.method;
-  
-  // Log all incoming requests
-  console.log(`[${new Date().toISOString()}] ${method} ${pathname} from ${req.socket.remoteAddress}`);
 
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -33,13 +30,6 @@ const requestHandler = (req, res) => {
     req.on('end', () => {
       const timestamp = new Date().toISOString();
       
-      // Log the incoming SOAP request
-      console.log('\n--- SOAP Request Received ---');
-      console.log('Timestamp:', timestamp);
-      console.log('Headers:', JSON.stringify(req.headers, null, 2));
-      console.log('Body:');
-      console.log(body);
-      console.log('--- End SOAP Request ---\n');
       
       // Parse SOAP action from headers
       const soapAction = req.headers['soapaction'] || req.headers['SOAPAction'] || '';

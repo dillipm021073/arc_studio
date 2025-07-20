@@ -1128,9 +1128,9 @@ export default function ProjectManager({
       <CreateFolderDialog
         open={createFolderDialogOpen}
         onOpenChange={setCreateFolderDialogOpen}
-        parentPath={createFolderParentPath}
-        onCreateFolder={(folderName) => {
-          handleCreateFolder(createFolderParentPath, folderName);
+        parentFolder={null}
+        onFolderCreated={() => {
+          loadProjects();
         }}
       />
 
