@@ -98,6 +98,9 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
   const [currentRequestId, setCurrentRequestId] = useState<number | null>(null);
   const [showCollections, setShowCollections] = useState(true);
   const [savingRequest, setSavingRequest] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveRequestName, setSaveRequestName] = useState('');
+  const [saveToCollectionId, setSaveToCollectionId] = useState<number | null>(null);
   const [environments, setEnvironments] = useState<any[]>([]);
   const [currentEnvironmentId, setCurrentEnvironmentId] = useState<number | null>(null);
   const [showEnvironmentDialog, setShowEnvironmentDialog] = useState(false);
@@ -108,9 +111,7 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
   const [protocol, setProtocol] = useState('HTTPS');
   const [method, setMethod] = useState('GET');
   const [url, setUrl] = useState('');
-  const [headers, setHeaders] = useState<Header[]>([
-    { key: 'Content-Type', value: 'application/json', enabled: true },
-  ]);
+  const [headers, setHeaders] = useState<Header[]>([]);
   const [queryParams, setQueryParams] = useState<QueryParam[]>([]);
   const [authType, setAuthType] = useState('None');
   const [authCredentials, setAuthCredentials] = useState({ username: '', password: '', token: '', apiKey: '' });
@@ -211,23 +212,44 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
     }
   };
 
-  const saveRequest = async () => {
-    if (!selectedCollection) {
+  const handleSaveClick = () => {
+    if (collections.length === 0) {
       toast({
-        title: 'No Collection Selected',
-        description: 'Please select or create a collection first',
+        title: 'No Collections',
+        description: 'Please create a collection first',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    // Pre-fill request name from URL if available
+    try {
+      const urlObj = new URL(url);
+      setSaveRequestName(urlObj.pathname.split('/').filter(Boolean).join(' ') || 'New Request');
+    } catch {
+      setSaveRequestName('New Request');
+    }
+    
+    // Pre-select current collection or first available
+    setSaveToCollectionId(selectedCollection?.id || collections[0]?.id || null);
+    setShowSaveDialog(true);
+  };
+
+  const saveRequest = async () => {
+    if (!saveRequestName || !saveToCollectionId) {
+      toast({
+        title: 'Missing Information',
+        description: 'Please provide a request name and select a collection',
         variant: 'destructive',
       });
       return;
     }
 
-    const name = prompt('Request name:', url ? new URL(url).pathname : 'New Request');
-    if (!name) return;
-
     setSavingRequest(true);
+    setShowSaveDialog(false);
     try {
       const requestData = {
-        name,
+        name: saveRequestName,
         method,
         url,
         protocol,
@@ -257,16 +279,19 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
         response = await api.put(`/api/api-test/requests/${currentRequestId}`, requestData);
       } else {
         // Create new request
-        response = await api.post(`/api/api-test/collections/${selectedCollection.id}/requests`, requestData);
+        response = await api.post(`/api/api-test/collections/${saveToCollectionId}/requests`, requestData);
       }
 
       // Reload collection to get updated requests
-      await loadCollection(selectedCollection.id);
+      await loadCollection(saveToCollectionId);
       setCurrentRequestId(response.data.id);
+      
+      // Find the collection name for the toast
+      const savedToCollection = collections.find(c => c.id === saveToCollectionId);
       
       toast({
         title: 'Request Saved',
-        description: `${name} has been saved to ${selectedCollection.name}`,
+        description: `${saveRequestName} has been saved to ${savedToCollection?.name}`,
       });
     } catch (error) {
       toast({
@@ -600,11 +625,18 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
     }
   };
 
+  const getStatusBadgeVariant = (status: number): "default" | "secondary" | "destructive" | "outline" => {
+    if (status >= 200 && status < 300) return 'default';
+    if (status >= 300 && status < 400) return 'secondary';
+    if (status >= 400 && status < 500) return 'destructive';
+    return 'destructive';
+  };
+  
   const getStatusColor = (status: number) => {
-    if (status >= 200 && status < 300) return 'text-green-600';
-    if (status >= 300 && status < 400) return 'text-yellow-600';
-    if (status >= 400 && status < 500) return 'text-orange-600';
-    return 'text-red-600';
+    if (status >= 200 && status < 300) return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+    if (status >= 300 && status < 400) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+    if (status >= 400 && status < 500) return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
+    return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
   };
 
   const copyToClipboard = (text: string) => {
@@ -779,7 +811,7 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
               size="sm" 
               variant="default"
               className="bg-blue-600 hover:bg-blue-700 text-white"
-              onClick={saveRequest}
+              onClick={handleSaveClick}
               disabled={!url || savingRequest}
             >
               {savingRequest ? (
@@ -800,8 +832,13 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                 <h3 className="font-semibold text-sm">Collections</h3>
                 <div className="flex gap-1">
                   <Button size="sm" variant="ghost" onClick={importCollection} title="Import Collection">
-                    <Upload className="h-3 w-3" />
+                    <Download className="h-3 w-3" />
                   </Button>
+                  {selectedCollection && (
+                    <Button size="sm" variant="ghost" onClick={exportCollection} title="Export Collection">
+                      <Upload className="h-3 w-3" />
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={createCollection} title="New Collection">
                     <Plus className="h-3 w-3" />
                   </Button>
@@ -1016,43 +1053,215 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                 <TabsContent value="headers" className="space-y-2 overflow-auto flex-1">
                   <div className="flex justify-between items-center mb-2">
                     <Label>Request Headers</Label>
-                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0" onClick={addHeader}>
-                      <Plus className="h-4 w-4" />
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={addHeader}>
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Custom
                     </Button>
                   </div>
-                  {headers.map((header, index) => (
-                    <div key={index} className="flex gap-2 items-center">
-                      <HeaderAutocomplete
-                        type="key"
-                        placeholder="Header name"
-                        value={header.key}
-                        onChange={(value) => updateHeader(index, 'key', value)}
-                        className="flex-1"
-                      />
-                      <HeaderAutocomplete
-                        type="value"
-                        placeholder="Header value"
-                        value={header.value}
-                        onChange={(value) => updateHeader(index, 'value', value)}
-                        currentKey={header.key}
-                        className="flex-1"
-                      />
+                  
+                  {/* Common Headers Section */}
+                  <div className="space-y-3 mb-4">
+                    <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Common Headers</div>
+                    
+                    {/* Content-Type Header */}
+                    <div className="flex gap-2 items-center">
                       <input
                         type="checkbox"
-                        checked={header.enabled}
-                        onChange={(e) => updateHeader(index, 'enabled', e.target.checked)}
+                        checked={headers.some(h => h.key === 'Content-Type' && h.enabled)}
+                        onChange={(e) => {
+                          const existing = headers.find(h => h.key === 'Content-Type');
+                          if (existing) {
+                            const index = headers.indexOf(existing);
+                            updateHeader(index, 'enabled', e.target.checked);
+                          } else if (e.target.checked) {
+                            setHeaders([...headers, { key: 'Content-Type', value: 'application/json', enabled: true }]);
+                          }
+                        }}
                         className="h-4 w-4"
-                        title="Enable/disable this header"
                       />
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => removeHeader(index)}
+                      <div className="font-mono text-sm w-40">Content-Type</div>
+                      <Select
+                        value={headers.find(h => h.key === 'Content-Type')?.value || 'application/json'}
+                        onValueChange={(value) => {
+                          const existing = headers.find(h => h.key === 'Content-Type');
+                          if (existing) {
+                            const index = headers.indexOf(existing);
+                            updateHeader(index, 'value', value);
+                          } else {
+                            setHeaders([...headers, { key: 'Content-Type', value, enabled: true }]);
+                          }
+                        }}
+                        disabled={!headers.some(h => h.key === 'Content-Type' && h.enabled)}
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="application/json">application/json</SelectItem>
+                          <SelectItem value="application/xml">application/xml</SelectItem>
+                          <SelectItem value="text/xml">text/xml</SelectItem>
+                          <SelectItem value="text/xml; charset=utf-8">text/xml; charset=utf-8</SelectItem>
+                          <SelectItem value="application/x-www-form-urlencoded">application/x-www-form-urlencoded</SelectItem>
+                          <SelectItem value="multipart/form-data">multipart/form-data</SelectItem>
+                          <SelectItem value="text/plain">text/plain</SelectItem>
+                          <SelectItem value="text/html">text/html</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  ))}
+                    
+                    {/* SOAPAction Header */}
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="checkbox"
+                        checked={headers.some(h => h.key === 'SOAPAction' && h.enabled)}
+                        onChange={(e) => {
+                          const existing = headers.find(h => h.key === 'SOAPAction');
+                          if (existing) {
+                            const index = headers.indexOf(existing);
+                            updateHeader(index, 'enabled', e.target.checked);
+                          } else if (e.target.checked) {
+                            setHeaders([...headers, { key: 'SOAPAction', value: '', enabled: true }]);
+                          }
+                        }}
+                        className="h-4 w-4"
+                      />
+                      <div className="font-mono text-sm w-40">SOAPAction</div>
+                      <Input
+                        value={headers.find(h => h.key === 'SOAPAction')?.value || ''}
+                        onChange={(e) => {
+                          const existing = headers.find(h => h.key === 'SOAPAction');
+                          if (existing) {
+                            const index = headers.indexOf(existing);
+                            updateHeader(index, 'value', e.target.value);
+                          } else {
+                            setHeaders([...headers, { key: 'SOAPAction', value: e.target.value, enabled: true }]);
+                          }
+                        }}
+                        placeholder="Enter SOAP action"
+                        disabled={!headers.some(h => h.key === 'SOAPAction' && h.enabled)}
+                        className="flex-1"
+                      />
+                    </div>
+                    
+                    {/* Accept Header */}
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="checkbox"
+                        checked={headers.some(h => h.key === 'Accept' && h.enabled)}
+                        onChange={(e) => {
+                          const existing = headers.find(h => h.key === 'Accept');
+                          if (existing) {
+                            const index = headers.indexOf(existing);
+                            updateHeader(index, 'enabled', e.target.checked);
+                          } else if (e.target.checked) {
+                            setHeaders([...headers, { key: 'Accept', value: 'application/json', enabled: true }]);
+                          }
+                        }}
+                        className="h-4 w-4"
+                      />
+                      <div className="font-mono text-sm w-40">Accept</div>
+                      <Select
+                        value={headers.find(h => h.key === 'Accept')?.value || 'application/json'}
+                        onValueChange={(value) => {
+                          const existing = headers.find(h => h.key === 'Accept');
+                          if (existing) {
+                            const index = headers.indexOf(existing);
+                            updateHeader(index, 'value', value);
+                          } else {
+                            setHeaders([...headers, { key: 'Accept', value, enabled: true }]);
+                          }
+                        }}
+                        disabled={!headers.some(h => h.key === 'Accept' && h.enabled)}
+                      >
+                        <SelectTrigger className="flex-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="application/json">application/json</SelectItem>
+                          <SelectItem value="application/xml">application/xml</SelectItem>
+                          <SelectItem value="text/xml">text/xml</SelectItem>
+                          <SelectItem value="text/html">text/html</SelectItem>
+                          <SelectItem value="text/plain">text/plain</SelectItem>
+                          <SelectItem value="*/*">*/*</SelectItem>
+                          <SelectItem value="application/json, text/plain, */*">application/json, text/plain, */*</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {/* Authorization Header */}
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="checkbox"
+                        checked={headers.some(h => h.key === 'Authorization' && h.enabled)}
+                        onChange={(e) => {
+                          const existing = headers.find(h => h.key === 'Authorization');
+                          if (existing) {
+                            const index = headers.indexOf(existing);
+                            updateHeader(index, 'enabled', e.target.checked);
+                          } else if (e.target.checked) {
+                            setHeaders([...headers, { key: 'Authorization', value: 'Bearer ', enabled: true }]);
+                          }
+                        }}
+                        className="h-4 w-4"
+                      />
+                      <div className="font-mono text-sm w-40">Authorization</div>
+                      <Input
+                        value={headers.find(h => h.key === 'Authorization')?.value || ''}
+                        onChange={(e) => {
+                          const existing = headers.find(h => h.key === 'Authorization');
+                          if (existing) {
+                            const index = headers.indexOf(existing);
+                            updateHeader(index, 'value', e.target.value);
+                          } else {
+                            setHeaders([...headers, { key: 'Authorization', value: e.target.value, enabled: true }]);
+                          }
+                        }}
+                        placeholder="Bearer token or Basic auth"
+                        disabled={!headers.some(h => h.key === 'Authorization' && h.enabled)}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Custom Headers Section */}
+                  {headers.filter(h => !['Content-Type', 'SOAPAction', 'Accept', 'Authorization'].includes(h.key)).length > 0 && (
+                    <>
+                      <Separator className="my-4" />
+                      <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Custom Headers</div>
+                      {headers.filter(h => !['Content-Type', 'SOAPAction', 'Accept', 'Authorization'].includes(h.key)).map((header, index) => {
+                        const actualIndex = headers.indexOf(header);
+                        return (
+                          <div key={actualIndex} className="flex gap-2 items-center">
+                            <input
+                              type="checkbox"
+                              checked={header.enabled}
+                              onChange={(e) => updateHeader(actualIndex, 'enabled', e.target.checked)}
+                              className="h-4 w-4"
+                            />
+                            <Input
+                              placeholder="Header name"
+                              value={header.key}
+                              onChange={(e) => updateHeader(actualIndex, 'key', e.target.value)}
+                              className="w-40"
+                            />
+                            <Input
+                              placeholder="Header value"
+                              value={header.value}
+                              onChange={(e) => updateHeader(actualIndex, 'value', e.target.value)}
+                              className="flex-1"
+                            />
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => removeHeader(actualIndex)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
                 </TabsContent>
 
                 <TabsContent value="auth" className="space-y-4 overflow-auto flex-1">
@@ -1271,7 +1480,7 @@ pm.test("Response has required fields", () => {
                 <div className="p-4 border-b bg-gray-50 dark:bg-gray-900">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <Badge className={cn("font-mono", getStatusColor(response.status))}>
+                      <Badge variant="outline" className={cn("font-mono border-0", getStatusColor(response.status))}>
                         {response.status} {response.statusText}
                       </Badge>
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1359,6 +1568,72 @@ pm.test("Response has required fields", () => {
         currentEnvironmentId={currentEnvironmentId}
       />
     )}
+    
+    {/* Save Request Dialog */}
+    <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Save Request</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-4">
+          <div>
+            <Label htmlFor="request-name">Request Name</Label>
+            <Input
+              id="request-name"
+              value={saveRequestName}
+              onChange={(e) => setSaveRequestName(e.target.value)}
+              placeholder="Enter request name"
+              className="mt-2"
+            />
+          </div>
+          
+          <div>
+            <Label htmlFor="collection-select">Save to Collection</Label>
+            <Select 
+              value={saveToCollectionId?.toString() || ''} 
+              onValueChange={(value) => setSaveToCollectionId(parseInt(value))}
+            >
+              <SelectTrigger id="collection-select" className="mt-2">
+                <SelectValue placeholder="Select a collection" />
+              </SelectTrigger>
+              <SelectContent>
+                {collections.map(collection => (
+                  <SelectItem key={collection.id} value={collection.id.toString()}>
+                    <div className="flex items-center gap-2">
+                      <FolderOpen className="h-4 w-4" />
+                      <span>{collection.name}</span>
+                      {collection.id === selectedCollection?.id && (
+                        <Badge variant="outline" className="ml-2 text-xs">Current</Badge>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
+        <div className="flex justify-end gap-2 mt-6">
+          <Button variant="outline" onClick={() => setShowSaveDialog(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={saveRequest}
+            disabled={!saveRequestName || !saveToCollectionId}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {savingRequest ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save'
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   </>
   );
 }
