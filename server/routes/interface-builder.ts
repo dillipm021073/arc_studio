@@ -10,6 +10,10 @@ import {
 } from "../../shared/schema";
 import { requireAuth } from "../auth";
 import { eq, and, or, inArray, sql } from "drizzle-orm";
+import { HttpProxyAgent } from "http-proxy-agent";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import https from "https";
+import fetch from "node-fetch";
 
 const router = Router();
 
@@ -1221,7 +1225,17 @@ router.delete("/folders/:folderPath", async (req, res) => {
 // API Test Proxy Endpoint
 router.post("/test-api", async (req, res) => {
   try {
-    const { method, url, headers, body, protocol } = req.body;
+    const { method, url, headers, body, protocol, insecureSkipVerify, proxy } = req.body;
+    
+    // Debug logging
+    console.log("API Test Request:", {
+      method,
+      url,
+      protocol,
+      insecureSkipVerify,
+      hasProxy: !!proxy,
+      proxyUrl: proxy?.url
+    });
     
     // Validate input
     if (!url || !method) {
@@ -1260,12 +1274,60 @@ router.post("/test-api", async (req, res) => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
         
-        const response = await fetch(url, {
+        // Build fetch options for SOAP
+        const soapFetchOptions: any = {
           method: 'POST',
           headers: soapHeaders,
           body: body,
           signal: controller.signal
-        });
+        };
+        
+        // Handle SSL certificate verification for SOAP
+        if (insecureSkipVerify) {
+          soapFetchOptions.agent = new https.Agent({
+            rejectUnauthorized: false
+          });
+        }
+        
+        // Handle proxy for SOAP requests
+        if (proxy && proxy.url) {
+          try {
+            const proxyUrl = new URL(proxy.url);
+            const isHttps = url.startsWith('https://');
+            
+            // Check if the host should bypass proxy
+            const targetHost = new URL(url).hostname;
+            const shouldBypassProxy = proxy.noProxy && proxy.noProxy.some((pattern: string) => {
+              if (pattern === targetHost) return true;
+              if (pattern.startsWith('*')) {
+                const suffix = pattern.slice(1);
+                return targetHost.endsWith(suffix);
+              }
+              return false;
+            });
+            
+            if (!shouldBypassProxy) {
+              // Configure proxy auth if provided
+              if (proxy.auth && proxy.auth.username) {
+                proxyUrl.username = proxy.auth.username;
+                proxyUrl.password = proxy.auth.password || '';
+              }
+              
+              // Create appropriate proxy agent
+              const ProxyAgent = isHttps ? HttpsProxyAgent : HttpProxyAgent;
+              const proxyAgent = new ProxyAgent(proxyUrl.toString(), {
+                rejectUnauthorized: !insecureSkipVerify
+              });
+              
+              soapFetchOptions.agent = proxyAgent;
+            }
+          } catch (proxyError) {
+            return res.status(400).json({ error: "Invalid proxy URL" });
+          }
+        }
+        
+        // @ts-ignore - using node-fetch with agent
+        const response = await fetch(url, soapFetchOptions);
         
         clearTimeout(timeoutId);
         
@@ -1295,18 +1357,79 @@ router.post("/test-api", async (req, res) => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000);
         
-        const fetchOptions: RequestInit = {
+        // Build fetch options
+        const fetchOptions: any = {
           method,
           headers: headers || {},
           signal: controller.signal
         };
         
-        // Only add body for methods that support it
-        if (!['GET', 'HEAD'].includes(method.toUpperCase()) && body) {
-          fetchOptions.body = typeof body === 'string' ? body : JSON.stringify(body);
+        // Handle proxy configuration first
+        let proxyAgent = null;
+        if (proxy && proxy.url) {
+          try {
+            const proxyUrl = new URL(proxy.url);
+            const isHttps = url.startsWith('https://');
+            
+            // Check if the host should bypass proxy
+            const targetHost = new URL(url).hostname;
+            const shouldBypassProxy = proxy.noProxy && proxy.noProxy.some((pattern: string) => {
+              if (pattern === targetHost) return true;
+              if (pattern.startsWith('*')) {
+                const suffix = pattern.slice(1);
+                return targetHost.endsWith(suffix);
+              }
+              return false;
+            });
+            
+            if (!shouldBypassProxy) {
+              // Configure proxy auth if provided
+              if (proxy.auth && proxy.auth.username) {
+                proxyUrl.username = proxy.auth.username;
+                proxyUrl.password = proxy.auth.password || '';
+              }
+              
+              // Create appropriate proxy agent
+              const ProxyAgent = isHttps ? HttpsProxyAgent : HttpProxyAgent;
+              proxyAgent = new ProxyAgent(proxyUrl.toString(), {
+                rejectUnauthorized: !insecureSkipVerify
+              });
+            }
+          } catch (proxyError) {
+            return res.status(400).json({ error: "Invalid proxy URL" });
+          }
         }
         
-        const response = await fetch(url, fetchOptions);
+        // Handle SSL certificate verification
+        // If we have a proxy agent, update it; otherwise create an HTTPS agent
+        if (url.startsWith('https://')) {
+          if (proxyAgent) {
+            fetchOptions.agent = proxyAgent;
+          } else if (insecureSkipVerify) {
+            // For HTTPS without proxy, use https.Agent directly
+            fetchOptions.agent = new https.Agent({
+              rejectUnauthorized: false
+            });
+          }
+        } else if (proxyAgent) {
+          // For HTTP with proxy
+          fetchOptions.agent = proxyAgent;
+        }
+        
+        const fetchOptionsForFetch: any = {
+          method,
+          headers: headers || {},
+          signal: controller.signal,
+          agent: fetchOptions.agent
+        };
+        
+        // Only add body for methods that support it
+        if (!['GET', 'HEAD'].includes(method.toUpperCase()) && body) {
+          fetchOptionsForFetch.body = typeof body === 'string' ? body : JSON.stringify(body);
+        }
+        
+        // @ts-ignore - using node-fetch with agent
+        const response = await fetch(url, fetchOptionsForFetch);
         
         clearTimeout(timeoutId);
         
@@ -1343,9 +1466,37 @@ router.post("/test-api", async (req, res) => {
           data: responseData
         });
       } catch (fetchError: any) {
+        console.error("API Test Error Details:", {
+          url,
+          method,
+          errorName: fetchError.name,
+          errorMessage: fetchError.message,
+          errorCause: fetchError.cause,
+          errorStack: fetchError.stack
+        });
+        
         if (fetchError.name === 'AbortError') {
           return res.status(408).json({ error: "Request timeout (30s)" });
         }
+        
+        // Handle specific fetch errors
+        if (fetchError.cause) {
+          if (fetchError.cause.code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || 
+              fetchError.cause.code === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
+              fetchError.cause.code === 'SELF_SIGNED_CERT_IN_CHAIN') {
+            return res.status(500).json({ 
+              error: "SSL certificate verification failed. Enable 'Skip SSL Verification' for self-signed certificates.",
+              details: fetchError.cause.code
+            });
+          }
+          if (fetchError.cause.code === 'ECONNREFUSED') {
+            return res.status(500).json({ 
+              error: "Connection refused. Please check if the service is running and the URL is correct.",
+              details: fetchError.cause.code
+            });
+          }
+        }
+        
         return res.status(500).json({ error: fetchError.message || "Failed to make request" });
       }
     }

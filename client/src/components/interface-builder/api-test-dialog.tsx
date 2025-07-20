@@ -38,6 +38,9 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { EnvironmentVariablesDialog } from './environment-variables-dialog';
+import { HeaderAutocomplete } from './header-autocomplete';
+import { formatXml, isXmlContent } from '@/lib/xml-formatter';
+import './api-test-dialog-styles.css';
 
 interface ApiTestDialogProps {
   open: boolean;
@@ -114,6 +117,13 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
   const [requestBody, setRequestBody] = useState('');
   const [contentType, setContentType] = useState('application/json');
   const [testScript, setTestScript] = useState('');
+  
+  // Security & Proxy settings
+  const [insecureSkipVerify, setInsecureSkipVerify] = useState(false);
+  const [useProxy, setUseProxy] = useState(false);
+  const [proxyUrl, setProxyUrl] = useState('');
+  const [proxyAuth, setProxyAuth] = useState({ username: '', password: '' });
+  const [noProxyHosts, setNoProxyHosts] = useState('');
   
   // Response state
   const [response, setResponse] = useState<TestResponse | null>(null);
@@ -220,6 +230,7 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
         name,
         method,
         url,
+        protocol,
         headers: headers.filter(h => h.enabled && h.key).reduce((acc, h) => ({
           ...acc,
           [h.key]: h.value
@@ -227,9 +238,17 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
         queryParams: queryParams.filter(p => p.enabled && p.key),
         body: requestBody,
         bodyType: 'raw',
+        contentType,
         authType,
         authConfig: authCredentials,
         testScript: testScript,
+        settings: {
+          insecureSkipVerify,
+          useProxy,
+          proxyUrl: useProxy ? proxyUrl : '',
+          proxyAuth: useProxy ? proxyAuth : { username: '', password: '' },
+          noProxyHosts: useProxy ? noProxyHosts : ''
+        }
       };
 
       let response;
@@ -264,6 +283,7 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
     setCurrentRequestId(request.id);
     setMethod(request.method);
     setUrl(request.url);
+    setProtocol(request.protocol || 'HTTPS');
     
     // Load headers
     if (request.headers) {
@@ -282,6 +302,7 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
     
     // Load body
     setRequestBody(request.body || '');
+    setContentType(request.contentType || 'application/json');
     
     // Load auth
     setAuthType(request.authType || 'None');
@@ -289,6 +310,22 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
     
     // Load test script
     setTestScript(request.testScript || '');
+    
+    // Load settings
+    if (request.settings) {
+      setInsecureSkipVerify(request.settings.insecureSkipVerify || false);
+      setUseProxy(request.settings.useProxy || false);
+      setProxyUrl(request.settings.proxyUrl || '');
+      setProxyAuth(request.settings.proxyAuth || { username: '', password: '' });
+      setNoProxyHosts(request.settings.noProxyHosts || '');
+    } else {
+      // Reset settings if not present
+      setInsecureSkipVerify(false);
+      setUseProxy(false);
+      setProxyUrl('');
+      setProxyAuth({ username: '', password: '' });
+      setNoProxyHosts('');
+    }
     
     // Clear response
     setResponse(null);
@@ -339,6 +376,11 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
     setAuthCredentials({ username: '', password: '', token: '', apiKey: '' });
     setResponse(null);
     setTestScript('');
+    setInsecureSkipVerify(false);
+    setUseProxy(false);
+    setProxyUrl('');
+    setProxyAuth({ username: '', password: '' });
+    setNoProxyHosts('');
   };
 
   useEffect(() => {
@@ -493,6 +535,12 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
           headers: requestHeaders,
           body: ['GET', 'HEAD'].includes(method) ? undefined : replaceVariables(requestBody),
           protocol,
+          insecureSkipVerify,
+          proxy: useProxy ? {
+            url: proxyUrl,
+            auth: proxyAuth.username ? proxyAuth : undefined,
+            noProxy: noProxyHosts ? noProxyHosts.split(',').map(h => h.trim()) : []
+          } : undefined
         }),
       });
 
@@ -528,9 +576,25 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
     }
   };
 
-  const formatJson = (data: any) => {
+  const formatResponseData = (data: any) => {
     try {
-      return JSON.stringify(data, null, 2);
+      // Check if it's XML/SOAP content
+      if (isXmlContent(data)) {
+        return formatXml(data);
+      }
+      
+      // Check if response has isXml flag (from backend)
+      if (response?.headers?.['content-type']?.includes('xml') || 
+          response?.headers?.['content-type']?.includes('soap')) {
+        return formatXml(data);
+      }
+      
+      // Otherwise format as JSON
+      if (typeof data === 'object') {
+        return JSON.stringify(data, null, 2);
+      }
+      
+      return String(data);
     } catch {
       return String(data);
     }
@@ -666,8 +730,8 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
   return (
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] max-h-[90vh] p-0">
-        <div className="px-6 py-4 border-b flex flex-row items-center justify-between">
+      <DialogContent className="max-w-[95vw] max-h-[90vh] p-0 border-2 border-white/30 shadow-2xl bg-background ring-4 ring-white/10 dark:border-white/20 dark:ring-white/5">
+        <div className="px-6 py-4 border-b flex flex-row items-center justify-between bg-gray-50 dark:bg-gray-900/50">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-semibold">API Test Tool</h2>
             {selectedCollection && environments.length > 0 && (
@@ -713,7 +777,8 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
             </Button>
             <Button 
               size="sm" 
-              variant="outline" 
+              variant="default"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
               onClick={saveRequest}
               disabled={!url || savingRequest}
             >
@@ -854,10 +919,10 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
           )}
           
           {/* Request Panel */}
-          <div className="flex-1 border-r flex flex-col">
-            <div className="p-4 space-y-4 flex-1 overflow-auto">
+          <div className="w-[45%] min-w-[500px] border-r flex flex-col">
+            <div className="p-4 flex flex-col flex-1 overflow-hidden">
               {/* URL Bar */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 mb-4">
                 <Select value={protocol} onValueChange={setProtocol}>
                   <SelectTrigger className="w-[120px]">
                     <SelectValue />
@@ -890,7 +955,7 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                 <Button
                   onClick={sendRequest}
                   disabled={loading || !url}
-                  className="min-w-[100px]"
+                  className="min-w-[100px] bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   {loading ? (
                     <>
@@ -906,19 +971,20 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                 </Button>
               </div>
 
-              <Tabs defaultValue="params" className="flex-1">
-                <TabsList className="grid w-full grid-cols-5">
+              <Tabs defaultValue="params" className="flex-1 flex flex-col">
+                <TabsList className="grid w-full grid-cols-6 shrink-0">
                   <TabsTrigger value="params">Params</TabsTrigger>
                   <TabsTrigger value="headers">Headers</TabsTrigger>
                   <TabsTrigger value="auth">Auth</TabsTrigger>
                   <TabsTrigger value="body">Body</TabsTrigger>
                   <TabsTrigger value="tests">Tests</TabsTrigger>
+                  <TabsTrigger value="settings">Settings</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="params" className="space-y-2">
+                <TabsContent value="params" className="space-y-2 overflow-auto flex-1">
                   <div className="flex justify-between items-center mb-2">
                     <Label>Query Parameters</Label>
-                    <Button size="sm" variant="outline" onClick={addQueryParam}>
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0" onClick={addQueryParam}>
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>
@@ -947,26 +1013,36 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                   ))}
                 </TabsContent>
 
-                <TabsContent value="headers" className="space-y-2">
+                <TabsContent value="headers" className="space-y-2 overflow-auto flex-1">
                   <div className="flex justify-between items-center mb-2">
                     <Label>Request Headers</Label>
-                    <Button size="sm" variant="outline" onClick={addHeader}>
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white h-8 w-8 p-0" onClick={addHeader}>
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>
                   {headers.map((header, index) => (
                     <div key={index} className="flex gap-2 items-center">
-                      <Input
-                        placeholder="Key"
+                      <HeaderAutocomplete
+                        type="key"
+                        placeholder="Header name"
                         value={header.key}
-                        onChange={(e) => updateHeader(index, 'key', e.target.value)}
+                        onChange={(value) => updateHeader(index, 'key', value)}
                         className="flex-1"
                       />
-                      <Input
-                        placeholder="Value"
+                      <HeaderAutocomplete
+                        type="value"
+                        placeholder="Header value"
                         value={header.value}
-                        onChange={(e) => updateHeader(index, 'value', e.target.value)}
+                        onChange={(value) => updateHeader(index, 'value', value)}
+                        currentKey={header.key}
                         className="flex-1"
+                      />
+                      <input
+                        type="checkbox"
+                        checked={header.enabled}
+                        onChange={(e) => updateHeader(index, 'enabled', e.target.checked)}
+                        className="h-4 w-4"
+                        title="Enable/disable this header"
                       />
                       <Button
                         size="icon"
@@ -979,7 +1055,7 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                   ))}
                 </TabsContent>
 
-                <TabsContent value="auth" className="space-y-4">
+                <TabsContent value="auth" className="space-y-4 overflow-auto flex-1">
                   <div>
                     <Label>Authentication Type</Label>
                     <Select value={authType} onValueChange={setAuthType}>
@@ -1041,8 +1117,8 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                   )}
                 </TabsContent>
 
-                <TabsContent value="body" className="space-y-4">
-                  <div>
+                <TabsContent value="body" className="flex flex-col h-full">
+                  <div className="shrink-0 mb-2">
                     <Label>Content Type</Label>
                     <Select value={contentType} onValueChange={setContentType}>
                       <SelectTrigger className="w-full mt-2">
@@ -1055,19 +1131,19 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label>Request Body</Label>
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <Label className="mb-2">Request Body</Label>
                     <Textarea
                       value={requestBody}
                       onChange={(e) => setRequestBody(e.target.value)}
-                      className="mt-2 font-mono text-sm min-h-[200px]"
+                      className="flex-1 font-mono text-sm resize-none"
                       placeholder={contentType === 'application/json' ? '{\n  "key": "value"\n}' : 'Enter request body'}
                     />
                   </div>
                 </TabsContent>
 
-                <TabsContent value="tests" className="space-y-4">
-                  <div>
+                <TabsContent value="tests" className="flex flex-col h-full">
+                  <div className="flex flex-col h-full">
                     <Label>Test Script</Label>
                     <p className="text-sm text-muted-foreground mt-1 mb-2">
                       Write JavaScript to test your API response. Available variables: response, status, headers
@@ -1075,7 +1151,7 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                     <Textarea
                       value={testScript}
                       onChange={(e) => setTestScript(e.target.value)}
-                      className="mt-2 font-mono text-sm min-h-[300px]"
+                      className="flex-1 font-mono text-sm resize-none"
                       placeholder={`// Example tests:
 // Check status code
 pm.test("Status code is 200", () => {
@@ -1096,12 +1172,100 @@ pm.test("Response has required fields", () => {
                     />
                   </div>
                 </TabsContent>
+
+                <TabsContent value="settings" className="space-y-4 overflow-auto flex-1">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-sm font-semibold mb-2">SSL/TLS Certificate Verification</h3>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="insecure-skip-verify"
+                          checked={insecureSkipVerify}
+                          onChange={(e) => setInsecureSkipVerify(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <label htmlFor="insecure-skip-verify" className="text-sm text-muted-foreground">
+                          Skip SSL certificate verification (insecure)
+                        </label>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        ⚠️ Warning: Only use this for testing with self-signed certificates
+                      </p>
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                      <h3 className="text-sm font-semibold mb-2">Proxy Configuration</h3>
+                      <div className="flex items-center space-x-2 mb-4">
+                        <input
+                          type="checkbox"
+                          id="use-proxy"
+                          checked={useProxy}
+                          onChange={(e) => setUseProxy(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <label htmlFor="use-proxy" className="text-sm">
+                          Use proxy server
+                        </label>
+                      </div>
+
+                      {useProxy && (
+                        <div className="space-y-4 ml-6">
+                          <div>
+                            <Label>Proxy URL</Label>
+                            <Input
+                              value={proxyUrl}
+                              onChange={(e) => setProxyUrl(e.target.value)}
+                              placeholder="http://proxy.example.com:8080"
+                              className="mt-1"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label>Proxy Username (optional)</Label>
+                              <Input
+                                value={proxyAuth.username}
+                                onChange={(e) => setProxyAuth({...proxyAuth, username: e.target.value})}
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label>Proxy Password (optional)</Label>
+                              <Input
+                                type="password"
+                                value={proxyAuth.password}
+                                onChange={(e) => setProxyAuth({...proxyAuth, password: e.target.value})}
+                                className="mt-1"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <Label>No Proxy Hosts</Label>
+                            <Input
+                              value={noProxyHosts}
+                              onChange={(e) => setNoProxyHosts(e.target.value)}
+                              placeholder="localhost, 127.0.0.1, *.local"
+                              className="mt-1"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Comma-separated list of hosts that should bypass the proxy
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
               </Tabs>
             </div>
           </div>
 
           {/* Response Panel */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 min-w-[400px] flex flex-col overflow-hidden">
             {response ? (
               <>
                 <div className="p-4 border-b bg-gray-50 dark:bg-gray-900">
@@ -1117,12 +1281,17 @@ pm.test("Response has required fields", () => {
                       <div className="text-sm text-muted-foreground">
                         {(response.size / 1024).toFixed(2)} KB
                       </div>
+                      {(isXmlContent(response.data) || response.headers?.['content-type']?.includes('xml') || response.headers?.['content-type']?.includes('soap')) && (
+                        <Badge variant="outline" className="text-xs">
+                          XML/SOAP
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => copyToClipboard(formatJson(response.data))}
+                        onClick={() => copyToClipboard(formatResponseData(response.data))}
                       >
                         <Copy className="h-4 w-4" />
                       </Button>
@@ -1140,10 +1309,10 @@ pm.test("Response has required fields", () => {
                     <TabsTrigger value="raw">Raw</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="body" className="h-full p-4">
-                    <ScrollArea className="h-[calc(100%-50px)]">
-                      <pre className="text-sm font-mono">
-                        {formatJson(response.data)}
+                  <TabsContent value="body" className="h-full p-4 overflow-hidden">
+                    <ScrollArea className="h-[calc(100%-50px)] w-full">
+                      <pre className="text-sm font-mono whitespace-pre-wrap break-all">
+                        {formatResponseData(response.data)}
                       </pre>
                     </ScrollArea>
                   </TabsContent>
@@ -1159,9 +1328,9 @@ pm.test("Response has required fields", () => {
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="raw" className="h-full p-4">
-                    <ScrollArea className="h-[calc(100%-50px)]">
-                      <pre className="text-sm font-mono text-muted-foreground">
+                  <TabsContent value="raw" className="h-full p-4 overflow-hidden">
+                    <ScrollArea className="h-[calc(100%-50px)] w-full">
+                      <pre className="text-sm font-mono text-muted-foreground whitespace-pre-wrap break-all">
                         {JSON.stringify(response, null, 2)}
                       </pre>
                     </ScrollArea>
