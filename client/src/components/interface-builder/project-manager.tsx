@@ -51,7 +51,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { FolderTree } from './folder-tree';
 import { FolderBreadcrumb } from './folder-breadcrumb';
-import { CreateFolderDialog } from './create-folder-dialog';
+import { CreateProjectFolderDialog } from './create-project-folder-dialog';
 import { RenameFolderDialog } from './rename-folder-dialog';
 import { DeleteFolderDialog } from './delete-folder-dialog';
 
@@ -1125,12 +1125,18 @@ export default function ProjectManager({
       </AlertDialog>
 
       {/* Create Folder Dialog */}
-      <CreateFolderDialog
+      <CreateProjectFolderDialog
         open={createFolderDialogOpen}
         onOpenChange={setCreateFolderDialogOpen}
-        parentFolder={null}
+        parentFolder={createFolderParentPath === '/' ? null : { 
+          path: createFolderParentPath, 
+          name: createFolderParentPath.split('/').pop() || '', 
+          parentPath: null,
+          isTeamFolder: false 
+        }}
         onFolderCreated={() => {
-          loadProjects();
+          loadAllProjects();
+          loadFolders();
         }}
       />
 
