@@ -786,7 +786,7 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
     <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] max-h-[90vh] p-0 border-2 border-white/30 shadow-2xl bg-background ring-4 ring-white/10 dark:border-white/20 dark:ring-white/5">
-        <div className="px-6 py-4 border-b flex flex-row items-center justify-between bg-gray-50 dark:bg-gray-900/50">
+        <div className="px-6 py-4 border-b flex flex-row items-center justify-between bg-gray-50 dark:bg-gray-900">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-semibold">API Test Tool</h2>
             {selectedCollection && environments.length > 0 && (

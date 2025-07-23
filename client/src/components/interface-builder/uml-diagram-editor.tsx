@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 interface UmlDiagram {
   id: number;
@@ -341,9 +342,9 @@ export function UmlDiagramEditor({ open, onOpenChange, diagram, onSave }: UmlDia
         </div>
 
         {/* Main content area */}
-        <div className="grid grid-cols-2 gap-2 flex-1 min-h-0">
+        <PanelGroup direction="horizontal" className="flex-1 min-h-0">
           {/* Editor Panel */}
-          <div className="flex flex-col gap-2 min-h-0">
+          <Panel defaultSize={50} minSize={20} className="flex flex-col gap-2 min-h-0 pr-2">
             <div className="flex items-center justify-between">
               <Label className="text-sm">PlantUML Content</Label>
               <div className="flex items-center gap-1">
@@ -405,11 +406,18 @@ export function UmlDiagramEditor({ open, onOpenChange, diagram, onSave }: UmlDia
                 {showPreview ? 'Hide' : 'Show'}
               </Button>
             </div>
-          </div>
+          </Panel>
+
+          {/* Resize Handle */}
+          {showPreview && (
+            <PanelResizeHandle className="relative w-2 bg-gray-800 hover:bg-gray-600 transition-colors group">
+              <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 group-hover:bg-blue-500 transition-colors" />
+            </PanelResizeHandle>
+          )}
 
           {/* Preview Panel */}
           {showPreview && (
-            <div className="flex flex-col gap-2 min-h-0">
+            <Panel defaultSize={50} minSize={20} className="flex flex-col gap-2 min-h-0 pl-2">
               <div className="flex items-center justify-between">
                 <Label className="text-sm">Live Preview</Label>
                 <Button
@@ -450,9 +458,9 @@ export function UmlDiagramEditor({ open, onOpenChange, diagram, onSave }: UmlDia
                   </div>
                 )}
               </div>
-            </div>
+            </Panel>
           )}
-        </div>
+        </PanelGroup>
       </DialogContent>
     </Dialog>
   );
