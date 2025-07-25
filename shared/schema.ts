@@ -52,6 +52,14 @@ export const applications = pgTable("applications", {
   tmfSubDomain: text("tmf_sub_domain"), // More specific sub-domain classification
   tmfProcessArea: text("tmf_process_area"), // eTOM process area mapping
   tmfCapability: text("tmf_capability"), // Specific capability within the domain
+  // Technical details fields
+  applicationType: text("application_type"), // frontend, backend, fullstack, middleware, batch, data-processing
+  hasDatabase: boolean("has_database").default(false),
+  databaseType: text("database_type"), // postgresql, mysql, oracle, mongodb, redis, elasticsearch, other
+  databaseName: text("database_name"),
+  sharedDatabase: boolean("shared_database").default(false),
+  frontendTechnology: text("frontend_technology"), // React, Angular, Vue, etc.
+  backendTechnology: text("backend_technology"), // Node.js, Java Spring, .NET, etc.
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 });

@@ -215,6 +215,63 @@ export default function ApplicationDetailsModal({
                   )}
                 </CardContent>
               </Card>
+
+              {/* Technical Details Card */}
+              {(application.applicationType || application.hasDatabase || application.frontendTechnology || application.backendTechnology) && (
+                <Card className="bg-gray-700 border-gray-600">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm text-gray-300">Technical Details</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {application.applicationType && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-400">Application Type</span>
+                        <span className="text-sm text-white capitalize">{application.applicationType.replace('-', ' ')}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-400">Has Database</span>
+                      <Badge className={application.hasDatabase ? "bg-green-600 text-white" : "bg-gray-600 text-white"}>
+                        {application.hasDatabase ? "Yes" : "No"}
+                      </Badge>
+                    </div>
+                    {application.hasDatabase && (
+                      <>
+                        {application.databaseType && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-400">Database Type</span>
+                            <span className="text-sm text-white">{application.databaseType}</span>
+                          </div>
+                        )}
+                        {application.databaseName && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-400">Database Name</span>
+                            <span className="text-sm font-mono text-white">{application.databaseName}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-gray-400">Shared Database</span>
+                          <Badge className={application.sharedDatabase ? "bg-yellow-600 text-white" : "bg-green-600 text-white"}>
+                            {application.sharedDatabase ? "Shared" : "Dedicated"}
+                          </Badge>
+                        </div>
+                      </>
+                    )}
+                    {application.frontendTechnology && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-400">Frontend Tech</span>
+                        <span className="text-sm text-white">{application.frontendTechnology}</span>
+                      </div>
+                    )}
+                    {application.backendTechnology && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-400">Backend Tech</span>
+                        <span className="text-sm text-white">{application.backendTechnology}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="interfaces" className="space-y-4 mt-4">

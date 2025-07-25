@@ -52,6 +52,14 @@ export default function ApplicationForm({ onSuccess, initialData, applicationId,
       tmfSubDomain: initialData?.tmfSubDomain || "",
       tmfProcessArea: initialData?.tmfProcessArea || "",
       tmfCapability: initialData?.tmfCapability || "",
+      // Technical details
+      applicationType: initialData?.applicationType || "",
+      hasDatabase: initialData?.hasDatabase || false,
+      databaseType: initialData?.databaseType || "",
+      databaseName: initialData?.databaseName || "",
+      sharedDatabase: initialData?.sharedDatabase || false,
+      frontendTechnology: initialData?.frontendTechnology || "",
+      backendTechnology: initialData?.backendTechnology || "",
     },
   });
 
@@ -88,6 +96,8 @@ export default function ApplicationForm({ onSuccess, initialData, applicationId,
 
   const providesInterface = form.watch("providesExtInterface");
   const consumesInterfaces = form.watch("consumesExtInterfaces");
+  const hasDatabase = form.watch("hasDatabase");
+  const applicationType = form.watch("applicationType");
 
   return (
     <>
@@ -508,6 +518,186 @@ export default function ApplicationForm({ onSuccess, initialData, applicationId,
                   </FormItem>
                 )}
               />
+            </div>
+          </div>
+
+          {/* Technical Details Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold border-b border-gray-600 pb-2 text-white">Technical Details</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="applicationType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-300">Application Type</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                      <FormControl>
+                        <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                          <SelectValue placeholder="Select Application Type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent className="bg-gray-800 border-gray-700">
+                        <SelectItem value="frontend">Frontend</SelectItem>
+                        <SelectItem value="backend">Backend</SelectItem>
+                        <SelectItem value="fullstack">Full Stack</SelectItem>
+                        <SelectItem value="middleware">Middleware</SelectItem>
+                        <SelectItem value="batch">Batch Processing</SelectItem>
+                        <SelectItem value="data-processing">Data Processing</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="hasDatabase"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-300">Has Database</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        onValueChange={(value) => field.onChange(value === "true")}
+                        defaultValue={field.value ? "true" : "false"}
+                        className="flex space-x-4"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="true" id="db-yes" />
+                          <Label htmlFor="db-yes" className="text-gray-300">Yes</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <RadioGroupItem value="false" id="db-no" />
+                          <Label htmlFor="db-no" className="text-gray-300">No</Label>
+                        </div>
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {hasDatabase && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="databaseType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-gray-300">Database Type</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value || undefined}>
+                          <FormControl>
+                            <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                              <SelectValue placeholder="Select Database Type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="bg-gray-800 border-gray-700">
+                            <SelectItem value="postgresql">PostgreSQL</SelectItem>
+                            <SelectItem value="mysql">MySQL</SelectItem>
+                            <SelectItem value="oracle">Oracle</SelectItem>
+                            <SelectItem value="mongodb">MongoDB</SelectItem>
+                            <SelectItem value="redis">Redis</SelectItem>
+                            <SelectItem value="elasticsearch">Elasticsearch</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="databaseName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-gray-300">Database Name</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="e.g., myapp_db" 
+                            {...field} 
+                            value={field.value || ''} 
+                            className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" 
+                          />
+                        </FormControl>
+                        <p className="text-xs text-gray-400 mt-1">Database instance or schema name</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="sharedDatabase"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-gray-300">Shared Database</FormLabel>
+                        <FormControl>
+                          <RadioGroup
+                            onValueChange={(value) => field.onChange(value === "true")}
+                            defaultValue={field.value ? "true" : "false"}
+                            className="flex space-x-4"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="true" id="shared-yes" />
+                              <Label htmlFor="shared-yes" className="text-gray-300">Yes</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <RadioGroupItem value="false" id="shared-no" />
+                              <Label htmlFor="shared-no" className="text-gray-300">No</Label>
+                            </div>
+                          </RadioGroup>
+                        </FormControl>
+                        <p className="text-xs text-gray-400 mt-1">Is this database shared with other applications?</p>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
+
+              {(applicationType === 'frontend' || applicationType === 'fullstack') && (
+                <FormField
+                  control={form.control}
+                  name="frontendTechnology"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-gray-300">Frontend Technology</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="e.g., React, Angular, Vue.js" 
+                          {...field} 
+                          value={field.value || ''} 
+                          className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {(applicationType === 'backend' || applicationType === 'fullstack' || applicationType === 'middleware') && (
+                <FormField
+                  control={form.control}
+                  name="backendTechnology"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-gray-300">Backend Technology</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="e.g., Node.js, Java Spring, .NET Core" 
+                          {...field} 
+                          value={field.value || ''} 
+                          className="bg-gray-700 border-gray-600 text-white placeholder-gray-400" 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </div>
           </div>
 
