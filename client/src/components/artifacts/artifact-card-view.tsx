@@ -20,6 +20,8 @@ import {
   MessageSquare,
   Rocket,
   Info,
+  Building2,
+  Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +46,7 @@ import { getArtifactState } from "@/lib/artifact-state-utils";
 import CommunicationBadge from "@/components/communications/communication-badge";
 import { formatDistanceToNow } from "date-fns";
 import { useInitiative } from "@/components/initiatives/initiative-context";
+import { getProcessLevelIcon, getProcessIconProps } from "@/lib/business-process-utils";
 
 interface ArtifactCardViewProps {
   artifacts: any[];
@@ -224,6 +227,18 @@ export default function ArtifactCardView({
       );
     }
 
+    if (artifactType === "businessProcess" && artifact.level) {
+      const levelColor = artifact.level === 'A' ? 'bg-blue-700 text-white border-blue-600' :
+                        artifact.level === 'B' ? 'bg-purple-700 text-white border-purple-600' :
+                        artifact.level === 'C' ? 'bg-pink-700 text-white border-pink-600' :
+                        'bg-gray-700 text-white border-gray-600';
+      badges.push(
+        <Badge key="level" className={cn("text-xs", levelColor)}>
+          Level {artifact.level}
+        </Badge>
+      );
+    }
+
     return badges;
   };
 
@@ -344,18 +359,35 @@ export default function ArtifactCardView({
                     "p-2 rounded-lg",
                     artifactType === "application" && "bg-blue-500/10",
                     artifactType === "interface" && "bg-green-500/10",
-                    artifactType === "businessProcess" && "bg-purple-500/10",
+                    artifactType === "businessProcess" && (
+                      artifact.level === 'A' ? "bg-blue-700/20" :
+                      artifact.level === 'B' ? "bg-purple-700/20" :
+                      artifact.level === 'C' ? "bg-pink-700/20" :
+                      "bg-purple-500/10"
+                    ),
                     artifactType === "internalActivity" && "bg-orange-500/10",
                     artifactType === "technicalProcess" && "bg-cyan-500/10"
                   )}>
-                    <Icon className={cn(
-                      "h-5 w-5",
-                      artifactType === "application" && "text-blue-500",
-                      artifactType === "interface" && "text-green-500",
-                      artifactType === "businessProcess" && "text-purple-500",
-                      artifactType === "internalActivity" && "text-orange-500",
-                      artifactType === "technicalProcess" && "text-cyan-500"
-                    )} />
+                    {artifactType === "businessProcess" ? (
+                      (() => {
+                        const ProcessIcon = getProcessLevelIcon(artifact.level || 'C');
+                        return <ProcessIcon className={cn(
+                          "h-5 w-5",
+                          artifact.level === 'A' ? "text-blue-600" :
+                          artifact.level === 'B' ? "text-purple-600" :
+                          artifact.level === 'C' ? "text-pink-600" :
+                          "text-purple-500"
+                        )} />;
+                      })()
+                    ) : (
+                      <Icon className={cn(
+                        "h-5 w-5",
+                        artifactType === "application" && "text-blue-500",
+                        artifactType === "interface" && "text-green-500",
+                        artifactType === "internalActivity" && "text-orange-500",
+                        artifactType === "technicalProcess" && "text-cyan-500"
+                      )} />
+                    )}
                   </div>
                   {/* Status indicators */}
                   {(() => {

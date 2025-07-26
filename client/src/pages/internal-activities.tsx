@@ -151,14 +151,19 @@ export default function InternalActivities() {
     queryKey: ["internal-activities"],
     queryFn: async () => {
       console.log('=== FETCHING INTERNAL ACTIVITIES ===');
-      const response = await api.get("/api/internal-activities");
-      console.log('=== RAW API RESPONSE ===');
-      console.log('Type:', typeof response.data);
-      console.log('Is Array:', Array.isArray(response.data));
-      console.log('Length:', response.data?.length);
-      console.log('First item:', response.data?.[0]);
-      console.log('All items:', response.data);
-      return response.data;
+      try {
+        const response = await api.get("/api/internal-activities");
+        console.log('=== RAW API RESPONSE ===');
+        console.log('Type:', typeof response.data);
+        console.log('Is Array:', Array.isArray(response.data));
+        console.log('Length:', response.data?.length);
+        console.log('First item:', response.data?.[0]);
+        console.log('All items:', response.data);
+        return response.data;
+      } catch (err) {
+        console.error('=== API ERROR ===', err);
+        throw err;
+      }
     },
   });
 
@@ -216,24 +221,19 @@ export default function InternalActivities() {
   try {
     console.log('=== MAPPING ACTIVITIES ===');
     const mappedActivities = activities.map((item: any, index: number) => {
-      console.log(`Processing item ${index}:`, item);
       if (!item) {
-        console.log(`Item ${index} is null/undefined`);
         return null;
       }
       
       // Handle nested structure from API
       if (item.activity) {
-        console.log(`Item ${index} has nested structure:`, item.activity);
         const transformed = {
           ...item.activity,
           applicationName: item.application?.name || '',
           businessProcessName: item.businessProcess?.businessProcess || ''
         };
-        console.log(`Transformed item ${index}:`, transformed);
         return transformed;
       } else {
-        console.log(`Item ${index} is flat structure:`, item);
         // Handle flat structure (fallback)
         const application = applications?.find(app => app.id === item.applicationId);
         const businessProcess = businessProcesses?.find(bp => bp.id === item.businessProcessId);
@@ -243,7 +243,6 @@ export default function InternalActivities() {
           applicationName: application?.name || '',
           businessProcessName: businessProcess?.businessProcess || ''
         };
-        console.log(`Transformed flat item ${index}:`, transformed);
         return transformed;
       }
     }).filter(Boolean);
@@ -280,7 +279,6 @@ export default function InternalActivities() {
       const matchesType = typeFilter === "all" || activity.activityType === typeFilter;
 
       const passes = matchesSearch && matchesApplication && matchesProcess && matchesType;
-      console.log(`Activity ${activity.activityName}: search=${matchesSearch}, app=${matchesApplication}, process=${matchesProcess}, type=${matchesType} => ${passes}`);
       return passes;
     }).map((activity: any) => {
       // Add lock information to each activity for ArtifactsExplorer
@@ -290,7 +288,6 @@ export default function InternalActivities() {
         lockedBy: lock?.lock?.lockedBy || null,
         currentUserId: currentUser?.id || null
       };
-      console.log(`Enhanced activity:`, enhanced);
       return enhanced;
     });
     
@@ -643,7 +640,16 @@ export default function InternalActivities() {
     );
   }
 
-  console.log('=== RENDERING MAIN COMPONENT ===');
+  console.log('=== INTERNAL ACTIVITIES COMPONENT STATE ===');
+  console.log('- API data length:', data?.length || 0);
+  console.log('- isLoading:', isLoading);
+  console.log('- error:', error);
+  console.log('- displayActivities length:', displayActivities.length);
+  console.log('- filteredActivities length:', filteredActivities.length);
+  
+  if (!data && !isLoading && !error) {
+    console.log('WARNING: No data, not loading, no error - possible auth issue');
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">
@@ -664,13 +670,31 @@ export default function InternalActivities() {
               Manage self-referential activities within applications
             </p>
           </div>
-          <Button
-            onClick={() => setCreateDialogOpen(true)}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            New Internal Activity
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={async () => {
+                console.log('Testing API directly...');
+                try {
+                  const response = await api.get("/api/internal-activities");
+                  console.log('Direct API test success:', response.data);
+                  alert(`API returned ${response.data.length} activities`);
+                } catch (err) {
+                  console.error('Direct API test failed:', err);
+                  alert('API test failed: ' + err.message);
+                }
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Test API
+            </Button>
+            <Button
+              onClick={() => setCreateDialogOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New Internal Activity
+            </Button>
+          </div>
         </div>
       </header>
 
