@@ -63,7 +63,10 @@ import {
   GitBranch,
   Lock,
   Unlock,
-  X
+  X,
+  Grid3x3,
+  List,
+  TableIcon
 } from "lucide-react";
 import { Link } from "wouter";
 import InterfaceFormEnhanced from "@/components/interfaces/interface-form-enhanced";
@@ -88,6 +91,7 @@ import {
   ArtifactStatusIndicator, 
   StatusColumn 
 } from "@/components/ui/artifact-status-badge";
+import ArtifactsExplorer from "@/components/artifacts/artifacts-explorer";
 
 interface Interface {
   id: number;
@@ -121,6 +125,7 @@ export default function Interfaces() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingInterface, setEditingInterface] = useState<Interface | null>(null);
   const [viewingInterface, setViewingInterface] = useState<Interface | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "explorer">("table");
   const [deletingInterface, setDeletingInterface] = useState<Interface | null>(null);
   const [duplicatingInterface, setDuplicatingInterface] = useState<Interface | null>(null);
   const [showImportExport, setShowImportExport] = useState(false);
@@ -707,6 +712,26 @@ export default function Interfaces() {
                 onClearAllFilters={clearAllFilters}
               />
             </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewMode === "explorer" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("explorer")}
+                title="Card/List View"
+              >
+                <Grid3x3 className="h-4 w-4 mr-2" />
+                Explorer
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+                title="Table View"
+              >
+                <List className="h-4 w-4 mr-2" />
+                Table
+              </Button>
+            </div>
           </div>
           {hasActiveFilters() && (
             <div className="flex items-center gap-2 text-sm text-blue-400">
@@ -730,270 +755,247 @@ export default function Interfaces() {
           />
         )}
 
-        {/* Interfaces Table */}
-        {isLoading ? (
-          <div className="text-center py-12">
-            <div className="text-gray-400">Loading interfaces...</div>
-          </div>
-        ) : filteredInterfaces.length === 0 ? (
-          <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 text-center py-12">
-            <Plug className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-white mb-2">No interfaces found</h3>
-            <p className="text-gray-400 mb-4">
-              {searchTerm ? "No interfaces match your search criteria." : "Get started by creating your first interface."}
-            </p>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-blue-600 text-white hover:bg-blue-700">
-                  <Plus className="mr-2" size={16} />
-                  Create Interface
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
-                <InterfaceFormEnhanced onSuccess={() => setIsCreateDialogOpen(false)} />
-              </DialogContent>
-            </Dialog>
-          </div>
+        {/* Interfaces View */}
+        {viewMode === "explorer" ? (
+          <ArtifactsExplorer
+          artifacts={filteredInterfaces}
+          artifactType="interface"
+          isLoading={isLoading}
+          onView={setViewingInterface}
+          onEdit={(iface) => {
+            if (isInterfaceLocked(iface.id)) {
+              setEditingInterface(iface);
+            } else {
+              toast({
+                title: "Interface not checked out",
+                description: "You need to check out this interface before editing",
+                variant: "destructive"
+              });
+            }
+          }}
+          onDelete={(iface) => setDeletingInterface(iface)}
+          onCheckout={(iface) => checkoutMutation.mutate(iface)}
+          onCheckin={(iface, changes) => checkinMutation.mutate({ interface: iface, changes })}
+          onCancelCheckout={(iface) => cancelCheckoutMutation.mutate(iface)}
+          customActions={(iface) => (
+            <>
+              <ContextMenuItem 
+                onClick={() => navigator.clipboard.writeText(iface.imlNumber)}
+                className="text-gray-300 hover:bg-gray-700"
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy IML Number
+              </ContextMenuItem>
+              {canCreate('interfaces') && (
+                <ContextMenuItem 
+                  onClick={() => handleDuplicateAndEdit(iface)}
+                  className="text-gray-300 hover:bg-gray-700"
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Duplicate Interface
+                </ContextMenuItem>
+              )}
+              {canDelete('interfaces') && iface.status !== 'decommissioned' && (
+                <>
+                  <ContextMenuSeparator className="bg-gray-700" />
+                  <ContextMenuItem 
+                    onClick={() => setDecommissioningInterface(iface)}
+                    className="text-yellow-400 hover:bg-yellow-900/20"
+                  >
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    Decommission
+                  </ContextMenuItem>
+                </>
+              )}
+            </>
+          )}
+          />
         ) : (
           <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
-            <MultiSelectTable
-              items={filteredInterfaces}
-              selectedIds={multiSelect.selectedIds}
-              getItemId={(iface) => iface.id}
-              onToggleSelection={multiSelect.toggleSelection}
-              onToggleAll={multiSelect.toggleAll}
-              onRangeSelect={multiSelect.selectRange}
-              isAllSelected={multiSelect.isAllSelected}
-              isSomeSelected={multiSelect.isSomeSelected}
-              onRowDoubleClick={(iface) => setViewingInterface(iface)}
-              getRowClassName={(interface_, isSelected) => 
-                getRowClassName(getInterfaceState(interface_), isSelected)
-              }
-              renderContextMenu={(interface_, rowContent) => (
-                <ContextMenu>
-                  <ContextMenuTrigger asChild>
-                    {rowContent}
-                  </ContextMenuTrigger>
-                  <ContextMenuContent className="bg-gray-800 border-gray-700">
-                    {/* Version Control Options */}
-                    {currentInitiative && !isProductionView && (
-                      <>
-                        {(() => {
-                          const lock = isInterfaceLocked(interface_.id);
-                          const isLockedByMe = lock?.lock.lockedBy === currentUser?.id || isAdmin;
-                          const isLockedByOther = lock && !isLockedByMe;
-                          
-                          return (
+            <Table>
+              <TableHeader>
+                <TableRow className="border-gray-700">
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={filteredInterfaces.length > 0 && multiSelect.selectedItems.length === filteredInterfaces.length}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          multiSelect.selectAll();
+                        } else {
+                          multiSelect.clearSelection();
+                        }
+                      }}
+                      aria-label="Select all interfaces"
+                    />
+                  </TableHead>
+                  <TableHead className="text-gray-300">IML Number</TableHead>
+                  <TableHead className="text-gray-300">Provider App</TableHead>
+                  <TableHead className="text-gray-300">Consumer App</TableHead>
+                  <TableHead className="text-gray-300">Type</TableHead>
+                  <TableHead className="text-gray-300">Version</TableHead>
+                  <TableHead className="text-gray-300">Status</TableHead>
+                  <TableHead className="text-gray-300">Business Process</TableHead>
+                  <TableHead className="text-gray-300">Version Status</TableHead>
+                  <TableHead className="text-gray-300">Communications</TableHead>
+                  <TableHead className="text-gray-300">Last Changed</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center text-gray-400">
+                      Loading interfaces...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredInterfaces.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center text-gray-400">
+                      No interfaces found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredInterfaces.map((interface_) => {
+                    const providerApp = getApplication(interface_.providerApplicationId);
+                    const consumerApp = getApplication(interface_.consumerApplicationId);
+                    return (
+                      <ContextMenu key={interface_.id}>
+                        <ContextMenuTrigger asChild>
+                          <TableRow 
+                            className={cn(
+                              "hover:bg-gray-700 cursor-pointer",
+                              getRowClassName(getInterfaceState(interface_), multiSelect.isSelected(interface_))
+                            )}
+                            onDoubleClick={() => setViewingInterface(interface_)}
+                          >
+                            <TableCell className="w-12">
+                              <Checkbox
+                                checked={multiSelect.isSelected(interface_)}
+                                onCheckedChange={() => multiSelect.toggleSelection(interface_)}
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label={`Select interface ${interface_.imlNumber}`}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium text-white">
+                              <ArtifactInitiativeTooltip
+                                artifactType="interface"
+                                artifactId={interface_.id}
+                                artifactState={interface_.artifactState}
+                              >
+                                <div className="flex items-center space-x-2">
+                                  <Plug className="h-4 w-4 text-green-500" />
+                                  <span>{interface_.imlNumber}</span>
+                                  <ArtifactStatusIndicator 
+                                    state={getInterfaceState(interface_)} 
+                                    initiativeName={currentInitiative?.name}
+                                  />
+                                </div>
+                              </ArtifactInitiativeTooltip>
+                            </TableCell>
+                            <TableCell className="text-gray-300">
+                              {providerApp?.name || 'Unknown'}
+                            </TableCell>
+                            <TableCell className="text-gray-300">
+                              {consumerApp?.name || 'Unknown'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={getInterfaceTypeColor(interface_.interfaceType)}>
+                                {interface_.interfaceType}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-gray-300">{interface_.version}</TableCell>
+                            <TableCell>
+                              <Badge className={getStatusColor(interface_.status)}>
+                                {interface_.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-gray-300">{interface_.businessProcessName}</TableCell>
+                            <TableCell>
+                              <StatusColumn state={getInterfaceState(interface_)} />
+                            </TableCell>
+                            <TableCell>
+                              <CommunicationBadge 
+                                entityType="interface" 
+                                entityId={interface_.id} 
+                                entityName={interface_.imlNumber}
+                              />
+                            </TableCell>
+                            <TableCell className="text-gray-300">
+                              {new Date(interface_.lastChangeDate).toLocaleDateString()}
+                            </TableCell>
+                          </TableRow>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          <ContextMenuItem onClick={() => setViewingInterface(interface_)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </ContextMenuItem>
+                          {currentInitiative && !isProductionView && (
                             <>
-                              {!lock && (
-                                <ContextMenuItem 
-                                  onClick={() => checkoutMutation.mutate(interface_)}
-                                  disabled={checkoutMutation.isPending}
-                                  className="text-gray-300 hover:bg-gray-700"
-                                >
-                                  <GitBranch className="mr-2 h-4 w-4" />
+                              {!isInterfaceLocked(interface_.id) && (
+                                <ContextMenuItem onClick={() => checkoutMutation.mutate(interface_)}>
+                                  <Lock className="mr-2 h-4 w-4" />
                                   Checkout
                                 </ContextMenuItem>
                               )}
-                              {isLockedByMe && (
+                              {isInterfaceLocked(interface_.id) && (
                                 <>
-                                  <ContextMenuItem 
-                                    onClick={() => setEditingInterface(interface_)}
-                                    className="text-gray-300 hover:bg-gray-700"
-                                  >
+                                  <ContextMenuItem onClick={() => setEditingInterface(interface_)}>
                                     <Edit className="mr-2 h-4 w-4" />
                                     Edit
                                   </ContextMenuItem>
-                                  <ContextMenuItem 
-                                    onClick={() => checkinMutation.mutate({ interface: interface_, changes: {} })}
-                                    disabled={checkinMutation.isPending}
-                                    className="text-gray-300 hover:bg-gray-700"
-                                  >
+                                  <ContextMenuItem onClick={() => cancelCheckoutMutation.mutate(interface_)}>
                                     <Unlock className="mr-2 h-4 w-4" />
-                                    Checkin
-                                  </ContextMenuItem>
-                                  <ContextMenuItem 
-                                    onClick={() => cancelCheckoutMutation.mutate(interface_)}
-                                    disabled={cancelCheckoutMutation.isPending}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <X className="mr-2 h-4 w-4" />
                                     Cancel Checkout
                                   </ContextMenuItem>
                                 </>
                               )}
-                              {isLockedByOther && (
+                            </>
+                          )}
+                          {(!currentInitiative || isProductionView) && canUpdate('interfaces') && (
+                            <ContextMenuItem onClick={() => setEditingInterface(interface_)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </ContextMenuItem>
+                          )}
+                          <ContextMenuSeparator />
+                          <ContextMenuItem onClick={() => navigator.clipboard.writeText(interface_.imlNumber)}>
+                            <Copy className="mr-2 h-4 w-4" />
+                            Copy IML Number
+                          </ContextMenuItem>
+                          {canCreate('interfaces') && (
+                            <ContextMenuItem onClick={() => handleDuplicateAndEdit(interface_)}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              Duplicate Interface
+                            </ContextMenuItem>
+                          )}
+                          {canDelete('interfaces') && (
+                            <>
+                              <ContextMenuSeparator />
+                              {interface_.status !== 'decommissioned' && (
                                 <ContextMenuItem 
-                                  disabled
-                                  className="text-gray-500"
+                                  onClick={() => setDecommissioningInterface(interface_)}
+                                  className="text-yellow-400"
                                 >
-                                  <Lock className="mr-2 h-4 w-4" />
-                                  Locked by {lock.user?.username}
+                                  <AlertTriangle className="mr-2 h-4 w-4" />
+                                  Decommission
                                 </ContextMenuItem>
                               )}
+                              <ContextMenuItem 
+                                onClick={() => setDeletingInterface(interface_)}
+                                className="text-red-400"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </ContextMenuItem>
                             </>
-                          );
-                        })()}
-                        <ContextMenuSeparator className="bg-gray-700" />
-                      </>
-                    )}
-                    <ContextMenuItem 
-                      onClick={() => setViewingInterface(interface_)}
-                      className="text-gray-300 hover:bg-gray-700"
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                    </ContextMenuItem>
-                    {canUpdate && (!currentInitiative || isProductionView) && (
-                      <ContextMenuItem 
-                        onClick={() => setEditingInterface(interface_)}
-                        className="text-gray-300 hover:bg-gray-700"
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit Interface
-                      </ContextMenuItem>
-                    )}
-                    {canCreate && (
-                      <ContextMenuItem 
-                        onClick={() => handleDuplicateAndEdit(interface_)}
-                        className="text-gray-300 hover:bg-gray-700"
-                      >
-                        <Copy className="h-4 w-4 mr-2" />
-                        Duplicate Interface
-                      </ContextMenuItem>
-                    )}
-                    <ContextMenuItem 
-                      onClick={() => navigator.clipboard.writeText(interface_.imlNumber)}
-                      className="text-gray-300 hover:bg-gray-700"
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy IML Number
-                    </ContextMenuItem>
-                    <ContextMenuSeparator className="bg-gray-700" />
-                    <ContextMenuItem 
-                      onClick={() => setDecommissioningInterface(interface_)}
-                      className="text-yellow-400 hover:bg-yellow-900/20"
-                    >
-                      <AlertTriangle className="h-4 w-4 mr-2" />
-                      Decommission
-                    </ContextMenuItem>
-                    {canDelete && (
-                      <ContextMenuItem 
-                        onClick={() => setDeletingInterface(interface_)}
-                        className="text-red-400 hover:bg-red-900/20"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete Interface
-                      </ContextMenuItem>
-                    )}
-                  </ContextMenuContent>
-                </ContextMenu>
-              )}
-              headers={
-                <>
-                  <TableHead className="w-[120px] text-gray-300">IML Number</TableHead>
-                  <TableHead className="w-[250px] text-gray-300">Description</TableHead>
-                  <TableHead className="w-[120px] text-gray-300">Type</TableHead>
-                  <TableHead className="w-[120px] text-gray-300">Middleware</TableHead>
-                  <TableHead className="w-[150px] text-gray-300">LOB</TableHead>
-                  <TableHead className="w-[200px] text-gray-300">Provider → Consumer</TableHead>
-                  <TableHead className="w-[150px] text-gray-300">Business Process</TableHead>
-                  <TableHead className="w-[100px] text-gray-300">Status</TableHead>
-                  <TableHead className="w-[120px] text-gray-300">Version Status</TableHead>
-                  <TableHead className="w-[120px] text-gray-300">Customer Focal</TableHead>
-                  <TableHead className="w-[100px] text-gray-300">Communications</TableHead>
-                </>
-              }
-            >
-              {(interface_) => {
-                  const provider = getApplication(interface_.providerApplicationId);
-                  const consumer = getApplication(interface_.consumerApplicationId);
-                  
-                  return (
-                    <>
-                      <TableCell className="font-medium text-white">
-                        <ArtifactInitiativeTooltip
-                          artifactType="interface"
-                          artifactId={interface_.id}
-                          artifactState={interface_.artifactState}
-                        >
-                          <div className="flex items-center space-x-2">
-                            <Plug className="h-4 w-4 text-green-600" />
-                            <span>{interface_.imlNumber}</span>
-                            <ArtifactStatusIndicator 
-                              state={getInterfaceState(interface_)} 
-                              initiativeName={currentInitiative?.name}
-                            />
-                            <ArtifactStatusBadge 
-                              state={getInterfaceState(interface_)} 
-                              showIcon={false}
-                              showText={true}
-                              size="sm"
-                            />
-                          </div>
-                        </ArtifactInitiativeTooltip>
-                      </TableCell>
-                      <TableCell className="text-gray-300">
-                        <div className="max-w-[250px] break-words whitespace-pre-wrap">
-                          {interface_.description || '-'}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`status-badge ${getInterfaceTypeColor(interface_.interfaceType)}`}>
-                          {interface_.interfaceType.toUpperCase()}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-gray-300">{interface_.middleware || 'None'}</TableCell>
-                      <TableCell className="text-gray-300">{interface_.lob || '-'}</TableCell>
-                      <TableCell>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger className="flex items-center space-x-1 cursor-help text-gray-300">
-                              <span className="truncate max-w-[80px]">{provider?.name || 'Unknown'}</span>
-                              <ArrowRight className="h-3 w-3 flex-shrink-0" />
-                              <span className="truncate max-w-[80px]">{consumer?.name || 'Unknown'}</span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <div>
-                                <p className="font-semibold">Provider: {provider?.name || 'Unknown'}</p>
-                                <p className="text-xs">Owner: {interface_.providerOwner}</p>
-                                <p className="font-semibold mt-2">Consumer: {consumer?.name || 'Unknown'}</p>
-                                <p className="text-xs">Owner: {interface_.consumerOwner}</p>
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </TableCell>
-                      <TableCell>
-                        <InterfaceBusinessProcesses interfaceId={interface_.id} />
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(interface_.status)}>
-                          {interface_.status.replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <StatusColumn state={getInterfaceState(interface_)} />
-                      </TableCell>
-                      <TableCell className="text-gray-300">{interface_.customerFocal}</TableCell>
-                      <TableCell>
-                        <CommunicationBadge 
-                          entityType="interface" 
-                          entityId={interface_.id} 
-                          entityName={interface_.imlNumber}
-                        />
-                      </TableCell>
-                    </>
-                  );
-                }}
-            </MultiSelectTable>
-          </div>
-        )}
-
-        {/* Pagination */}
-        {filteredInterfaces.length > 0 && (
-          <div className="mt-8 text-center text-sm text-gray-400">
-            Showing {filteredInterfaces.length} interface{filteredInterfaces.length !== 1 ? 's' : ''}
+                          )}
+                        </ContextMenuContent>
+                      </ContextMenu>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>

@@ -38,6 +38,7 @@ import { ArtifactStatusBadge } from "@/components/ui/artifact-status-badge";
 import { getArtifactState } from "@/lib/artifact-state-utils";
 import CommunicationBadge from "@/components/communications/communication-badge";
 import { formatDistanceToNow } from "date-fns";
+import { useInitiative } from "@/components/initiatives/initiative-context";
 
 interface ArtifactListViewProps {
   artifacts: any[];
@@ -72,6 +73,7 @@ export default function ArtifactListView({
   customActions,
   isProductionView = false,
 }: ArtifactListViewProps) {
+  const { currentInitiative } = useInitiative();
   // Add custom scrollbar styles
   useEffect(() => {
     const style = document.createElement('style');
@@ -266,13 +268,14 @@ export default function ArtifactListView({
                   <h3 className="font-medium text-sm truncate">
                     {getArtifactName(artifact)}
                   </h3>
-                  <ArtifactStatusBadge 
-                    state={getArtifactState(artifact)} 
-                    showIcon={true}
-                    showText={false}
-                    size="sm"
-                  />
+                  {/* Status badge will be shown separately */}
                 </div>
+                {/* Application name for internal activities and technical processes */}
+                {(artifactType === "internalActivity" || artifactType === "technicalProcess") && artifact.applicationName && (
+                  <p className="text-sm font-bold text-white truncate mt-1">
+                    {artifact.applicationName}
+                  </p>
+                )}
                 <p className="text-xs text-gray-400 truncate mt-1">
                   {getArtifactSubtitle(artifact)}
                 </p>

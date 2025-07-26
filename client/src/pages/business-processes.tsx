@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useInitiative } from "@/components/initiatives/initiative-context";
 import { api } from "@/lib/api";
-import { Plus, Search, Edit, Trash2, Network, MoreVertical, Info, FileJson, Copy, Eye, TableIcon, UserPlus, FileDown, ChevronDown, Layers, GitBranch, Lock, Unlock, AlertTriangle , X} from "lucide-react";
+import { Plus, Search, Edit, Trash2, Network, MoreVertical, Info, FileJson, Copy, Eye, TableIcon, UserPlus, FileDown, ChevronDown, Layers, GitBranch, Lock, Unlock, AlertTriangle, X, Grid3x3, List } from "lucide-react";
 import { getProcessLevelIcon, getProcessIconProps, getProcessLevelDescription } from "@/lib/business-process-utils";
 import { ProcessLevelBadge } from "@/components/ui/process-level-badge";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,7 @@ import {
   ArtifactStatusIndicator, 
   StatusColumn 
 } from "@/components/ui/artifact-status-badge";
+import ArtifactsExplorer from "@/components/artifacts/artifacts-explorer";
 
 export default function BusinessProcesses() {
   const {
@@ -103,7 +104,7 @@ export default function BusinessProcesses() {
   const [showImportExport, setShowImportExport] = useState(false);
   const [bpParents, setBpParents] = useState<any[]>([]);
   const [bpChildren, setBpChildren] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<"table" | "hierarchy" | "tree">("table");
+  const [viewMode, setViewMode] = useState<"card" | "list" | "table" | "tree" | "hierarchy">("list");
   const [deletionImpactMessage, setDeletionImpactMessage] = useState<string | null>(null);
   const [creatingChildForBP, setCreatingChildForBP] = useState<any>(null);
   const [showHierarchyDesigns, setShowHierarchyDesigns] = useState(false);
@@ -317,6 +318,42 @@ export default function BusinessProcesses() {
         title: "Cancel checkout failed",
         description: error.response?.data?.error || "Failed to cancel checkout",
         variant: "destructive"
+      });
+    }
+  });
+
+  const copyProcessWithChildrenMutation = useMutation({
+    mutationFn: async ({ sourceProcessId, targetParentId }: { sourceProcessId: number; targetParentId: number | null }) => {
+      const response = await fetch(`/api/business-processes/${sourceProcessId}/copy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          targetParentId,
+          includeChildren: true 
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to copy process");
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["business-processes"] });
+      queryClient.invalidateQueries({ queryKey: ["business-process-relationships"] });
+      
+      toast({
+        title: "Success",
+        description: "Business process copied successfully with all children",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to copy business process",
+        variant: "destructive",
       });
     }
   });
@@ -782,9 +819,17 @@ export default function BusinessProcesses() {
             <ToggleGroup 
               type="single" 
               value={viewMode} 
-              onValueChange={(value) => value && setViewMode(value as "table" | "hierarchy" | "tree")}
+              onValueChange={(value) => value && setViewMode(value as "card" | "list" | "table" | "tree" | "hierarchy")}
               className="bg-gray-800 border-gray-700"
             >
+              <ToggleGroupItem value="card" aria-label="Card view" className="data-[state=on]:bg-gray-700">
+                <Grid3x3 className="h-4 w-4 mr-2" />
+                Cards
+              </ToggleGroupItem>
+              <ToggleGroupItem value="list" aria-label="List view" className="data-[state=on]:bg-gray-700">
+                <List className="h-4 w-4 mr-2" />
+                List
+              </ToggleGroupItem>
               <ToggleGroupItem value="table" aria-label="Table view" className="data-[state=on]:bg-gray-700">
                 <TableIcon className="h-4 w-4 mr-2" />
                 Table
@@ -842,7 +887,52 @@ export default function BusinessProcesses() {
           </div>
         )}
 
-        {viewMode === "table" ? (
+        {(viewMode === "card" || viewMode === "list") ? (
+          <ArtifactsExplorer
+            artifacts={hierarchicalBPs}
+            artifactType="businessProcess"
+            isLoading={isLoading}
+            onView={setViewingBP}
+            onEdit={(bp) => {
+              if (isBusinessProcessLocked(bp.id)) {
+                setEditingBP(bp);
+              } else {
+                toast({
+                  title: "Business process not checked out",
+                  description: "You need to check out this business process before editing",
+                  variant: "destructive"
+                });
+              }
+            }}
+            onDelete={(bp) => setDeletingBP(bp)}
+            onCheckout={(bp) => checkoutMutation.mutate(bp)}
+            onCheckin={(bp, changes) => checkinMutation.mutate({ bp, changes })}
+            onCancelCheckout={(bp) => cancelCheckoutMutation.mutate(bp)}
+            customActions={(bp) => (
+              <>
+                <ContextMenuItem onClick={() => navigate(`/business-processes/${bp.id}/diagram`)}>
+                  <Network className="mr-2 h-4 w-4" />
+                  View IML Diagram
+                </ContextMenuItem>
+                {bp.level !== 'C' && (
+                  <>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem onClick={() => handleCreateChild(bp)}>
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Add Child Process
+                    </ContextMenuItem>
+                  </>
+                )}
+                {canCreate('business-processes') && (
+                  <ContextMenuItem onClick={() => handleDuplicateAndEdit(bp)}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Duplicate Process
+                  </ContextMenuItem>
+                )}
+              </>
+            )}
+          />
+        ) : viewMode === "table" ? (
           <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
           <Table>
           <TableHeader>
@@ -1072,6 +1162,23 @@ export default function BusinessProcesses() {
           </TableBody>
         </Table>
         </div>
+        ) : viewMode === "tree" ? (
+          <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-4">
+            <BusinessProcessTreeViewDnd
+              processes={filteredBPs}
+              relationships={relationships}
+              searchTerm={search}
+              onEdit={setEditingBP}
+              onView={setViewingBP}
+              onDelete={setDeletingBP}
+              onDuplicate={handleDuplicateAndEdit}
+              onCreateChild={handleCreateChild}
+              onMoveProcess={moveProcessMutation.mutateAsync}
+              onCopyPaste={async (sourceProcessId: number, targetParentId: number | null) => {
+                await copyProcessWithChildrenMutation.mutateAsync({ sourceProcessId, targetParentId });
+              }}
+            />
+          </div>
         ) : viewMode === "hierarchy" ? (
           <div className="space-y-4">
             {/* Hierarchy Builder Header */}
@@ -1173,22 +1280,7 @@ export default function BusinessProcesses() {
               />
             </div>
           </div>
-        ) : (
-          <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-4">
-            <BusinessProcessTreeViewDnd
-              processes={filteredBPs}
-              relationships={relationships}
-              searchTerm={search}
-              onEdit={setEditingBP}
-              onView={setViewingBP}
-              onDelete={handleDeleteClick}
-              onDuplicate={handleDuplicateAndEdit}
-              onCreateChild={handleCreateChild}
-              onMoveProcess={handleMoveProcess}
-              onCopyPaste={handleCopyPaste}
-            />
-          </div>
-        )}
+        ) : null}
       </div>
 
       {/* Edit Business Process Dialog */}

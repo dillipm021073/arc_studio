@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import {
   Box,
   Plug,
@@ -19,6 +19,7 @@ import {
   FileText,
   MessageSquare,
   Rocket,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,7 @@ import { ArtifactStatusBadge } from "@/components/ui/artifact-status-badge";
 import { getArtifactState } from "@/lib/artifact-state-utils";
 import CommunicationBadge from "@/components/communications/communication-badge";
 import { formatDistanceToNow } from "date-fns";
+import { useInitiative } from "@/components/initiatives/initiative-context";
 
 interface ArtifactCardViewProps {
   artifacts: any[];
@@ -100,6 +102,7 @@ export default function ArtifactCardView({
   customActions,
   isProductionView = false,
 }: ArtifactCardViewProps) {
+  const { currentInitiative } = useInitiative();
   // Add custom scrollbar styles
   useEffect(() => {
     const style = document.createElement('style');
@@ -172,8 +175,20 @@ export default function ArtifactCardView({
   const getArtifactBadges = (artifact: any) => {
     const badges = [];
     
-    // Status badge
-    if (artifact.status) {
+    // Status badge - show initiative state if pending
+    if (artifact.artifactState === 'pending' || artifact.versionState === 'new_in_initiative') {
+      badges.push(
+        <Badge key="status" className={cn("text-xs", "bg-yellow-600 text-white")}>
+          Pending Deployment
+        </Badge>
+      );
+    } else if (artifact.artifactState === 'decommissioning') {
+      badges.push(
+        <Badge key="status" className={cn("text-xs", "bg-gray-600 text-white")}>
+          Decommissioning
+        </Badge>
+      );
+    } else if (artifact.status) {
       badges.push(
         <Badge key="status" className={cn("text-xs", getStatusColor(artifact.status))}>
           {artifact.status.replace('_', ' ')}
@@ -224,27 +239,52 @@ export default function ArtifactCardView({
             View Details
           </ContextMenuItem>
         )}
-        {!isProductionView && (
+        {/* Version control options for initiative mode */}
+        {currentInitiative && !isProductionView && (
           <>
-            {onCheckout && (
+            {onCheckout && !artifact.lockedBy && (
               <ContextMenuItem onClick={() => onCheckout(artifact)}>
                 <Lock className="mr-2 h-4 w-4" />
                 Checkout for Edit
               </ContextMenuItem>
             )}
-            {onEdit && (
-              <ContextMenuItem onClick={() => onEdit(artifact)}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </ContextMenuItem>
+            {artifact.lockedBy && artifact.lockedBy === artifact.currentUserId && (
+              <>
+                {onEdit && (
+                  <ContextMenuItem onClick={() => onEdit(artifact)}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit
+                  </ContextMenuItem>
+                )}
+                {onCancelCheckout && (
+                  <ContextMenuItem onClick={() => onCancelCheckout(artifact)}>
+                    <Unlock className="mr-2 h-4 w-4" />
+                    Cancel Checkout
+                  </ContextMenuItem>
+                )}
+              </>
             )}
-            {onCancelCheckout && (
-              <ContextMenuItem onClick={() => onCancelCheckout(artifact)}>
-                <Unlock className="mr-2 h-4 w-4" />
-                Cancel Checkout
+            {artifact.lockedBy && artifact.lockedBy !== artifact.currentUserId && (
+              <ContextMenuItem disabled>
+                <Lock className="mr-2 h-4 w-4" />
+                Locked by user
               </ContextMenuItem>
             )}
           </>
+        )}
+        {/* Edit option for production view or no initiative context */}
+        {(!currentInitiative || isProductionView) && onEdit && (
+          <ContextMenuItem onClick={() => onEdit(artifact)}>
+            <Edit className="mr-2 h-4 w-4" />
+            Edit
+          </ContextMenuItem>
+        )}
+        {/* Show help when in initiative mode but item not checked out */}
+        {currentInitiative && !isProductionView && !artifact.lockedBy && (
+          <ContextMenuItem disabled>
+            <Info className="mr-2 h-4 w-4" />
+            Checkout required to edit
+          </ContextMenuItem>
         )}
         {customActions && (
           <>
@@ -281,10 +321,17 @@ export default function ArtifactCardView({
                 "bg-gray-800 hover:bg-gray-700",
                 // Visual differentiation based on state
                 (() => {
-                  const state = getArtifactState(artifact);
-                  if (state.state === 'locked_by_other') return "opacity-75 ring-2 ring-red-500/50";
-                  if (state.state === 'locked_by_user') return "ring-2 ring-green-500/50";
-                  if (state.state === 'has_initiative_changes') return "ring-2 ring-yellow-500/30";
+                  // Check for pending/new artifacts first
+                  if (artifact.artifactState === 'pending' || artifact.versionState === 'new_in_initiative') {
+                    return "ring-2 ring-yellow-500/50 bg-yellow-950/20";
+                  }
+                  if (artifact.artifactState === 'decommissioning') {
+                    return "opacity-60 ring-2 ring-gray-500/30";
+                  }
+                  // Then check lock states
+                  if (artifact.lockedBy && artifact.lockedBy !== artifact.currentUserId) return "opacity-75 ring-2 ring-red-500/50";
+                  if (artifact.lockedBy && artifact.lockedBy === artifact.currentUserId) return "ring-2 ring-green-500/50";
+                  if (artifact.hasInitiativeChanges) return "ring-2 ring-yellow-500/30";
                   return "";
                 })()
               )}
@@ -312,17 +359,16 @@ export default function ArtifactCardView({
                   </div>
                   {/* Status indicators */}
                   {(() => {
-                    const state = getArtifactState(artifact);
                     const icons = [];
                     
                     // Show lock icon if checked out
-                    if (state.state === 'locked_by_user') {
+                    if (artifact.lockedBy && artifact.lockedBy === artifact.currentUserId) {
                       icons.push(
                         <div key="lock" className="p-1 rounded bg-green-500/20" title="Checked out by you">
                           <Lock className="h-4 w-4 text-green-500" />
                         </div>
                       );
-                    } else if (state.state === 'locked_by_other') {
+                    } else if (artifact.lockedBy && artifact.lockedBy !== artifact.currentUserId) {
                       icons.push(
                         <div key="lock" className="p-1 rounded bg-red-500/20" title="Checked out by another user">
                           <Lock className="h-4 w-4 text-red-500" />
@@ -331,7 +377,10 @@ export default function ArtifactCardView({
                     }
                     
                     // Show rocket icon for pending changes
-                    if (state.state === 'has_initiative_changes' || artifact.hasInitiativeChanges) {
+                    if (artifact.hasInitiativeChanges || 
+                        artifact.artifactState === 'pending' || 
+                        artifact.versionState === 'new_in_initiative' ||
+                        artifact.artifactState === 'decommissioning') {
                       icons.push(
                         <div key="rocket" className="p-1 rounded bg-yellow-500/20" title="Has pending changes">
                           <Rocket className="h-4 w-4 text-yellow-500" />
@@ -342,12 +391,7 @@ export default function ArtifactCardView({
                     return icons;
                   })()}
                   
-                  <ArtifactStatusBadge 
-                    state={getArtifactState(artifact)} 
-                    showIcon={true}
-                    showText={false}
-                    size="sm"
-                  />
+                  {/* Status badge will be shown separately */}
                 </div>
                 
                 <DropdownMenu>
@@ -414,9 +458,22 @@ export default function ArtifactCardView({
 
               {/* Content */}
               <div className="space-y-2">
-                <h3 className="font-medium text-sm truncate" title={getArtifactName(artifact)}>
-                  {getArtifactName(artifact)}
-                </h3>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-medium text-sm truncate flex-1" title={getArtifactName(artifact)}>
+                    {getArtifactName(artifact)}
+                  </h3>
+                  {artifactType === "application" && artifact.amlNumber && (
+                    <span className="text-xs text-gray-500 font-mono">
+                      {artifact.amlNumber}
+                    </span>
+                  )}
+                </div>
+                {/* Application name for internal activities and technical processes */}
+                {(artifactType === "internalActivity" || artifactType === "technicalProcess") && artifact.applicationName && (
+                  <p className="text-sm font-bold text-white truncate" title={artifact.applicationName}>
+                    {artifact.applicationName}
+                  </p>
+                )}
                 <p className="text-xs text-gray-400 truncate" title={getArtifactDescription(artifact)}>
                   {getArtifactDescription(artifact)}
                 </p>

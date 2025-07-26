@@ -59,7 +59,10 @@ import {
   Eye,
   Lock,
   Unlock,
-  X
+  X,
+  Grid3x3,
+  List,
+  TableIcon
 } from "lucide-react";
 import { Link } from "wouter";
 import {
@@ -79,6 +82,8 @@ import {
   ArtifactStatusIndicator, 
   StatusColumn 
 } from "@/components/ui/artifact-status-badge";
+import ArtifactsExplorer from "@/components/artifacts/artifacts-explorer";
+import { cn } from "@/lib/utils";
 
 interface InternalActivity {
   id: number;
@@ -123,6 +128,7 @@ export default function InternalActivities() {
   const [duplicatingActivity, setDuplicatingActivity] = useState<InternalActivity | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [applicationFilter, setApplicationFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"table" | "explorer">("table");
   const [processFilter, setProcessFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [viewingActivity, setViewingActivity] = useState<any | null>(null);
@@ -601,8 +607,28 @@ export default function InternalActivities() {
           
           {/* Filters */}
           <Card className="bg-gray-800 border-gray-700 mb-6 mt-4">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-white">Filters</CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={viewMode === "table" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewMode("table")}
+                  title="Table View"
+                >
+                  <TableIcon className="h-4 w-4 mr-2" />
+                  Table
+                </Button>
+                <Button
+                  variant={viewMode === "explorer" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewMode("explorer")}
+                  title="Card/List View"
+                >
+                  <Grid3x3 className="h-4 w-4 mr-2" />
+                  Explorer
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-4 gap-4">
@@ -708,234 +734,226 @@ export default function InternalActivities() {
             </Card>
           )}
 
-          {/* Activities Table */}
-          <Card className="bg-gray-800 border-gray-700">
-            <CardContent className="p-0">
-              <div className="max-h-[600px] overflow-auto">
+          {/* Activities View */}
+          {viewMode === "explorer" ? (
+            <ArtifactsExplorer
+              artifacts={filteredActivities}
+              artifactType="internalActivity"
+              isLoading={isLoading}
+              onView={setViewingActivity}
+              onEdit={(activity) => {
+                if (isActivityLocked(activity.id)) {
+                  handleEdit(activity);
+                } else {
+                  toast({
+                    title: "Activity not checked out",
+                    description: "You need to check out this activity before editing",
+                    variant: "destructive"
+                  });
+                }
+              }}
+              onDelete={(activity) => setDeletingActivity(activity)}
+              onCheckout={(activity) => checkoutMutation.mutate(activity)}
+              onCheckin={(activity, changes) => {
+                const data = {
+                  applicationId: activity.applicationId,
+                  activityName: activity.activityName,
+                  activityType: activity.activityType,
+                  description: activity.description,
+                  sequenceNumber: activity.sequenceNumber,
+                  businessProcessId: activity.businessProcessId,
+                  preCondition: activity.preCondition,
+                  postCondition: activity.postCondition,
+                  estimatedDurationMs: activity.estimatedDurationMs
+                };
+                checkinMutation.mutate({ activity, data });
+              }}
+              onCancelCheckout={(activity) => cancelCheckoutMutation.mutate(activity)}
+              customActions={(activity) => (
+                <>
+                  <ContextMenuItem
+                    onClick={() => handleDuplicateAndEdit(activity)}
+                    className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Duplicate
+                  </ContextMenuItem>
+                </>
+              )}
+            />
+          ) : (
+            <Card className="bg-gray-800 border-gray-700">
+              <CardContent className="p-0">
                 <Table>
-                <TableHeader>
-                  <TableRow className="border-gray-700">
-                    <TableHead className="w-12">
-                      <Checkbox
-                        checked={filteredActivities?.length > 0 && multiSelect.selectedItems.length === filteredActivities.length}
-                        onCheckedChange={(checked) => {
-                          if (checked && filteredActivities?.length > 0) {
-                            multiSelect.selectAll();
-                          } else {
-                            multiSelect.clearSelection();
-                          }
-                        }}
-                        aria-label="Select all activities"
-                      />
-                    </TableHead>
-                    <TableHead className="text-gray-400">Activity Name</TableHead>
-                    <TableHead className="text-gray-400">Application</TableHead>
-                    <TableHead className="text-gray-400">Type</TableHead>
-                    <TableHead className="text-gray-400">Sequence</TableHead>
-                    <TableHead className="text-gray-400">Duration</TableHead>
-                    <TableHead className="text-gray-400">Pre-Condition</TableHead>
-                    <TableHead className="text-gray-400">Post-Condition</TableHead>
-                    <TableHead className="text-gray-400">Version Status</TableHead>
-                    <TableHead className="text-gray-400 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={10} className="text-center text-gray-400">
-                        Loading...
-                      </TableCell>
+                  <TableHeader>
+                    <TableRow className="border-gray-700">
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={filteredActivities.length > 0 && multiSelect.selectedItems.length === filteredActivities.length}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              multiSelect.selectAll();
+                            } else {
+                              multiSelect.clearSelection();
+                            }
+                          }}
+                        />
+                      </TableHead>
+                      <TableHead className="text-gray-300">Activity Name</TableHead>
+                      <TableHead className="text-gray-300">Type</TableHead>
+                      <TableHead className="text-gray-300">Application</TableHead>
+                      <TableHead className="text-gray-300">Business Process</TableHead>
+                      <TableHead className="text-gray-300">Sequence</TableHead>
+                      <TableHead className="text-gray-300">Duration</TableHead>
+                      <TableHead className="text-gray-300">Version Status</TableHead>
+                      <TableHead className="text-gray-300">Actions</TableHead>
                     </TableRow>
-                  ) : filteredActivities?.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={10} className="text-center text-gray-400">
-                        No internal activities found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredActivities?.map((activity: InternalActivity & { applicationName: string; businessProcessName: string }) => (
-                      <ContextMenu key={activity.id}>
-                        <ContextMenuTrigger asChild>
-                          <TableRow className={getRowClassName(getActivityState(activity), multiSelect.isSelected(activity))}>
-                            <TableCell className="w-12">
-                              <Checkbox
-                                checked={multiSelect.isSelected(activity)}
-                                onCheckedChange={() => multiSelect.toggleSelection(activity)}
-                                onClick={(e) => e.stopPropagation()}
-                                aria-label={`Select activity ${activity.activityName}`}
-                              />
-                            </TableCell>
-                            <TableCell className="text-white font-medium">
-                            <div className="flex items-center space-x-2">
-                              <Activity className="h-4 w-4 text-green-600" />
-                              <span>{activity.activityName}</span>
-                            </div>
-                            {activity.description && (
-                              <p className="text-sm text-gray-400 mt-1">
-                                {activity.description}
-                              </p>
-                            )}
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-gray-400">
+                          Loading activities...
                         </TableCell>
-                        <TableCell className="text-gray-300">
-                          {activity.applicationName}
+                      </TableRow>
+                    ) : filteredActivities.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center text-gray-400">
+                          No activities found
                         </TableCell>
-                        <TableCell>
-                          <Badge className={`${getActivityTypeColor(activity.activityType)} text-white`}>
-                            <span className="mr-1">{getActivityTypeIcon(activity.activityType)}</span>
-                            {activity.activityType}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-gray-300">
-                          {activity.sequenceNumber || '-'}
-                        </TableCell>
-                        <TableCell className="text-gray-300">
-                          {activity.estimatedDurationMs ? (
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {activity.estimatedDurationMs}ms
-                            </div>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell className="text-gray-300 text-sm">
-                          {activity.preCondition || '-'}
-                        </TableCell>
-                        <TableCell className="text-gray-300 text-sm">
-                          {activity.postCondition || '-'}
-                        </TableCell>
-                        <TableCell>
-                          {/* Temporarily disabled StatusColumn */}
-                          <span className="text-gray-400">-</span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleEdit(activity)}
-                              className="text-blue-400 hover:text-blue-300"
+                      </TableRow>
+                    ) : (
+                      filteredActivities.map((activity) => (
+                        <ContextMenu key={activity.id}>
+                          <ContextMenuTrigger asChild>
+                            <TableRow
+                              className={cn(
+                                "hover:bg-gray-700 cursor-pointer",
+                                getRowClassName(getActivityState(activity), multiSelect.isSelected(activity))
+                              )}
+                              onDoubleClick={() => setViewingActivity(activity)}
                             >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => deleteMutation.mutate(activity.id)}
-                              className="text-red-400 hover:text-red-300"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                          </TableRow>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent className="bg-gray-800 border-gray-600">
-                          <ContextMenuItem
-                            onClick={() => setViewingActivity(activity)}
-                            className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Details
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onClick={() => handleEdit(activity)}
-                            className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
-                          >
-                            <Edit className="h-4 w-4 mr-2" />
-                            Edit
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onClick={() => handleDuplicateAndEdit(activity)}
-                            className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
-                          >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Duplicate
-                          </ContextMenuItem>
-                          
-                          {/* Version Control Options */}
-                          {currentInitiative && !isProductionView && (
-                            <>
-                              <ContextMenuSeparator className="bg-gray-600" />
-                              {(() => {
-                                const lock = isActivityLocked(activity.id);
-                                const isLockedByMe = lock?.lock.lockedBy === currentUser?.id || isAdmin;
-                                const isLockedByOther = lock && !isLockedByMe;
-                                
-                                return (
+                              <TableCell className="w-12">
+                                <Checkbox
+                                  checked={multiSelect.isSelected(activity)}
+                                  onCheckedChange={() => multiSelect.toggleSelection(activity)}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              </TableCell>
+                              <TableCell className="font-medium text-white">
+                                <ArtifactInitiativeTooltip
+                                  artifactType="internal_process"
+                                  artifactId={activity.id}
+                                  artifactState={activity.artifactState}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Activity className="h-4 w-4 text-orange-500" />
+                                    <span>{activity.activityName}</span>
+                                    <ArtifactStatusIndicator 
+                                      state={getActivityState(activity)} 
+                                      initiativeName={currentInitiative?.name}
+                                    />
+                                  </div>
+                                </ArtifactInitiativeTooltip>
+                              </TableCell>
+                              <TableCell>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <Badge className={getActivityTypeColor(activity.activityType)}>
+                                        {getActivityTypeIcon(activity.activityType)}
+                                        <span className="ml-1">{activity.activityType}</span>
+                                      </Badge>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="capitalize">{activity.activityType} activity</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </TableCell>
+                              <TableCell className="text-gray-300">
+                                {activity.applicationName || 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-gray-300">
+                                {activity.businessProcessName || 'N/A'}
+                              </TableCell>
+                              <TableCell className="text-gray-300">
+                                {activity.sequenceNumber || '-'}
+                              </TableCell>
+                              <TableCell className="text-gray-300">
+                                {activity.estimatedDurationMs ? `${activity.estimatedDurationMs}ms` : '-'}
+                              </TableCell>
+                              <TableCell>
+                                <StatusColumn state={getActivityState(activity)} />
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setViewingActivity(activity)}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent>
+                            <ContextMenuItem onClick={() => setViewingActivity(activity)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </ContextMenuItem>
+                            {currentInitiative && !isProductionView && (
+                              <>
+                                {!isActivityLocked(activity.id) && (
+                                  <ContextMenuItem onClick={() => checkoutMutation.mutate(activity)}>
+                                    <Lock className="mr-2 h-4 w-4" />
+                                    Checkout
+                                  </ContextMenuItem>
+                                )}
+                                {isActivityLocked(activity.id) && (
                                   <>
-                                    {!lock && (
-                                      <ContextMenuItem 
-                                        onClick={() => checkoutMutation.mutate(activity)}
-                                        className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
-                                      >
-                                        <GitBranch className="mr-2 h-4 w-4" />
-                                        Checkout
-                                      </ContextMenuItem>
-                                    )}
-                                    {isLockedByMe && (
-                                      <>
-                                        <ContextMenuItem onClick={() => handleEdit(activity)}>
-                                          <Edit className="mr-2 h-4 w-4" />
-                                          Edit (Checked Out)
-                                        </ContextMenuItem>
-                                        <ContextMenuItem 
-                                          onClick={() => {
-                                            const data = {
-                                              applicationId: activity.applicationId,
-                                              activityName: activity.activityName,
-                                              activityType: activity.activityType,
-                                              description: activity.description,
-                                              sequenceNumber: activity.sequenceNumber,
-                                              businessProcessId: activity.businessProcessId,
-                                              preCondition: activity.preCondition,
-                                              postCondition: activity.postCondition,
-                                              estimatedDurationMs: activity.estimatedDurationMs
-                                            };
-                                            checkinMutation.mutate({ activity, data });
-                                          }}
-                                          className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
-                                        >
-                                          <Unlock className="mr-2 h-4 w-4" />
-                                          Checkin
-                                        </ContextMenuItem>
-                                        <ContextMenuItem 
-                                          onClick={() => cancelCheckoutMutation.mutate(activity)}
-                                          disabled={cancelCheckoutMutation.isPending}
-                                          className="text-red-600 hover:text-red-700"
-                                        >
-                                          <X className="mr-2 h-4 w-4" />
-                                          Cancel Checkout
-                                        </ContextMenuItem>
-                                      </>
-                                    )}
-                                    {isLockedByOther && (
-                                      <ContextMenuItem disabled>
-                                        <Lock className="mr-2 h-4 w-4" />
-                                        Locked by {lock.user?.username}
-                                      </ContextMenuItem>
-                                    )}
+                                    <ContextMenuItem onClick={() => handleEdit(activity)}>
+                                      <Edit className="mr-2 h-4 w-4" />
+                                      Edit
+                                    </ContextMenuItem>
+                                    <ContextMenuItem onClick={() => cancelCheckoutMutation.mutate(activity)}>
+                                      <Unlock className="mr-2 h-4 w-4" />
+                                      Cancel Checkout
+                                    </ContextMenuItem>
                                   </>
-                                );
-                              })()}
-                            </>
-                          )}
-                          
-                          <ContextMenuSeparator className="bg-gray-600" />
-                          <ContextMenuItem
-                            onClick={() => deleteMutation.mutate(activity.id)}
-                            className="text-red-400 hover:bg-gray-700 focus:bg-gray-700"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-              </div>
-            </CardContent>
-          </Card>
+                                )}
+                              </>
+                            )}
+                            {(!currentInitiative || isProductionView) && (
+                              <ContextMenuItem onClick={() => handleEdit(activity)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </ContextMenuItem>
+                            )}
+                            <ContextMenuSeparator />
+                            <ContextMenuItem onClick={() => handleDuplicateAndEdit(activity)}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              Duplicate
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
+                            <ContextMenuItem 
+                              onClick={() => setDeletingActivity(activity)}
+                              className="text-red-400"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </ContextMenuItem>
+                          </ContextMenuContent>
+                        </ContextMenu>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 

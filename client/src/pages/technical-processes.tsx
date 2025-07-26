@@ -40,8 +40,12 @@ import {
   FileJson,
   Network,
   Lock,
-  Unlock
-, X} from "lucide-react";
+  Unlock,
+  X,
+  Grid3x3,
+  List,
+  TableIcon
+} from "lucide-react";
 import { Link, useLocation } from "wouter";
 import TechnicalProcessForm from "@/components/technical-processes/technical-process-form";
 import { ImportExportDialog } from "@/components/import-export-dialog";
@@ -54,6 +58,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -89,6 +94,7 @@ import {
   ArtifactStatusIndicator, 
   StatusColumn 
 } from "@/components/ui/artifact-status-badge";
+import ArtifactsExplorer from "@/components/artifacts/artifacts-explorer";
 
 interface TechnicalProcess {
   id: number;
@@ -128,6 +134,7 @@ export default function TechnicalProcesses() {
   const [showImportExport, setShowImportExport] = useState(false);
   const [viewingProcess, setViewingProcess] = useState<TechnicalProcess | null>(null);
   const [duplicatingProcess, setDuplicatingProcess] = useState<TechnicalProcess | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "explorer">("table");
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -175,7 +182,7 @@ export default function TechnicalProcesses() {
   };
 
   // Helper to get process state for visual indicators
-  const getProcessState = (process: TechnicalProcess): ArtifactState => {
+  const getTechnicalProcessState = (process: TechnicalProcess): ArtifactState => {
     const lock = isProcessLocked(process.id);
     // TODO: Add logic to detect initiative changes and conflicts
     const hasInitiativeChanges = false; // This would check if process has versions in current initiative
@@ -360,7 +367,7 @@ export default function TechnicalProcesses() {
   if (versionStateFilter && currentInitiative && !isProductionView) {
     try {
       filteredByConditions = filteredByConditions.filter((process: TechnicalProcess) => {
-        const processState = getProcessState(process);
+        const processState = getTechnicalProcessState(process);
         return processState.state === versionStateFilter.value;
       });
     } catch (e) {
@@ -490,6 +497,26 @@ export default function TechnicalProcesses() {
             onClearAll={clearAllFilters}
             hasActiveFilters={hasActiveFilters}
           />
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === "table" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              title="Table View"
+            >
+              <TableIcon className="h-4 w-4 mr-2" />
+              Table
+            </Button>
+            <Button
+              variant={viewMode === "explorer" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("explorer")}
+              title="Card/List View"
+            >
+              <Grid3x3 className="h-4 w-4 mr-2" />
+              Explorer
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -549,330 +576,318 @@ export default function TechnicalProcesses() {
               {searchTerm || hasActiveFilters ? "Try adjusting your search or filters" : "Create your first technical process to get started"}
             </p>
           </div>
+        ) : viewMode === "explorer" ? (
+          <ArtifactsExplorer
+            artifacts={filteredProcesses}
+            artifactType="technicalProcess"
+            isLoading={isLoading}
+            onView={setViewingProcess}
+            onEdit={(process) => {
+              if (isProcessLocked(process.id)) {
+                setSelectedProcess(process);
+                setIsFormOpen(true);
+              } else {
+                toast({
+                  title: "Technical process not checked out",
+                  description: "You need to check out this technical process before editing",
+                  variant: "destructive"
+                });
+              }
+            }}
+            onDelete={(process) => setDeleteId(process.id)}
+            onCheckout={(process) => checkoutMutation.mutate(process)}
+            onCheckin={(process, changes) => checkinMutation.mutate({ process, changes })}
+            onCancelCheckout={(process) => cancelCheckoutMutation.mutate(process)}
+            customActions={(process) => (
+              <>
+                {process.businessProcessId && (
+                  <ContextMenuItem 
+                    onClick={() => navigate(`/business-processes/${process.businessProcessId}/diagram`)}
+                    className="text-gray-300 hover:bg-gray-700"
+                  >
+                    <Network className="mr-2 h-4 w-4" />
+                    View Process Diagram
+                  </ContextMenuItem>
+                )}
+                {canCreate('technical-processes') && (
+                  <ContextMenuItem 
+                    onClick={() => handleDuplicateAndEdit(process)}
+                    className="text-gray-300 hover:bg-gray-700"
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Duplicate Process
+                  </ContextMenuItem>
+                )}
+              </>
+            )}
+          />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow className="border-gray-700 hover:bg-gray-800/50">
-                <TableHead className="w-12">
-                  <Checkbox
-                    checked={filteredProcesses.length > 0 && multiSelect.selectedItems.length === filteredProcesses.length}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        multiSelect.selectAll();
-                      } else {
-                        multiSelect.clearSelection();
-                      }
-                    }}
-                    aria-label="Select all technical processes"
-                  />
-                </TableHead>
-                <TableHead className="text-gray-300">Process Name</TableHead>
-                <TableHead className="text-gray-300">Job Name</TableHead>
-                <TableHead className="text-gray-300">Application</TableHead>
-                <TableHead className="text-gray-300">Frequency</TableHead>
-                <TableHead className="text-gray-300">Criticality</TableHead>
-                <TableHead className="text-gray-300">Status</TableHead>
-                <TableHead className="text-gray-300">Owner</TableHead>
-                <TableHead className="text-gray-300">Last Run</TableHead>
-                <TableHead className="text-gray-300">Next Run</TableHead>
-                <TableHead className="text-gray-300">Version Status</TableHead>
-                <TableHead className="text-gray-300 text-center">Comms</TableHead>
-                <TableHead className="text-gray-300 w-10"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProcesses.map((process: TechnicalProcess) => (
-                <ContextMenu key={process.id}>
-                  <ContextMenuTrigger asChild>
-                    <TableRow 
-                      className={getRowClassName(getProcessState(process), multiSelect.isSelected(process))}
-                      onDoubleClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        navigate(`/technical-processes/${process.id}`);
+          <div className="p-6">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-gray-700">
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={filteredProcesses.length > 0 && multiSelect.selectedItems.length === filteredProcesses.length}
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          multiSelect.selectAll();
+                        } else {
+                          multiSelect.clearSelection();
+                        }
                       }}
-                      title="Double-click to view technical process details"
-                    >
-                      <TableCell className="w-12">
-                        <Checkbox
-                          checked={multiSelect.isSelected(process)}
-                          onCheckedChange={() => multiSelect.toggleSelection(process)}
-                          onClick={(e) => e.stopPropagation()}
-                          aria-label={`Select technical process ${process.name}`}
-                        />
-                      </TableCell>
-                      <TableCell className="font-medium text-white">
-                        <ArtifactInitiativeTooltip
-                          artifactType="technicalProcess"
-                          artifactId={process.id}
-                          artifactState={process.artifactState}
-                        >
-                          <div className="flex items-center space-x-2">
-                            <Cpu className="h-4 w-4 text-purple-600" />
+                      aria-label="Select all"
+                    />
+                  </TableHead>
+                  <TableHead className="text-gray-300">Process Name</TableHead>
+                  <TableHead className="text-gray-300">Job Name</TableHead>
+                  <TableHead className="text-gray-300">Application</TableHead>
+                  <TableHead className="text-gray-300">Frequency</TableHead>
+                  <TableHead className="text-gray-300">Criticality</TableHead>
+                  <TableHead className="text-gray-300">Status</TableHead>
+                  <TableHead className="text-gray-300">Owner</TableHead>
+                  <TableHead className="text-gray-300">Version Status</TableHead>
+                  <TableHead className="text-gray-300">Communications</TableHead>
+                  <TableHead className="text-gray-300">Last Run</TableHead>
+                  <TableHead className="text-gray-300">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProcesses.map((process) => (
+                  <ContextMenu key={process.id}>
+                    <ContextMenuTrigger asChild>
+                      <TableRow
+                        className={cn(
+                          "hover:bg-gray-700 cursor-pointer",
+                          getRowClassName(getTechnicalProcessState(process), multiSelect.isSelected(process))
+                        )}
+                        onDoubleClick={() => setViewingProcess(process)}
+                      >
+                        <TableCell className="w-12">
+                          <Checkbox
+                            checked={multiSelect.isSelected(process)}
+                            onCheckedChange={() => multiSelect.toggleSelection(process)}
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={`Select ${process.name}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium text-white">
+                          <ArtifactInitiativeTooltip
+                            artifactType="technical_process"
+                            artifactId={process.id}
+                            artifactState={process.artifactState}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Cpu className="h-4 w-4 text-purple-500" />
+                              <span>{process.name}</span>
+                              <ArtifactStatusIndicator 
+                                state={getTechnicalProcessState(process)} 
+                                initiativeName={currentInitiative?.name}
+                              />
+                            </div>
+                          </ArtifactInitiativeTooltip>
+                        </TableCell>
+                        <TableCell className="text-gray-300">{process.jobName}</TableCell>
+                        <TableCell className="text-gray-300">
+                          {process.applicationName || "Not specified"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            {getFrequencyIcon(process.frequency)}
+                            <span className="text-gray-300">{process.frequency}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getCriticalityBadge(process.criticality)}</TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={process.status === "active" ? "success" : process.status === "inactive" ? "secondary" : "destructive"}
+                          >
+                            {process.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-gray-300">{process.owner || "-"}</TableCell>
+                        <TableCell>
+                          <StatusColumn state={getTechnicalProcessState(process)} />
+                        </TableCell>
+                        <TableCell>
+                          <CommunicationBadge 
+                            entityType="technical_process" 
+                            entityId={process.id} 
+                            entityName={process.name}
+                          />
+                        </TableCell>
+                        <TableCell className="text-gray-300">
+                          {process.lastRunDate ? (
                             <TooltipProvider>
                               <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span 
-                                    className="hover:text-purple-400 transition-colors cursor-pointer"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setViewingProcess(process);
-                                    }}
-                                  >
-                                    {process.name}
-                                  </span>
+                                <TooltipTrigger>
+                                  <div className="flex items-center gap-1">
+                                    <CalendarCheck className="h-3 w-3" />
+                                    {new Date(process.lastRunDate).toLocaleDateString()}
+                                  </div>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p className="max-w-xs">{process.description || "No description"}</p>
+                                  <p>Last run: {new Date(process.lastRunDate).toLocaleString()}</p>
+                                  {process.nextRunDate && (
+                                    <p>Next run: {new Date(process.nextRunDate).toLocaleString()}</p>
+                                  )}
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                            <ArtifactStatusIndicator 
-                              state={getProcessState(process)} 
-                              initiativeName={currentInitiative?.name}
-                            />
-                            <ArtifactStatusBadge 
-                              state={getProcessState(process)} 
-                              showIcon={false}
-                              showText={true}
-                              size="sm"
-                            />
-                          </div>
-                        </ArtifactInitiativeTooltip>
-                      </TableCell>
-                      <TableCell className="text-gray-300">{process.jobName}</TableCell>
-                      <TableCell className="text-gray-300">
-                        {process.applicationName ? (
-                          <Link 
-                            href={`/applications/${process.applicationId}`} 
-                            className="hover:text-blue-400 transition-colors"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {process.applicationName}
-                          </Link>
-                        ) : (
-                          <span className="text-gray-500">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getFrequencyIcon(process.frequency)}
-                          <span className="text-gray-300">{process.frequency}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>{getCriticalityBadge(process.criticality)}</TableCell>
-                      <TableCell>{getStatusBadge(process.status)}</TableCell>
-                      <TableCell className="text-gray-300">{process.owner || "-"}</TableCell>
-                      <TableCell className="text-gray-300">
-                        {process.lastRunDate ? (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <span className="flex items-center gap-1">
-                                  <CalendarCheck className="h-3 w-3" />
-                                  {new Date(process.lastRunDate).toLocaleDateString()}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {new Date(process.lastRunDate).toLocaleString()}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          <span className="text-gray-500">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-gray-300">
-                        {process.nextRunDate ? (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {new Date(process.nextRunDate).toLocaleDateString()}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                {new Date(process.nextRunDate).toLocaleString()}
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        ) : (
-                          <span className="text-gray-500">-</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <StatusColumn state={getProcessState(process)} />
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <CommunicationBadge
-                          count={communicationCounts[process.id] || 0}
-                          entityType="technical_process"
-                          entityId={process.id}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <MoreVertical className="h-4 w-4 text-gray-400" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-gray-800 border-gray-700">
-                            <DropdownMenuItem
-                              onClick={() => handleEdit(process)}
-                              className="text-gray-300 hover:text-white hover:bg-gray-700"
-                            >
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(process.id)}
-                              className="text-red-400 hover:text-red-300 hover:bg-gray-700"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent className="bg-gray-800 border-gray-700">
-                    <ContextMenuItem
-                      onClick={() => handleEdit(process)}
-                      className="text-gray-300 hover:text-white hover:bg-gray-700"
-                    >
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit Technical Process
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => setViewingProcess(process)}
-                      className="text-gray-300 hover:text-white hover:bg-gray-700"
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      View Details (Quick)
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => navigate(`/technical-processes/${process.id}`)}
-                      className="text-gray-300 hover:text-white hover:bg-gray-700"
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      View Full Details
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => navigate(`/technical-processes/${process.id}/diagram`)}
-                      className="text-gray-300 hover:text-white hover:bg-gray-700"
-                    >
-                      <Network className="mr-2 h-4 w-4" />
-                      View Process Diagram
-                    </ContextMenuItem>
-                    <ContextMenuSeparator className="bg-gray-700" />
-                    <ContextMenuItem
-                      onClick={() => handleCopy(process)}
-                      className="text-gray-300 hover:text-white hover:bg-gray-700"
-                    >
-                      <Copy className="mr-2 h-4 w-4" />
-                      Copy Process Data
-                    </ContextMenuItem>
-                    <ContextMenuItem
-                      onClick={() => handleDuplicateAndEdit(process)}
-                      className="text-gray-300 hover:text-white hover:bg-gray-700"
-                    >
-                      <Copy className="mr-2 h-4 w-4" />
-                      Duplicate and Edit
-                    </ContextMenuItem>
-                    
-                    {/* Version Control Options */}
-                    {currentInitiative && !isProductionView && (
-                      <>
-                        <ContextMenuSeparator className="bg-gray-700" />
-                        {(() => {
-                          const lock = isProcessLocked(process.id);
-                          const isLockedByMe = lock?.lock.lockedBy === currentUser?.id || isAdmin;
-                          const isLockedByOther = lock && !isLockedByMe;
-                          
-                          return (
-                            <>
-                              {!lock && (
-                                <ContextMenuItem 
-                                  onClick={() => checkoutMutation.mutate(process)}
-                                  className="text-gray-300 hover:text-white hover:bg-gray-700"
-                                >
-                                  <GitBranch className="mr-2 h-4 w-4" />
-                                  Checkout
-                                </ContextMenuItem>
-                              )}
-                              {isLockedByMe && (
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setViewingProcess(process)}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
+                              {currentInitiative && !isProductionView && (
                                 <>
-                                  <ContextMenuItem 
-                                    onClick={() => handleEdit(process)}
-                                    className="text-gray-300 hover:text-white hover:bg-gray-700"
-                                  >
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit (Checked Out)
-                                  </ContextMenuItem>
-                                  <ContextMenuItem 
-                                    onClick={() => {
-                                      const data = {
-                                        name: process.name,
-                                        jobName: process.jobName,
-                                        applicationId: process.applicationId,
-                                        description: process.description,
-                                        frequency: process.frequency,
-                                        schedule: process.schedule,
-                                        criticality: process.criticality,
-                                        status: process.status,
-                                        owner: process.owner,
-                                        technicalOwner: process.technicalOwner,
-                                        lastRunDate: process.lastRunDate,
-                                        nextRunDate: process.nextRunDate
-                                      };
-                                      checkinMutation.mutate({ process, data });
-                                    }}
-                                    className="text-gray-300 hover:text-white hover:bg-gray-700"
-                                  >
-                                    <Unlock className="mr-2 h-4 w-4" />
-                                    Checkin
-                                  </ContextMenuItem>
-                                  <ContextMenuItem 
-                                    onClick={() => cancelCheckoutMutation.mutate(process)}
-                                    disabled={cancelCheckoutMutation.isPending}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <X className="mr-2 h-4 w-4" />
-                                    Cancel Checkout
-                                  </ContextMenuItem>
+                                  {!isProcessLocked(process.id) && (
+                                    <DropdownMenuItem onClick={() => checkoutMutation.mutate(process)}>
+                                      <Lock className="mr-2 h-4 w-4" />
+                                      Checkout
+                                    </DropdownMenuItem>
+                                  )}
+                                  {isProcessLocked(process.id) && (
+                                    <>
+                                      <DropdownMenuItem onClick={() => {
+                                        setSelectedProcess(process);
+                                        setIsFormOpen(true);
+                                      }}>
+                                        <Edit className="mr-2 h-4 w-4" />
+                                        Edit
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => cancelCheckoutMutation.mutate(process)}>
+                                        <Unlock className="mr-2 h-4 w-4" />
+                                        Cancel Checkout
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
                                 </>
                               )}
-                              {isLockedByOther && (
-                                <ContextMenuItem disabled>
-                                  <Lock className="mr-2 h-4 w-4" />
-                                  Locked by {lock.user?.username}
-                                </ContextMenuItem>
+                              {(!currentInitiative || isProductionView) && canUpdate('technical-processes') && (
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedProcess(process);
+                                  setIsFormOpen(true);
+                                }}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
                               )}
+                              {process.businessProcessId && (
+                                <DropdownMenuItem onClick={() => navigate(`/business-processes/${process.businessProcessId}/diagram`)}>
+                                  <Network className="mr-2 h-4 w-4" />
+                                  View Process Diagram
+                                </DropdownMenuItem>
+                              )}
+                              {canCreate('technical-processes') && (
+                                <DropdownMenuItem onClick={() => handleDuplicateAndEdit(process)}>
+                                  <Copy className="mr-2 h-4 w-4" />
+                                  Duplicate
+                                </DropdownMenuItem>
+                              )}
+                              {canDelete('technical-processes') && (
+                                <DropdownMenuItem 
+                                  onClick={() => setDeleteId(process.id)}
+                                  className="text-red-600"
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuItem onClick={() => setViewingProcess(process)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        View Details
+                      </ContextMenuItem>
+                      {currentInitiative && !isProductionView && (
+                        <>
+                          {!isProcessLocked(process.id) && (
+                            <ContextMenuItem onClick={() => checkoutMutation.mutate(process)}>
+                              <Lock className="mr-2 h-4 w-4" />
+                              Checkout
+                            </ContextMenuItem>
+                          )}
+                          {isProcessLocked(process.id) && (
+                            <>
+                              <ContextMenuItem onClick={() => {
+                                setSelectedProcess(process);
+                                setIsFormOpen(true);
+                              }}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </ContextMenuItem>
+                              <ContextMenuItem onClick={() => cancelCheckoutMutation.mutate(process)}>
+                                <Unlock className="mr-2 h-4 w-4" />
+                                Cancel Checkout
+                              </ContextMenuItem>
                             </>
-                          );
-                        })()}
-                      </>
-                    )}
-                    
-                    <ContextMenuSeparator className="bg-gray-700" />
-                    <ContextMenuItem
-                      onClick={() => handleDelete(process.id)}
-                      className="text-red-400 hover:text-red-300 hover:bg-gray-700"
-                    >
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Delete Technical Process
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              ))}
-            </TableBody>
-          </Table>
+                          )}
+                        </>
+                      )}
+                      {(!currentInitiative || isProductionView) && canUpdate('technical-processes') && (
+                        <ContextMenuItem onClick={() => {
+                          setSelectedProcess(process);
+                          setIsFormOpen(true);
+                        }}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </ContextMenuItem>
+                      )}
+                      <ContextMenuSeparator />
+                      {process.businessProcessId && (
+                        <ContextMenuItem onClick={() => navigate(`/business-processes/${process.businessProcessId}/diagram`)}>
+                          <Network className="mr-2 h-4 w-4" />
+                          View Process Diagram
+                        </ContextMenuItem>
+                      )}
+                      {canCreate('technical-processes') && (
+                        <ContextMenuItem onClick={() => handleDuplicateAndEdit(process)}>
+                          <Copy className="mr-2 h-4 w-4" />
+                          Duplicate
+                        </ContextMenuItem>
+                      )}
+                      {canDelete('technical-processes') && (
+                        <>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem 
+                            onClick={() => setDeleteId(process.id)}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </ContextMenuItem>
+                        </>
+                      )}
+                    </ContextMenuContent>
+                  </ContextMenu>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
-
+      
+      {/* Old table implementation removed - using ArtifactsExplorer instead */}
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent className="bg-gray-800 border-gray-700">
           <AlertDialogHeader>

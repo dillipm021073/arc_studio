@@ -1161,22 +1161,38 @@ export default function Applications() {
             onCancelCheckout={(app) => cancelCheckoutMutation.mutate(app)}
             customActions={(app) => (
               <>
-                <DropdownMenuItem onClick={() => setViewingInterfacesApp(app)}>
+                <ContextMenuItem onClick={() => setViewingInterfacesApp(app)}>
                   <Plug className="mr-2 h-4 w-4" />
                   View Interfaces
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setDuplicatingApp(app)}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  Duplicate
-                </DropdownMenuItem>
-                {app.status === 'active' && (
-                  <DropdownMenuItem
-                    onClick={() => handleDecommission(app)}
-                    className="text-yellow-600"
-                  >
-                    <AlertTriangle className="mr-2 h-4 w-4" />
-                    Decommission
-                  </DropdownMenuItem>
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => setShowCapabilitiesView(app)}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  View Capability Documents
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => setShowCapabilitiesUpload(app)}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Capability Document
+                </ContextMenuItem>
+                {canCreate('applications') && (
+                  <>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem onClick={() => handleDuplicateAndEdit(app)}>
+                      <Copy className="mr-2 h-4 w-4" />
+                      Duplicate and Edit
+                    </ContextMenuItem>
+                  </>
+                )}
+                {canDelete('applications') && app.status !== 'decommissioned' && (
+                  <>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      onClick={() => handleDecommission(app)}
+                      className="text-orange-400 focus:text-orange-300"
+                    >
+                      <AlertTriangle className="mr-2 h-4 w-4" />
+                      Schedule Decommission
+                    </ContextMenuItem>
+                  </>
                 )}
               </>
             )}
