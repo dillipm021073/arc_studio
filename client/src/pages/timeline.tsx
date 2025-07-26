@@ -311,10 +311,10 @@ export default function History() {
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Time Range</label>
                 <Select value={timeRange} onValueChange={handleTimeRangeChange}>
-                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectTrigger className="bg-black border-gray-600 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-black border-gray-600">
                     <SelectItem value="2days">Last 2 Days</SelectItem>
                     <SelectItem value="1week">Last Week</SelectItem>
                     <SelectItem value="2weeks">Last 2 Weeks</SelectItem>
@@ -335,7 +335,7 @@ export default function History() {
                     <Button
                       variant="outline"
                       className={cn(
-                        "w-full justify-start text-left font-normal bg-gray-700 border-gray-600 text-white hover:bg-gray-600",
+                        "w-full justify-start text-left font-normal bg-black border-gray-600 text-white hover:bg-gray-800",
                         !startDate && "text-gray-400"
                       )}
                     >
@@ -362,7 +362,7 @@ export default function History() {
                     <Button
                       variant="outline"
                       className={cn(
-                        "w-full justify-start text-left font-normal bg-gray-700 border-gray-600 text-white hover:bg-gray-600",
+                        "w-full justify-start text-left font-normal bg-black border-gray-600 text-white hover:bg-gray-800",
                         !endDate && "text-gray-400"
                       )}
                     >
@@ -385,10 +385,10 @@ export default function History() {
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Status</label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectTrigger className="bg-black border-gray-600 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-black border-gray-600">
                     <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="draft">Draft</SelectItem>
                     <SelectItem value="created">Created</SelectItem>
@@ -410,10 +410,10 @@ export default function History() {
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Type</label>
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectTrigger className="bg-black border-gray-600 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-black border-gray-600">
                     <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="change_request">Change Requests</SelectItem>
                     <SelectItem value="application">Applications</SelectItem>
