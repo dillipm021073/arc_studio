@@ -501,7 +501,7 @@ export default function TechnicalProcesses() {
               placeholder="Search technical processes..."
               value={searchTerm}
               onChange={(e) => updateSearchTerm(e.target.value)}
-              className="pl-10 bg-gray-700 border-gray-600 text-white placeholder:text-gray-400"
+              className="pl-10 bg-black border-gray-700 text-white placeholder:text-gray-400"
             />
           </div>
           <DataFilter

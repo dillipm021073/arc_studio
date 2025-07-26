@@ -685,10 +685,71 @@ export default function InternalActivities() {
             </div>
           )}
           
-          {/* Filters */}
-          <Card className="bg-gray-800 border-gray-700 mb-6 mt-4">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-white">Filters</CardTitle>
+          {/* Search and Filter Bar */}
+          <div className="mb-6 space-y-4 mt-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="relative">
+                  <Input
+                    type="text"
+                    placeholder="Search activities..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-80 pl-10 bg-black border-gray-700 text-white placeholder-gray-400"
+                  />
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="text-gray-400" size={16} />
+                  </div>
+                </div>
+                <Select 
+                  value={applicationFilter} 
+                  onValueChange={setApplicationFilter}
+                >
+                  <SelectTrigger className="w-64 bg-black border-gray-700 text-white">
+                    <SelectValue placeholder="All Applications" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black border-gray-700">
+                    <SelectItem value="all">All Applications</SelectItem>
+                    {applications?.map((app) => (
+                      <SelectItem key={app.id} value={app.id.toString()}>
+                        {app.amlNumber} - {app.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select 
+                  value={typeFilter} 
+                  onValueChange={setTypeFilter}
+                >
+                  <SelectTrigger className="w-48 bg-black border-gray-700 text-white">
+                    <SelectValue placeholder="All Activity Types" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black border-gray-700">
+                    <SelectItem value="all">All Activity Types</SelectItem>
+                    <SelectItem value="check">Check</SelectItem>
+                    <SelectItem value="validate">Validate</SelectItem>
+                    <SelectItem value="transform">Transform</SelectItem>
+                    <SelectItem value="compute">Compute</SelectItem>
+                    <SelectItem value="decide">Decide</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select 
+                  value={processFilter} 
+                  onValueChange={setProcessFilter}
+                >
+                  <SelectTrigger className="w-64 bg-black border-gray-700 text-white">
+                    <SelectValue placeholder="All Business Processes" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-black border-gray-700">
+                    <SelectItem value="all">All Business Processes</SelectItem>
+                    {businessProcesses?.map((bp) => (
+                      <SelectItem key={bp.id} value={bp.id.toString()}>
+                        {bp.businessProcess} ({bp.lob})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant={viewMode === "table" ? "default" : "outline"}
@@ -706,75 +767,11 @@ export default function InternalActivities() {
                   title="Card/List View"
                 >
                   <Grid3x3 className="h-4 w-4 mr-2" />
-                  Explorer
+                  Cards
                 </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-4 gap-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="Search activities..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 bg-gray-700 border-gray-600"
-                  />
-                </div>
-
-                <Select 
-                  value={applicationFilter} 
-                  onValueChange={setApplicationFilter}
-                >
-                  <SelectTrigger className="bg-gray-700 border-gray-600">
-                    <SelectValue placeholder="All Applications" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-700 border-gray-600">
-                    <SelectItem value="all">All Applications</SelectItem>
-                    {applications?.map((app) => (
-                      <SelectItem key={app.id} value={app.id.toString()}>
-                        {app.amlNumber} - {app.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select 
-                  value={typeFilter} 
-                  onValueChange={setTypeFilter}
-                >
-                  <SelectTrigger className="bg-gray-700 border-gray-600">
-                    <SelectValue placeholder="All Activity Types" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-700 border-gray-600">
-                    <SelectItem value="all">All Activity Types</SelectItem>
-                    <SelectItem value="check">Check</SelectItem>
-                    <SelectItem value="validate">Validate</SelectItem>
-                    <SelectItem value="transform">Transform</SelectItem>
-                    <SelectItem value="compute">Compute</SelectItem>
-                    <SelectItem value="decide">Decide</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select 
-                  value={processFilter} 
-                  onValueChange={setProcessFilter}
-                >
-                  <SelectTrigger className="bg-gray-700 border-gray-600">
-                    <SelectValue placeholder="All Business Processes" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-700 border-gray-600">
-                    <SelectItem value="all">All Business Processes</SelectItem>
-                    {businessProcesses?.map((bp) => (
-                      <SelectItem key={bp.id} value={bp.id.toString()}>
-                        {bp.businessProcess} ({bp.lob})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
 
           {/* Bulk Actions */}
           {multiSelect.selectedItems.length > 0 && (
@@ -1065,10 +1062,10 @@ export default function InternalActivities() {
                 value={formData.applicationId} 
                 onValueChange={(value) => setFormData({ ...formData, applicationId: value })}
               >
-                <SelectTrigger className="bg-gray-700 border-gray-600">
+                <SelectTrigger className="bg-black border-gray-700">
                   <SelectValue placeholder="Select application" />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
+                <SelectContent className="bg-black border-gray-700">
                   {applications?.map((app) => (
                     <SelectItem key={app.id} value={app.id.toString()}>
                       {app.amlNumber} - {app.name}
@@ -1084,10 +1081,10 @@ export default function InternalActivities() {
                 value={formData.activityType} 
                 onValueChange={(value) => setFormData({ ...formData, activityType: value })}
               >
-                <SelectTrigger className="bg-gray-700 border-gray-600">
+                <SelectTrigger className="bg-black border-gray-700">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
+                <SelectContent className="bg-black border-gray-700">
                   <SelectItem value="check">Check</SelectItem>
                   <SelectItem value="validate">Validate</SelectItem>
                   <SelectItem value="transform">Transform</SelectItem>
@@ -1102,7 +1099,7 @@ export default function InternalActivities() {
               <Input
                 value={formData.activityName}
                 onChange={(e) => setFormData({ ...formData, activityName: e.target.value })}
-                className="bg-gray-700 border-gray-600"
+                className="bg-black border-gray-700"
                 placeholder="e.g., Check Reservation ID"
               />
             </div>
@@ -1112,7 +1109,7 @@ export default function InternalActivities() {
               <Textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="bg-gray-700 border-gray-600"
+                className="bg-black border-gray-700"
                 rows={3}
               />
             </div>
@@ -1122,7 +1119,7 @@ export default function InternalActivities() {
               <Input
                 value={formData.preCondition}
                 onChange={(e) => setFormData({ ...formData, preCondition: e.target.value })}
-                className="bg-gray-700 border-gray-600"
+                className="bg-black border-gray-700"
                 placeholder="e.g., order.status === 'pending'"
               />
             </div>
@@ -1132,7 +1129,7 @@ export default function InternalActivities() {
               <Input
                 value={formData.postCondition}
                 onChange={(e) => setFormData({ ...formData, postCondition: e.target.value })}
-                className="bg-gray-700 border-gray-600"
+                className="bg-black border-gray-700"
                 placeholder="e.g., reservation.id !== null"
               />
             </div>
@@ -1143,7 +1140,7 @@ export default function InternalActivities() {
                 type="number"
                 value={formData.sequenceNumber}
                 onChange={(e) => setFormData({ ...formData, sequenceNumber: e.target.value })}
-                className="bg-gray-700 border-gray-600"
+                className="bg-black border-gray-700"
               />
             </div>
 
@@ -1153,7 +1150,7 @@ export default function InternalActivities() {
                 type="number"
                 value={formData.estimatedDurationMs}
                 onChange={(e) => setFormData({ ...formData, estimatedDurationMs: e.target.value })}
-                className="bg-gray-700 border-gray-600"
+                className="bg-black border-gray-700"
                 placeholder="e.g., 500"
               />
             </div>
@@ -1164,10 +1161,10 @@ export default function InternalActivities() {
                 value={formData.businessProcessId} 
                 onValueChange={(value) => setFormData({ ...formData, businessProcessId: value })}
               >
-                <SelectTrigger className="bg-gray-700 border-gray-600">
+                <SelectTrigger className="bg-black border-gray-700">
                   <SelectValue placeholder="Select business process" />
                 </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
+                <SelectContent className="bg-black border-gray-700">
                   <SelectItem value="none">None</SelectItem>
                   {businessProcesses?.map((bp) => (
                     <SelectItem key={bp.id} value={bp.id.toString()}>
