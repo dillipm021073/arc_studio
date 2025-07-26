@@ -210,20 +210,31 @@ export default function InternalActivities() {
   
   let displayActivities = [];
   try {
-    displayActivities = activities.map((activity: any) => {
-      if (!activity) {
-        console.error('Invalid activity item:', activity);
+    displayActivities = activities.map((item: any) => {
+      if (!item) {
+        console.error('Invalid activity item:', item);
         return null;
       }
-      // Find the related application and business process names
-      const application = applications?.find(app => app.id === activity.applicationId);
-      const businessProcess = businessProcesses?.find(bp => bp.id === activity.businessProcessId);
       
-      return {
-        ...activity,
-        applicationName: application?.name || '',
-        businessProcessName: businessProcess?.businessProcess || ''
-      };
+      // Handle nested structure from API
+      if (item.activity) {
+        // API returns { activity, application, businessProcess }
+        return {
+          ...item.activity,
+          applicationName: item.application?.name || '',
+          businessProcessName: item.businessProcess?.businessProcess || ''
+        };
+      } else {
+        // Handle flat structure (fallback)
+        const application = applications?.find(app => app.id === item.applicationId);
+        const businessProcess = businessProcesses?.find(bp => bp.id === item.businessProcessId);
+        
+        return {
+          ...item,
+          applicationName: application?.name || '',
+          businessProcessName: businessProcess?.businessProcess || ''
+        };
+      }
     }).filter(Boolean);
   } catch (err) {
     console.error('Error transforming activities:', err);
