@@ -295,17 +295,16 @@ export default function ArtifactListView({
                   </Badge>
                 )}
                 <CommunicationBadge 
-                  entityType={artifactType} 
+                  entityType={artifactType === "businessProcess" ? "business_process" : artifactType as any} 
                   entityId={artifact.id} 
                   entityName={getArtifactName(artifact)}
-                  size="sm"
                 />
               </div>
 
               {/* Last Modified */}
               <div className="hidden lg:flex items-center gap-1 text-xs text-gray-400">
                 <Clock className="h-3 w-3" />
-                {artifact.lastChangeDate && formatDistanceToNow(new Date(artifact.lastChangeDate), { addSuffix: true })}
+                {artifact.lastChangeDate && formatDistanceToNow(new Date(artifact.lastChangeDate))}
               </div>
 
               {/* Actions */}

@@ -363,15 +363,14 @@ export default function ArtifactCardView({
               <div className="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CommunicationBadge 
-                    entityType={artifactType} 
+                    entityType={artifactType === "businessProcess" ? "business_process" : artifactType as any} 
                     entityId={artifact.id} 
                     entityName={getArtifactName(artifact)}
-                    size="sm"
                   />
                 </div>
                 <div className="text-xs text-gray-400 flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  {artifact.lastChangeDate && formatDistanceToNow(new Date(artifact.lastChangeDate), { addSuffix: true })}
+                  {artifact.lastChangeDate && formatDistanceToNow(new Date(artifact.lastChangeDate))}
                 </div>
               </div>
             </div>

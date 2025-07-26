@@ -41,7 +41,8 @@ import {
   Unlock,
   X,
   CheckCircle,
-  Rocket
+  Rocket,
+  Grid3x3
 } from "lucide-react";
 import { Link } from "wouter";
 import ApplicationForm from "@/components/applications/application-form";
