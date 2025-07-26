@@ -1,6 +1,6 @@
+import { useEffect } from "react";
 import { FileJson, MoreVertical, Eye, Edit, Copy, Trash2, Download, Layers, Clock, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -62,6 +62,38 @@ export default function HierarchyFileList({
   onGenerateProcesses,
   onSelectDesign,
 }: HierarchyFileListProps) {
+  // Add custom scrollbar styles
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      .hierarchy-file-list-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: #4b5563 #1f2937;
+      }
+      .hierarchy-file-list-scroll::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+      }
+      .hierarchy-file-list-scroll::-webkit-scrollbar-track {
+        background: #1f2937;
+        border-radius: 6px;
+      }
+      .hierarchy-file-list-scroll::-webkit-scrollbar-thumb {
+        background: #4b5563;
+        border-radius: 6px;
+      }
+      .hierarchy-file-list-scroll::-webkit-scrollbar-thumb:hover {
+        background: #6b7280;
+      }
+      .hierarchy-file-list-scroll::-webkit-scrollbar-corner {
+        background: #1f2937;
+      }
+    `;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
   const canEdit = (design: HierarchyDesign) => {
     return design.createdBy === currentUsername && !design.isTemplate;
   };
@@ -145,8 +177,8 @@ export default function HierarchyFileList({
 
   if (viewMode === "grid") {
     return (
-      <ScrollArea className="h-full">
-        <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+      <div className="h-full overflow-auto hierarchy-file-list-scroll">
+        <div className="p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" style={{ minWidth: '600px' }}>
           {designs.map((design) => (
             <DesignContextMenu key={design.id} design={design}>
               <div
@@ -229,13 +261,13 @@ export default function HierarchyFileList({
             </DesignContextMenu>
           ))}
         </div>
-      </ScrollArea>
+      </div>
     );
   }
 
   // List view
   return (
-    <ScrollArea className="h-full">
+    <div className="h-full overflow-auto hierarchy-file-list-scroll">
       <div className="p-4">
         <div className="space-y-1">
           {designs.map((design) => (
@@ -333,6 +365,6 @@ export default function HierarchyFileList({
           ))}
         </div>
       </div>
-    </ScrollArea>
+    </div>
   );
 }

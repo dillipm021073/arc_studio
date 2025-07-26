@@ -303,7 +303,7 @@ export default function HierarchyDesignsExplorer({
         </Card>
 
         {/* Right Panel - File List */}
-        <Card className="flex-1 overflow-hidden">
+        <Card className="flex-1 flex flex-col overflow-hidden">
           <HierarchyFileList
             designs={filteredDesigns}
             viewMode={viewMode}
