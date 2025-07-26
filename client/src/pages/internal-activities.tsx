@@ -210,15 +210,19 @@ export default function InternalActivities() {
   
   let displayActivities = [];
   try {
-    displayActivities = activities.map((item: any) => {
-      if (!item?.activity) {
-        console.error('Invalid activity item:', item);
+    displayActivities = activities.map((activity: any) => {
+      if (!activity) {
+        console.error('Invalid activity item:', activity);
         return null;
       }
+      // Find the related application and business process names
+      const application = applications?.find(app => app.id === activity.applicationId);
+      const businessProcess = businessProcesses?.find(bp => bp.id === activity.businessProcessId);
+      
       return {
-        ...item.activity,
-        applicationName: item.application?.name || '',
-        businessProcessName: item.businessProcess?.businessProcess || ''
+        ...activity,
+        applicationName: application?.name || '',
+        businessProcessName: businessProcess?.businessProcess || ''
       };
     }).filter(Boolean);
   } catch (err) {
@@ -244,6 +248,14 @@ export default function InternalActivities() {
       const matchesType = typeFilter === "all" || activity.activityType === typeFilter;
 
       return matchesSearch && matchesApplication && matchesProcess && matchesType;
+    }).map((activity: any) => {
+      // Add lock information to each activity for ArtifactsExplorer
+      const lock = isActivityLocked(activity.id);
+      return {
+        ...activity,
+        lockedBy: lock?.lock?.lockedBy || null,
+        currentUserId: currentUser?.id || null
+      };
     });
   } catch (err) {
     console.error('Error filtering activities:', err);

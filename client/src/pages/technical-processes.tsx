@@ -376,7 +376,15 @@ export default function TechnicalProcesses() {
     }
   }
 
-  const filteredProcesses = filteredByConditions;
+  const filteredProcesses = filteredByConditions.map((process: any) => {
+    // Add lock information to each process for ArtifactsExplorer
+    const lock = isProcessLocked(process.id);
+    return {
+      ...process,
+      lockedBy: lock?.lock?.lockedBy || null,
+      currentUserId: currentUser?.id || null
+    };
+  });
 
   // Initialize multi-select hook
   const multiSelect = useMultiSelect({

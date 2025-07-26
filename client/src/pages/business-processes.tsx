@@ -703,6 +703,17 @@ export default function BusinessProcesses() {
       bp.domainOwner?.toLowerCase().includes(searchLower) ||
       bp.itOwner?.toLowerCase().includes(searchLower)
     );
+  }).map((bp: any) => {
+    // Add lock information to each business process for ArtifactsExplorer
+    const lock = locks?.find((l: any) => 
+      l.lock.artifactType === 'business_process' && 
+      l.lock.artifactId === bp.id
+    );
+    return {
+      ...bp,
+      lockedBy: lock?.lock?.lockedBy || null,
+      currentUserId: currentUser?.id || null
+    };
   });
 
   // No hierarchical sorting for now - just use filtered business processes

@@ -575,6 +575,14 @@ export default function Interfaces() {
       interface_.providerOwner?.toLowerCase().includes(searchLower) ||
       interface_.consumerOwner?.toLowerCase().includes(searchLower)
     );
+  }).map((interface_: any) => {
+    // Add lock information to each interface for ArtifactsExplorer
+    const lock = isInterfaceLocked(interface_.id);
+    return {
+      ...interface_,
+      lockedBy: lock?.lock?.lockedBy || null,
+      currentUserId: currentUser?.id || null
+    };
   });
 
   // Initialize multi-select hook

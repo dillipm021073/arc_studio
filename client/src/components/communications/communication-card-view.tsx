@@ -180,10 +180,7 @@ export default function CommunicationCardView({
             {/* Header */}
             <div className="flex items-start justify-between mb-3">
               <div className="flex-1">
-                <h3 className="font-medium text-sm truncate" title={conversation.title}>
-                  {conversation.title}
-                </h3>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-400">
                   by {conversation.createdBy}
                 </p>
               </div>
@@ -246,12 +243,10 @@ export default function CommunicationCardView({
               </DropdownMenu>
             </div>
 
-            {/* Description - only show if different from title */}
-            {conversation.description && conversation.description !== conversation.title && (
-              <p className="text-xs text-gray-300 mb-3 line-clamp-2" title={conversation.description}>
-                {conversation.description}
-              </p>
-            )}
+            {/* Title as main content */}
+            <h3 className="text-sm font-medium text-white mb-3 line-clamp-2" title={conversation.title}>
+              {conversation.title}
+            </h3>
 
             {/* Status and Priority */}
             <div className="flex items-center gap-2 mb-3">

@@ -813,6 +813,14 @@ export default function Applications() {
       default:
         return true;
     }
+  }).map(app => {
+    // Add lock information to each application for ArtifactsExplorer
+    const lock = isApplicationLocked(app.id);
+    return {
+      ...app,
+      lockedBy: lock?.lock?.lockedBy || null,
+      currentUserId: currentUser?.id || null
+    };
   });
 
   // Initialize multi-select hook - ensure no null items
