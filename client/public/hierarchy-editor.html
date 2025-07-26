@@ -410,6 +410,54 @@
         </div>
     </div>
 
+    <!-- Save Dialog -->
+    <div id="save-dialog" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 1000;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: #1f2937; padding: 20px; border-radius: 8px; width: 500px; max-height: 80vh; overflow-y: auto;">
+            <h3 style="margin-top: 0; color: #e5e7eb;">Save Hierarchy Design</h3>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; color: #9ca3af;">Save as:</label>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="radio" name="save-mode" value="new" checked onchange="toggleSaveMode()" style="margin-right: 10px;">
+                        <span>New Design</span>
+                    </label>
+                    <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="radio" name="save-mode" value="overwrite" onchange="toggleSaveMode()" style="margin-right: 10px;">
+                        <span>Overwrite Existing Design</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div id="new-design-section" style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; color: #9ca3af;">Design Name:</label>
+                <input type="text" id="new-design-name" placeholder="Enter design name" style="width: 100%; padding: 8px; background-color: #374151; border: 1px solid #4b5563; border-radius: 4px; color: #e5e7eb;">
+            </div>
+            
+            <div id="existing-design-section" style="display: none; margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; color: #9ca3af;">Select Existing Design:</label>
+                <select id="existing-design-select" style="width: 100%; padding: 8px; background-color: #374151; border: 1px solid #4b5563; border-radius: 4px; color: #e5e7eb;">
+                    <option value="">Loading designs...</option>
+                </select>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; color: #9ca3af;">Description:</label>
+                <input type="text" id="save-design-description" placeholder="Enter description (optional)" style="width: 100%; padding: 8px; background-color: #374151; border: 1px solid #4b5563; border-radius: 4px; color: #e5e7eb;">
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 5px; color: #9ca3af;">Tags:</label>
+                <input type="text" id="save-design-tags" placeholder="Enter tags (comma separated)" style="width: 100%; padding: 8px; background-color: #374151; border: 1px solid #4b5563; border-radius: 4px; color: #e5e7eb;">
+            </div>
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="closeSaveDialog()" style="background-color: #6b7280;">Cancel</button>
+                <button onclick="confirmSaveDesign()" style="background-color: #059669;">Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let nodeCounter = 0;
         
@@ -683,20 +731,115 @@
                 return;
             }
             
+            // Show save dialog
+            showSaveDialog();
+        }
+        
+        function showSaveDialog() {
+            document.getElementById('save-dialog').style.display = 'block';
+            
+            // Pre-fill description and tags from the current fields
+            document.getElementById('save-design-description').value = document.getElementById('design-description').value || '';
+            document.getElementById('save-design-tags').value = document.getElementById('design-tags').value || '';
+            
+            // Pre-fill the new design name from the current name field
+            const currentName = document.getElementById('design-name').value || '';
+            document.getElementById('new-design-name').value = currentName || 'Untitled Design';
+            
+            // Load existing designs if overwrite mode is selected
+            if (document.querySelector('input[name="save-mode"]:checked').value === 'overwrite') {
+                loadExistingDesigns();
+            }
+        }
+        
+        function closeSaveDialog() {
+            document.getElementById('save-dialog').style.display = 'none';
+        }
+        
+        function toggleSaveMode() {
+            const saveMode = document.querySelector('input[name="save-mode"]:checked').value;
+            
+            if (saveMode === 'new') {
+                document.getElementById('new-design-section').style.display = 'block';
+                document.getElementById('existing-design-section').style.display = 'none';
+            } else {
+                document.getElementById('new-design-section').style.display = 'none';
+                document.getElementById('existing-design-section').style.display = 'block';
+                loadExistingDesigns();
+            }
+        }
+        
+        async function loadExistingDesigns() {
+            const select = document.getElementById('existing-design-select');
+            select.innerHTML = '<option value="">Loading designs...</option>';
+            
+            try {
+                // Fetch existing designs from the API
+                const response = await fetch('/api/hierarchy-designs', {
+                    credentials: 'include'
+                });
+                
+                if (response.ok) {
+                    const designs = await response.json();
+                    
+                    select.innerHTML = '<option value="">Select a design to overwrite</option>';
+                    designs.forEach(design => {
+                        const option = document.createElement('option');
+                        option.value = design.id;
+                        option.textContent = `${design.name} (${new Date(design.updatedAt).toLocaleDateString()})`;
+                        option.dataset.name = design.name;
+                        select.appendChild(option);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">Failed to load designs</option>';
+                }
+            } catch (error) {
+                console.error('Error loading designs:', error);
+                select.innerHTML = '<option value="">Error loading designs</option>';
+            }
+        }
+        
+        function confirmSaveDesign() {
+            const saveMode = document.querySelector('input[name="save-mode"]:checked').value;
+            const jsonOutput = document.getElementById('json-output').value;
+            
+            let designName;
+            let overwriteId = null;
+            
+            if (saveMode === 'new') {
+                designName = document.getElementById('new-design-name').value.trim();
+                if (!designName) {
+                    alert('Please enter a design name');
+                    return;
+                }
+            } else {
+                const select = document.getElementById('existing-design-select');
+                overwriteId = select.value;
+                if (!overwriteId) {
+                    alert('Please select a design to overwrite');
+                    return;
+                }
+                designName = select.options[select.selectedIndex].dataset.name;
+            }
+            
             const data = {
-                name: document.getElementById('design-name').value || 'Untitled Design',
-                description: document.getElementById('design-description').value || '',
-                tags: document.getElementById('design-tags').value || '',
-                hierarchyData: jsonOutput
+                name: designName,
+                description: document.getElementById('save-design-description').value || '',
+                tags: document.getElementById('save-design-tags').value || '',
+                hierarchyData: jsonOutput,
+                overwriteId: overwriteId
             };
             
-            console.log('Saving hierarchy data:', jsonOutput); // Debug log
+            console.log('Saving hierarchy data:', data); // Debug log
             
             // Post message to parent window
             window.parent.postMessage({
                 type: 'SAVE_HIERARCHY_DESIGN',
                 data: data
             }, '*');
+            
+            // Close the dialog
+            closeSaveDialog();
         }
         
         // Handle read-only mode

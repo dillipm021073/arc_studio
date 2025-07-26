@@ -1131,23 +1131,40 @@ export default function BusinessProcesses() {
                   // Get current user from localStorage or session
                   const currentUser = localStorage.getItem('username') || 'unknown';
                   
-                  // Add timestamp and username to the name
-                  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-                  const enhancedName = `${metadata.name}_${timestamp}_${currentUser}`;
-                  
-                  const response = await fetch("/api/hierarchy-designs", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify({
-                      name: enhancedName,
-                      description: metadata.description,
-                      hierarchyData: JSON.stringify(hierarchy),
-                      tags: Array.isArray(metadata.tags) ? metadata.tags.join(', ') : metadata.tags,
-                      createdBy: currentUser,
-                    }),
-                  });
-                  if (!response.ok) throw new Error("Failed to save design");
+                  if (metadata.overwriteId) {
+                    // Update existing design
+                    const response = await fetch(`/api/hierarchy-designs/${metadata.overwriteId}`, {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({
+                        name: metadata.name,
+                        description: metadata.description,
+                        hierarchyData: JSON.stringify(hierarchy),
+                        tags: Array.isArray(metadata.tags) ? metadata.tags.join(', ') : metadata.tags,
+                      }),
+                    });
+                    if (!response.ok) throw new Error("Failed to update design");
+                  } else {
+                    // Create new design
+                    // Add timestamp and username to the name
+                    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                    const enhancedName = `${metadata.name}_${timestamp}_${currentUser}`;
+                    
+                    const response = await fetch("/api/hierarchy-designs", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      credentials: "include",
+                      body: JSON.stringify({
+                        name: enhancedName,
+                        description: metadata.description,
+                        hierarchyData: JSON.stringify(hierarchy),
+                        tags: Array.isArray(metadata.tags) ? metadata.tags.join(', ') : metadata.tags,
+                        createdBy: currentUser,
+                      }),
+                    });
+                    if (!response.ok) throw new Error("Failed to save design");
+                  }
                   
                   // Clear selected design after save to show fresh state
                   setSelectedHierarchyDesign(null);

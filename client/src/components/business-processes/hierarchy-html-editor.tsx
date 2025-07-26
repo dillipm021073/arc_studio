@@ -34,14 +34,15 @@ export default function HierarchyHtmlEditor({
           description: data.description,
           tags: data.tags.split(',').map((tag: string) => tag.trim()).filter(Boolean),
           nodeCount: data.hierarchyData.match(/"id":/g)?.length || 0,
-          maxDepth: calculateMaxDepth(hierarchy)
+          maxDepth: calculateMaxDepth(hierarchy),
+          overwriteId: data.overwriteId // Pass the overwrite ID if present
         };
 
         onSave?.(hierarchy, metadata);
         
         toast({
           title: "Success",
-          description: "Hierarchy design saved successfully",
+          description: data.overwriteId ? "Hierarchy design updated successfully" : "Hierarchy design saved successfully",
         });
       } catch (error) {
         toast({
