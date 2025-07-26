@@ -42,7 +42,7 @@ import { ArtifactInitiativeTooltip } from "@/components/ui/artifact-initiative-t
 import BusinessProcessForm from "@/components/business-processes/business-process-form";
 import ChildBusinessProcessForm from "@/components/business-processes/child-business-process-form";
 import HierarchyHtmlEditor from "@/components/business-processes/hierarchy-html-editor";
-import HierarchyDesignsList from "@/components/business-processes/hierarchy-designs-list";
+import HierarchyDesignsExplorer from "@/components/business-processes/hierarchy-designs-explorer";
 import BusinessProcessTreeView from "@/components/business-processes/business-process-tree-view";
 import BusinessProcessTreeViewDnd from "@/components/business-processes/business-process-tree-view-dnd";
 import { DataFilter, FilterCondition, FilterColumn, applyFilters } from "@/components/ui/data-filter";
@@ -1104,7 +1104,7 @@ export default function BusinessProcesses() {
               </div>
               
               {showHierarchyDesigns && (
-                <HierarchyDesignsList
+                <HierarchyDesignsExplorer
                   onSelectDesign={(design) => {
                     setSelectedHierarchyDesign(design);
                     setShowHierarchyDesigns(false);
@@ -1113,6 +1113,7 @@ export default function BusinessProcesses() {
                       description: `Hierarchy design "${design.name}" has been loaded into the editor`,
                     });
                   }}
+                  showCreateButton={true}
                 />
               )}
             </div>
