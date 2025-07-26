@@ -197,8 +197,22 @@ export default function InternalActivities() {
     }
   });
 
+  // Helper function to check if activity is locked
+  const isActivityLocked = (activityId: number) => {
+    if (!locks || !Array.isArray(locks)) return null;
+    
+    const lock = locks.find((l: any) => 
+      l.lock.artifactType === 'internal_activity' && 
+      l.lock.artifactId === activityId
+    );
+    
+    return lock || null;
+  };
+
   // Transform data for display
   const activities = data || [];
+  console.log('Raw API data:', data);
+  console.log('Activities array:', activities);
   
   let displayActivities = [];
   if (Array.isArray(activities) && activities.length > 0) {
@@ -213,6 +227,7 @@ export default function InternalActivities() {
       return null;
     }).filter(Boolean);
   }
+  console.log('Display activities:', displayActivities);
 
   // Filter activities
   let filteredActivities = displayActivities.filter((activity: InternalActivity & { applicationName: string; businessProcessName: string }) => {
@@ -244,9 +259,6 @@ export default function InternalActivities() {
     items: filteredActivities || [],
     getItemId: (activity) => activity?.id || 0,
   });
-
-  // Helper function to check if activity is locked
-  const isActivityLocked = (activityId: number) => {
     if (!locks || !Array.isArray(locks)) return null;
     
     const lock = locks.find((l: any) => 
@@ -254,9 +266,6 @@ export default function InternalActivities() {
       l.lock.artifactId === activityId
     );
     
-    return lock || null;
-  };
-
   // Helper to get activity state for visual indicators
   const getActivityState = (activity: any): ArtifactState => {
     const lock = isActivityLocked(activity.id);
@@ -570,6 +579,16 @@ export default function InternalActivities() {
     );
   }
 
+
+  // Add error boundary
+  if (!filteredActivities) {
+    console.error('filteredActivities is undefined');
+    return (
+      <div className="flex flex-col h-screen bg-gray-900 items-center justify-center">
+        <div className="text-red-500">Error: Unable to load activities</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">
