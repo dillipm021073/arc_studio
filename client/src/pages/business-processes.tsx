@@ -917,14 +917,22 @@ export default function BusinessProcesses() {
             onView={setViewingBP}
             hideHeader={true}
             onEdit={(bp) => {
-              if (isBusinessProcessLocked(bp.id)) {
-                setEditingBP(bp);
+              if (currentInitiative && !isProductionView) {
+                // In initiative mode, check if locked
+                if (isBusinessProcessLocked(bp.id)) {
+                  setEditingBP(bp);
+                } else {
+                  toast({
+                    title: "Business process not checked out",
+                    description: "You need to check out this business process before editing",
+                    variant: "destructive"
+                  });
+                }
               } else {
-                toast({
-                  title: "Business process not checked out",
-                  description: "You need to check out this business process before editing",
-                  variant: "destructive"
-                });
+                // In production mode, allow edit if user has permission
+                if (canUpdate) {
+                  setEditingBP(bp);
+                }
               }
             }}
             onDelete={(bp) => setDeletingBP(bp)}

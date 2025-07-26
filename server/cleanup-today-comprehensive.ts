@@ -36,7 +36,7 @@ import { sql } from "drizzle-orm";
 import { exit } from "process";
 
 async function cleanupTodayArtifacts() {
-  console.log("Starting cleanup of artifacts created today with cascade handling...");
+  console.log("Starting COMPREHENSIVE cleanup of artifacts created today...");
   
   const today = new Date().toISOString().split('T')[0];
   console.log(`Today's date: ${today}`);
@@ -52,6 +52,9 @@ async function cleanupTodayArtifacts() {
           application_id IN (
             SELECT id FROM ${applications} 
             WHERE DATE(created_at) = ${today}
+          ) OR change_request_id IN (
+            SELECT id FROM ${changeRequests}
+            WHERE DATE(created_at) = ${today}
           )
         `);
       console.log("✅ Deleted change request application links");
@@ -65,6 +68,9 @@ async function cleanupTodayArtifacts() {
           interface_id IN (
             SELECT id FROM ${interfaces} 
             WHERE DATE(created_at) = ${today}
+          ) OR change_request_id IN (
+            SELECT id FROM ${changeRequests}
+            WHERE DATE(created_at) = ${today}
           )
         `);
       console.log("✅ Deleted change request interface links");
@@ -72,13 +78,14 @@ async function cleanupTodayArtifacts() {
       console.log(`❌ Failed to delete change request interface links - ${error.message}`);
     }
 
-    // Note: There's no changeRequestBusinessProcesses table, so we skip this
-    
     try {
       await db.delete(changeRequestInternalActivities)
         .where(sql`
           internal_activity_id IN (
             SELECT id FROM ${internalActivities} 
+            WHERE DATE(created_at) = ${today}
+          ) OR change_request_id IN (
+            SELECT id FROM ${changeRequests}
             WHERE DATE(created_at) = ${today}
           )
         `);
@@ -92,6 +99,9 @@ async function cleanupTodayArtifacts() {
         .where(sql`
           technical_process_id IN (
             SELECT id FROM ${technicalProcesses} 
+            WHERE DATE(created_at) = ${today}
+          ) OR change_request_id IN (
+            SELECT id FROM ${changeRequests}
             WHERE DATE(created_at) = ${today}
           )
         `);
@@ -180,8 +190,47 @@ async function cleanupTodayArtifacts() {
       console.log(`❌ Failed to delete technical process internal activity links - ${error.message}`);
     }
 
-    // Step 2: Delete main entities
-    console.log("\n--- Step 2: Cleaning main entities ---");
+    // Step 2: Handle referential integrity - Update or delete dependent records
+    console.log("\n--- Step 2: Handling referential integrity ---");
+    
+    // First, nullify references to applications that will be deleted
+    try {
+      await db.update(internalActivities)
+        .set({ applicationId: null })
+        .where(sql`
+          application_id IN (
+            SELECT id FROM ${applications} 
+            WHERE DATE(created_at) = ${today}
+          )
+        `);
+      console.log("✅ Nullified internal activities application references");
+    } catch (error: any) {
+      console.log(`❌ Failed to nullify internal activities application references - ${error.message}`);
+    }
+
+    // Nullify interface references to applications that will be deleted
+    try {
+      await db.update(interfaces)
+        .set({ 
+          providerApplicationId: null,
+          consumerApplicationId: null 
+        })
+        .where(sql`
+          provider_application_id IN (
+            SELECT id FROM ${applications} 
+            WHERE DATE(created_at) = ${today}
+          ) OR consumer_application_id IN (
+            SELECT id FROM ${applications} 
+            WHERE DATE(created_at) = ${today}
+          )
+        `);
+      console.log("✅ Nullified interfaces application references");
+    } catch (error: any) {
+      console.log(`❌ Failed to nullify interfaces application references - ${error.message}`);
+    }
+
+    // Step 3: Delete main entities
+    console.log("\n--- Step 3: Cleaning main entities ---");
     
     // Delete change requests
     try {
@@ -219,7 +268,7 @@ async function cleanupTodayArtifacts() {
       console.log(`❌ Failed to delete technical processes - ${error.message}`);
     }
 
-    // Delete business processes (after interface relationships are deleted)
+    // Delete business processes
     try {
       await db.delete(businessProcesses)
         .where(sql`DATE(created_at) = ${today}`);
@@ -228,7 +277,7 @@ async function cleanupTodayArtifacts() {
       console.log(`❌ Failed to delete business processes - ${error.message}`);
     }
 
-    // Delete internal activities (before applications since they reference them)
+    // Delete internal activities created today
     try {
       await db.delete(internalActivities)
         .where(sql`DATE(created_at) = ${today}`);
@@ -246,7 +295,7 @@ async function cleanupTodayArtifacts() {
       console.log(`❌ Failed to delete application capabilities - ${error.message}`);
     }
 
-    // Delete interfaces before applications (interfaces may reference applications)
+    // Delete interfaces created today
     try {
       await db.delete(interfaces)
         .where(sql`DATE(created_at) = ${today}`);
@@ -255,7 +304,7 @@ async function cleanupTodayArtifacts() {
       console.log(`❌ Failed to delete interfaces - ${error.message}`);
     }
 
-    // Delete applications last (after all dependencies are removed)
+    // Finally, delete applications (all references should be cleared by now)
     try {
       await db.delete(applications)
         .where(sql`DATE(created_at) = ${today}`);

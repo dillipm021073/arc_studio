@@ -783,14 +783,22 @@ export default function Interfaces() {
           onView={setViewingInterface}
           hideHeader={true}
           onEdit={(iface) => {
-            if (isInterfaceLocked(iface.id)) {
-              setEditingInterface(iface);
+            if (currentInitiative && !isProductionView) {
+              // In initiative mode, check if locked
+              if (isInterfaceLocked(iface.id)) {
+                setEditingInterface(iface);
+              } else {
+                toast({
+                  title: "Interface not checked out",
+                  description: "You need to check out this interface before editing",
+                  variant: "destructive"
+                });
+              }
             } else {
-              toast({
-                title: "Interface not checked out",
-                description: "You need to check out this interface before editing",
-                variant: "destructive"
-              });
+              // In production mode, allow edit if user has permission
+              if (canUpdate('interfaces')) {
+                setEditingInterface(iface);
+              }
             }
           }}
           onDelete={(iface) => setDeletingInterface(iface)}

@@ -598,15 +598,24 @@ export default function TechnicalProcesses() {
             onView={setViewingProcess}
             hideHeader={true}
             onEdit={(process) => {
-              if (isProcessLocked(process.id)) {
-                setSelectedProcess(process);
-                setIsFormOpen(true);
+              if (currentInitiative && !isProductionView) {
+                // In initiative mode, check if locked
+                if (isProcessLocked(process.id)) {
+                  setSelectedProcess(process);
+                  setIsFormOpen(true);
+                } else {
+                  toast({
+                    title: "Technical process not checked out",
+                    description: "You need to check out this technical process before editing",
+                    variant: "destructive"
+                  });
+                }
               } else {
-                toast({
-                  title: "Technical process not checked out",
-                  description: "You need to check out this technical process before editing",
-                  variant: "destructive"
-                });
+                // In production mode, allow edit if user has permission
+                if (canUpdate('technical-processes')) {
+                  setSelectedProcess(process);
+                  setIsFormOpen(true);
+                }
               }
             }}
             onDelete={(process) => setDeleteId(process.id)}

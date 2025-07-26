@@ -762,14 +762,22 @@ export default function InternalActivities() {
               onView={setViewingActivity}
               hideHeader={true}
               onEdit={(activity) => {
-                if (isActivityLocked(activity.id)) {
-                  handleEdit(activity);
+                if (currentInitiative && !isProductionView) {
+                  // In initiative mode, check if locked
+                  if (isActivityLocked(activity.id)) {
+                    handleEdit(activity);
+                  } else {
+                    toast({
+                      title: "Activity not checked out",
+                      description: "You need to check out this activity before editing",
+                      variant: "destructive"
+                    });
+                  }
                 } else {
-                  toast({
-                    title: "Activity not checked out",
-                    description: "You need to check out this activity before editing",
-                    variant: "destructive"
-                  });
+                  // In production mode, allow edit if user has permission
+                  if (canUpdate('internal-activities')) {
+                    handleEdit(activity);
+                  }
                 }
               }}
               onDelete={(activity) => setDeletingActivity(activity)}
