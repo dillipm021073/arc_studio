@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePersistentFilters } from "@/hooks/use-persistent-filters";
+import { useTableExplorerMode } from "@/hooks/use-view-mode";
 import { useCommunicationCounts } from "@/hooks/use-communication-counts";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useMultiSelect } from "@/hooks/use-multi-select";
@@ -134,7 +135,7 @@ export default function TechnicalProcesses() {
   const [showImportExport, setShowImportExport] = useState(false);
   const [viewingProcess, setViewingProcess] = useState<TechnicalProcess | null>(null);
   const [duplicatingProcess, setDuplicatingProcess] = useState<TechnicalProcess | null>(null);
-  const [viewMode, setViewMode] = useState<"table" | "explorer">("table");
+  const { viewMode, setViewMode } = useTableExplorerMode('technical-processes', 'table');
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [, navigate] = useLocation();

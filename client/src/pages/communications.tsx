@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMultiSelect } from "@/hooks/use-multi-select";
+import { useTableExplorerMode } from "@/hooks/use-view-mode";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -46,11 +47,14 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
-  Timer
+  Timer,
+  Grid3x3,
+  TableIcon
 } from "lucide-react";
 import { Link } from "wouter";
 import ConversationForm from "@/components/communications/conversation-form";
 import ConversationDetail from "@/components/communications/conversation-detail";
+import CommunicationCardView from "@/components/communications/communication-card-view";
 import { format } from "date-fns";
 
 interface Conversation {
@@ -70,6 +74,7 @@ interface Conversation {
 
 export default function Communications() {
   const [searchTerm, setSearchTerm] = useState("");
+  const { viewMode, setViewMode } = useTableExplorerMode('communications', 'table');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingConversation, setEditingConversation] = useState<Conversation | null>(null);
   const [viewingConversation, setViewingConversation] = useState<Conversation | null>(null);
@@ -105,6 +110,39 @@ export default function Communications() {
       });
     },
   });
+
+  const statusUpdateMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const response = await fetch(`/api/conversations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error("Failed to update conversation status");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      toast({
+        title: "Success",
+        description: "Conversation status updated successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to update conversation status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleMarkResolved = (conversationId: number) => {
+    statusUpdateMutation.mutate({ id: conversationId, status: "resolved" });
+  };
+
+  const handleReopen = (conversationId: number) => {
+    statusUpdateMutation.mutate({ id: conversationId, status: "open" });
+  };
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -292,6 +330,26 @@ export default function Communications() {
               onFiltersChange={setFilters}
             />
           </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === "table" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("table")}
+              title="Table View"
+            >
+              <TableIcon className="h-4 w-4 mr-2" />
+              Table
+            </Button>
+            <Button
+              variant={viewMode === "explorer" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("explorer")}
+              title="Card View"
+            >
+              <Grid3x3 className="h-4 w-4 mr-2" />
+              Cards
+            </Button>
+          </div>
         </div>
 
         {/* Conversations Table */}
@@ -318,6 +376,16 @@ export default function Communications() {
               </DialogContent>
             </Dialog>
           </div>
+        ) : viewMode === "explorer" ? (
+          <CommunicationCardView
+            conversations={filteredConversations}
+            onView={setViewingConversation}
+            onEdit={setEditingConversation}
+            onDelete={setDeletingConversation}
+            onMarkResolved={(conversation) => handleMarkResolved(conversation.id)}
+            onReopen={(conversation) => handleReopen(conversation.id)}
+            isLoading={isLoading}
+          />
         ) : (
           <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
             <Table>

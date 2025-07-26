@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { usePersistentFilters } from "@/hooks/use-persistent-filters";
+import { useTableExplorerMode } from "@/hooks/use-view-mode";
 import { useCommunicationCounts } from "@/hooks/use-communication-counts";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useMultiSelect } from "@/hooks/use-multi-select";
@@ -125,7 +126,7 @@ export default function Interfaces() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingInterface, setEditingInterface] = useState<Interface | null>(null);
   const [viewingInterface, setViewingInterface] = useState<Interface | null>(null);
-  const [viewMode, setViewMode] = useState<"table" | "explorer">("table");
+  const { viewMode, setViewMode } = useTableExplorerMode('interfaces', 'table');
   const [deletingInterface, setDeletingInterface] = useState<Interface | null>(null);
   const [duplicatingInterface, setDuplicatingInterface] = useState<Interface | null>(null);
   const [showImportExport, setShowImportExport] = useState(false);

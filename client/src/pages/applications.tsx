@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { usePersistentFilters } from "@/hooks/use-persistent-filters";
+import { useTableExplorerMode } from "@/hooks/use-view-mode";
 import { useCommunicationCounts } from "@/hooks/use-communication-counts";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useMultiSelect } from "@/hooks/use-multi-select";
@@ -149,7 +150,7 @@ export default function Applications() {
   const [duplicatingApp, setDuplicatingApp] = useState<Application | null>(null);
   const [showImportExport, setShowImportExport] = useState(false);
   const [decommissioningApp, setDecommissioningApp] = useState<Application | null>(null);
-  const [viewMode, setViewMode] = useState<"table" | "explorer">("table");
+  const { viewMode, setViewMode } = useTableExplorerMode('applications', 'table');
   const [decommissionImpact, setDecommissionImpact] = useState<any>(null);
   const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);

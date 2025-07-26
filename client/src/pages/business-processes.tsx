@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { usePersistentFilters } from "@/hooks/use-persistent-filters";
+import { useArtifactViewMode } from "@/hooks/use-view-mode";
 import { useCommunicationCounts } from "@/hooks/use-communication-counts";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useMultiSelect } from "@/hooks/use-multi-select";
@@ -104,7 +105,7 @@ export default function BusinessProcesses() {
   const [showImportExport, setShowImportExport] = useState(false);
   const [bpParents, setBpParents] = useState<any[]>([]);
   const [bpChildren, setBpChildren] = useState<any[]>([]);
-  const [viewMode, setViewMode] = useState<"card" | "list" | "table" | "tree" | "hierarchy">("list");
+  const { viewMode, setViewMode } = useArtifactViewMode('business-processes', ['card', 'list', 'table', 'tree', 'hierarchy'], 'list');
   const [deletionImpactMessage, setDeletionImpactMessage] = useState<string | null>(null);
   const [creatingChildForBP, setCreatingChildForBP] = useState<any>(null);
   const [showHierarchyDesigns, setShowHierarchyDesigns] = useState(false);

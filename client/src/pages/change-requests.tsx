@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { usePersistentFilters } from "@/hooks/use-persistent-filters";
+import { useTableExplorerMode } from "@/hooks/use-view-mode";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useMultiSelect } from "@/hooks/use-multi-select";
 import { useQuery } from "@tanstack/react-query";
@@ -53,7 +54,9 @@ import {
   Info,
   Trash2,
   FileJson,
-  Copy
+  Copy,
+  Grid3x3,
+  TableIcon
 } from "lucide-react";
 import { Link } from "wouter";
 import ChangeRequestFormEnhanced from "@/components/changes/change-request-form-enhanced";
@@ -65,6 +68,7 @@ import { BulkEditDialog, type BulkEditField } from "@/components/bulk-edit-dialo
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CommunicationBadge from "@/components/communications/communication-badge";
 import { useCommunicationCounts } from "@/hooks/use-communication-counts";
+import ChangeRequestCardView from "@/components/changes/change-request-card-view";
 
 interface ChangeRequest {
   id: number;
@@ -93,6 +97,7 @@ export default function ChangeRequests() {
     hasActiveFilters
   } = usePersistentFilters('change-requests');
   
+  const { viewMode, setViewMode } = useTableExplorerMode('change-requests', 'table');
   const { canCreate, canUpdate, canDelete } = usePermissions();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingCR, setEditingCR] = useState<ChangeRequest | null>(null);
@@ -262,6 +267,13 @@ export default function ChangeRequests() {
     bulkUpdateMutation.mutate({ ids, updates });
   };
 
+  const handleViewImpacts = (crId: number) => {
+    const cr = changeRequests?.find(c => c.id === crId);
+    if (cr) {
+      setViewingCR(cr);
+    }
+  };
+
   // Prepare bulk edit fields
   const bulkEditFields: BulkEditField[] = [
     {
@@ -419,6 +431,26 @@ export default function ChangeRequests() {
                 onClearAllFilters={clearAllFilters}
               />
             </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+                title="Table View"
+              >
+                <TableIcon className="h-4 w-4 mr-2" />
+                Table
+              </Button>
+              <Button
+                variant={viewMode === "explorer" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("explorer")}
+                title="Card View"
+              >
+                <Grid3x3 className="h-4 w-4 mr-2" />
+                Cards
+              </Button>
+            </div>
           </div>
           {hasActiveFilters() && (
             <div className="flex items-center gap-2 text-sm text-blue-400">
@@ -465,6 +497,15 @@ export default function ChangeRequests() {
               </DialogContent>
             </Dialog>
           </div>
+        ) : viewMode === "explorer" ? (
+          <ChangeRequestCardView
+            changeRequests={filteredChangeRequests}
+            onView={setViewingCR}
+            onEdit={canUpdate('change-requests') ? setEditingCR : undefined}
+            onDelete={canDelete('change-requests') ? setDeletingCR : undefined}
+            onViewImpacts={(cr) => handleViewImpacts(cr.id)}
+            isLoading={isLoading}
+          />
         ) : (
           <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
             <MultiSelectTable

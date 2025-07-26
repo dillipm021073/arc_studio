@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useTableExplorerMode } from "@/hooks/use-view-mode";
 import { useMultiSelect } from "@/hooks/use-multi-select";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useInitiative } from "@/components/initiatives/initiative-context";
@@ -128,7 +129,7 @@ export default function InternalActivities() {
   const [duplicatingActivity, setDuplicatingActivity] = useState<InternalActivity | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [applicationFilter, setApplicationFilter] = useState("all");
-  const [viewMode, setViewMode] = useState<"table" | "explorer">("table");
+  const { viewMode, setViewMode } = useTableExplorerMode('internal-activities', 'table');
   const [processFilter, setProcessFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [viewingActivity, setViewingActivity] = useState<any | null>(null);
