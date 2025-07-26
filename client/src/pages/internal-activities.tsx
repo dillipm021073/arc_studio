@@ -191,9 +191,8 @@ export default function InternalActivities() {
   const { data: applications } = useQuery<Application[]>({
     queryKey: ["/api/applications"],
     queryFn: async () => {
-      const response = await fetch("/api/applications");
-      if (!response.ok) throw new Error("Failed to fetch applications");
-      return response.json();
+      const response = await api.get("/api/applications");
+      return response.data;
     }
   });
 
@@ -201,9 +200,8 @@ export default function InternalActivities() {
   const { data: businessProcesses } = useQuery<BusinessProcess[]>({
     queryKey: ["/api/business-processes"],
     queryFn: async () => {
-      const response = await fetch("/api/business-processes");
-      if (!response.ok) throw new Error("Failed to fetch business processes");
-      return response.json();
+      const response = await api.get("/api/business-processes");
+      return response.data;
     }
   });
 
@@ -217,7 +215,7 @@ export default function InternalActivities() {
   let displayActivities = [];
   try {
     console.log('=== MAPPING ACTIVITIES ===');
-    displayActivities = activities.map((item: any, index: number) => {
+    const mappedActivities = activities.map((item: any, index: number) => {
       console.log(`Processing item ${index}:`, item);
       if (!item) {
         console.log(`Item ${index} is null/undefined`);
@@ -249,6 +247,7 @@ export default function InternalActivities() {
         return transformed;
       }
     }).filter(Boolean);
+    displayActivities = mappedActivities;
     console.log('=== FINAL DISPLAY ACTIVITIES ===');
     console.log('displayActivities:', displayActivities);
     console.log('displayActivities length:', displayActivities.length);

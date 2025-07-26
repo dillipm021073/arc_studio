@@ -4,11 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ChevronDown,
   AlertTriangle,
@@ -19,7 +15,10 @@ import {
   Building,
   BarChart3,
   Loader2,
-  Eye
+  Eye,
+  FileEdit,
+  Box,
+  GitBranch
 } from "lucide-react";
 import ArtifactCardView from "@/components/artifacts/artifact-card-view";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -234,21 +233,49 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
         </CardContent>
       </Card>
 
-      {/* Modified Artifacts */}
-      {analysis.modifiedArtifacts && analysis.modifiedArtifacts.length > 0 && (
-        <Collapsible defaultOpen>
-          <Card>
-            <CollapsibleTrigger asChild>
-              <CardHeader className="cursor-pointer hover:bg-muted/50">
-                <CardTitle className="flex items-center justify-between">
-                  <span>Modified Artifacts ({analysis.modifiedArtifacts.length})</span>
-                  <ChevronDown className="h-4 w-4" />
-                </CardTitle>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="p-0">
-                <div className="h-[400px] overflow-y-auto">
+      {/* Tabbed Interface for Artifacts */}
+      {(analysis.modifiedArtifacts?.length > 0 || 
+        analysis.impactedApplications?.length > 0 || 
+        analysis.impactedInterfaces?.length > 0 || 
+        analysis.relatedBusinessProcesses?.length > 0) && (
+        <Card>
+          <CardContent className="p-0">
+            <Tabs defaultValue={
+              analysis.modifiedArtifacts?.length > 0 ? "modified" :
+              analysis.impactedApplications?.length > 0 ? "applications" :
+              analysis.impactedInterfaces?.length > 0 ? "interfaces" : "processes"
+            } className="w-full">
+              <TabsList className="w-full justify-start rounded-none border-b">
+                {analysis.modifiedArtifacts?.length > 0 && (
+                  <TabsTrigger value="modified" className="data-[state=active]:bg-background">
+                    <FileEdit className="h-4 w-4 mr-2" />
+                    Modified ({analysis.modifiedArtifacts.length})
+                  </TabsTrigger>
+                )}
+                {analysis.impactedApplications?.length > 0 && (
+                  <TabsTrigger value="applications" className="data-[state=active]:bg-background">
+                    <Box className="h-4 w-4 mr-2" />
+                    Applications ({analysis.impactedApplications.length})
+                  </TabsTrigger>
+                )}
+                {analysis.impactedInterfaces?.length > 0 && (
+                  <TabsTrigger value="interfaces" className="data-[state=active]:bg-background">
+                    <Cable className="h-4 w-4 mr-2" />
+                    Interfaces ({analysis.impactedInterfaces.length})
+                  </TabsTrigger>
+                )}
+                {analysis.relatedBusinessProcesses?.length > 0 && (
+                  <TabsTrigger value="processes" className="data-[state=active]:bg-background">
+                    <GitBranch className="h-4 w-4 mr-2" />
+                    Processes ({analysis.relatedBusinessProcesses.length})
+                  </TabsTrigger>
+                )}
+              </TabsList>
+
+              {/* Modified Artifacts Tab */}
+              {analysis.modifiedArtifacts?.length > 0 && (
+                <TabsContent value="modified" className="p-0 m-0">
+                  <div className="h-[500px] overflow-y-auto">
                   <div className="p-4">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                       {analysis.modifiedArtifacts.map((artifact, index) => {
@@ -331,28 +358,13 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      )}
+                </TabsContent>
+              )}
 
-      {/* Impacted Applications */}
-      {analysis.impactedApplications && analysis.impactedApplications.length > 0 && (
-        <Collapsible defaultOpen>
-          <Card>
-            <CollapsibleTrigger asChild>
-              <CardHeader className="cursor-pointer hover:bg-muted/50">
-                <CardTitle className="flex items-center justify-between">
-                  <span>Impacted Applications ({analysis.impactedApplications.length})</span>
-                  <ChevronDown className="h-4 w-4" />
-                </CardTitle>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[400px] w-full">
-                  <div className="p-4">
+              {/* Impacted Applications Tab */}
+              {analysis.impactedApplications?.length > 0 && (
+                <TabsContent value="applications" className="p-0 m-0">
+                  <div className="h-[500px] overflow-y-auto p-4">
                     <ArtifactCardView
                       artifacts={analysis.impactedApplications}
                       artifactType="application"
@@ -363,29 +375,13 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
                       isProductionView={true}
                     />
                   </div>
-                </ScrollArea>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      )}
+                </TabsContent>
+              )}
 
-      {/* Impacted Interfaces */}
-      {analysis.impactedInterfaces && analysis.impactedInterfaces.length > 0 && (
-        <Collapsible defaultOpen>
-          <Card>
-            <CollapsibleTrigger asChild>
-              <CardHeader className="cursor-pointer hover:bg-muted/50">
-                <CardTitle className="flex items-center justify-between">
-                  <span>Impacted Interfaces (IMLs) ({analysis.impactedInterfaces.length})</span>
-                  <ChevronDown className="h-4 w-4" />
-                </CardTitle>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[400px] w-full">
-                  <div className="p-4">
+              {/* Impacted Interfaces Tab */}
+              {analysis.impactedInterfaces?.length > 0 && (
+                <TabsContent value="interfaces" className="p-0 m-0">
+                  <div className="h-[500px] overflow-y-auto p-4">
                     <ArtifactCardView
                       artifacts={analysis.impactedInterfaces}
                       artifactType="interface"
@@ -396,29 +392,13 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
                       isProductionView={true}
                     />
                   </div>
-                </ScrollArea>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-      )}
+                </TabsContent>
+              )}
 
-      {/* Related Business Processes */}
-      {analysis.relatedBusinessProcesses && analysis.relatedBusinessProcesses.length > 0 && (
-        <Collapsible defaultOpen>
-          <Card>
-            <CollapsibleTrigger asChild>
-              <CardHeader className="cursor-pointer hover:bg-muted/50">
-                <CardTitle className="flex items-center justify-between">
-                  <span>Related Business Processes ({analysis.relatedBusinessProcesses.length})</span>
-                  <ChevronDown className="h-4 w-4" />
-                </CardTitle>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent className="p-0">
-                <ScrollArea className="h-[400px] w-full">
-                  <div className="p-4">
+              {/* Related Business Processes Tab */}
+              {analysis.relatedBusinessProcesses?.length > 0 && (
+                <TabsContent value="processes" className="p-0 m-0">
+                  <div className="h-[500px] overflow-y-auto p-4">
                     <ArtifactCardView
                       artifacts={analysis.relatedBusinessProcesses}
                       artifactType="businessProcess"
@@ -429,11 +409,11 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
                       isProductionView={true}
                     />
                   </div>
-                </ScrollArea>
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
+                </TabsContent>
+              )}
+            </Tabs>
+          </CardContent>
+        </Card>
       )}
 
       {/* No Impact Message */}
