@@ -20,7 +20,8 @@
     "db:seed-comprehensive": "tsx server/seed-comprehensive-test-data.ts",
     "db:clean-seed-comprehensive": "tsx server/clean-and-seed-comprehensive.ts",
     "db:clean-reseed": "tsx server/clean-and-reseed.ts",
-    "db:cleanup-today": "tsx server/cleanup-today.ts"
+    "db:cleanup-today": "tsx server/cleanup-today.ts",
+    "db:cleanup-today-cascade": "tsx server/cleanup-today-cascade.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",

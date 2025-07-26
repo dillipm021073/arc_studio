@@ -248,19 +248,13 @@ export default function ArtifactCardView({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent className="w-56">
-        {onView && (
-          <ContextMenuItem onClick={() => onView(artifact)}>
-            <Eye className="mr-2 h-4 w-4" />
-            View Details
-          </ContextMenuItem>
-        )}
         {/* Version control options for initiative mode */}
         {currentInitiative && !isProductionView && (
           <>
             {onCheckout && !artifact.lockedBy && (
               <ContextMenuItem onClick={() => onCheckout(artifact)}>
                 <Lock className="mr-2 h-4 w-4" />
-                Checkout for Edit
+                Checkout
               </ContextMenuItem>
             )}
             {artifact.lockedBy && artifact.lockedBy === artifact.currentUserId && (
@@ -269,6 +263,12 @@ export default function ArtifactCardView({
                   <ContextMenuItem onClick={() => onEdit(artifact)}>
                     <Edit className="mr-2 h-4 w-4" />
                     Edit
+                  </ContextMenuItem>
+                )}
+                {onCheckin && (
+                  <ContextMenuItem onClick={() => onCheckin(artifact, {})}>
+                    <Unlock className="mr-2 h-4 w-4" />
+                    Checkin
                   </ContextMenuItem>
                 )}
                 {onCancelCheckout && (
@@ -285,34 +285,38 @@ export default function ArtifactCardView({
                 Locked by user
               </ContextMenuItem>
             )}
+            <ContextMenuSeparator />
           </>
         )}
         {/* Edit option for production view or no initiative context */}
         {(!currentInitiative || isProductionView) && onEdit && (
-          <ContextMenuItem onClick={() => onEdit(artifact)}>
-            <Edit className="mr-2 h-4 w-4" />
-            Edit
+          <>
+            <ContextMenuItem onClick={() => onEdit(artifact)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </ContextMenuItem>
+          </>
+        )}
+        {/* View Details */}
+        {onView && (
+          <ContextMenuItem onClick={() => onView(artifact)}>
+            <Eye className="mr-2 h-4 w-4" />
+            View Details
           </ContextMenuItem>
         )}
-        {/* Show help when in initiative mode but item not checked out */}
-        {currentInitiative && !isProductionView && !artifact.lockedBy && (
-          <ContextMenuItem disabled>
-            <Info className="mr-2 h-4 w-4" />
-            Checkout required to edit
-          </ContextMenuItem>
-        )}
+        {/* Custom actions (e.g., View IML Diagram, Add Child Process, Duplicate) */}
         {customActions && (
           <>
-            <ContextMenuSeparator />
             {customActions(artifact)}
           </>
         )}
-        {onDelete && !isProductionView && (
+        {/* Delete option */}
+        {onDelete && (
           <>
             <ContextMenuSeparator />
             <ContextMenuItem 
               onClick={() => onDelete(artifact)}
-              className="text-red-600"
+              className="text-red-400 focus:text-red-300"
             >
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
@@ -438,46 +442,75 @@ export default function ArtifactCardView({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    {/* Version control options for initiative mode */}
+                    {currentInitiative && !isProductionView && (
+                      <>
+                        {onCheckout && !artifact.lockedBy && (
+                          <DropdownMenuItem onClick={() => onCheckout(artifact)}>
+                            <Lock className="mr-2 h-4 w-4" />
+                            Checkout
+                          </DropdownMenuItem>
+                        )}
+                        {artifact.lockedBy && artifact.lockedBy === artifact.currentUserId && (
+                          <>
+                            {onEdit && (
+                              <DropdownMenuItem onClick={() => onEdit(artifact)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                            )}
+                            {onCheckin && (
+                              <DropdownMenuItem onClick={() => onCheckin(artifact, {})}>
+                                <Unlock className="mr-2 h-4 w-4" />
+                                Checkin
+                              </DropdownMenuItem>
+                            )}
+                            {onCancelCheckout && (
+                              <DropdownMenuItem onClick={() => onCancelCheckout(artifact)}>
+                                <Unlock className="mr-2 h-4 w-4" />
+                                Cancel Checkout
+                              </DropdownMenuItem>
+                            )}
+                          </>
+                        )}
+                        {artifact.lockedBy && artifact.lockedBy !== artifact.currentUserId && (
+                          <DropdownMenuItem disabled>
+                            <Lock className="mr-2 h-4 w-4" />
+                            Locked by user
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    {/* Edit option for production view or no initiative context */}
+                    {(!currentInitiative || isProductionView) && onEdit && (
+                      <>
+                        <DropdownMenuItem onClick={() => onEdit(artifact)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                    {/* View Details */}
                     {onView && (
                       <DropdownMenuItem onClick={() => onView(artifact)}>
                         <Eye className="mr-2 h-4 w-4" />
                         View Details
                       </DropdownMenuItem>
                     )}
-                    {!isProductionView && (
-                      <>
-                        {onCheckout && (
-                          <DropdownMenuItem onClick={() => onCheckout(artifact)}>
-                            <Lock className="mr-2 h-4 w-4" />
-                            Checkout for Edit
-                          </DropdownMenuItem>
-                        )}
-                        {onEdit && (
-                          <DropdownMenuItem onClick={() => onEdit(artifact)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                        )}
-                        {onCancelCheckout && (
-                          <DropdownMenuItem onClick={() => onCancelCheckout(artifact)}>
-                            <Unlock className="mr-2 h-4 w-4" />
-                            Cancel Checkout
-                          </DropdownMenuItem>
-                        )}
-                      </>
-                    )}
+                    {/* Custom actions (e.g., View IML Diagram, Add Child Process, Duplicate) */}
                     {customActions && (
                       <>
-                        <DropdownMenuSeparator />
                         {customActions(artifact)}
                       </>
                     )}
-                    {onDelete && !isProductionView && (
+                    {/* Delete option */}
+                    {onDelete && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
                           onClick={() => onDelete(artifact)}
-                          className="text-red-600"
+                          className="text-red-400 focus:text-red-300"
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Delete

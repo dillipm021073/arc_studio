@@ -211,8 +211,12 @@ export default function InternalActivities() {
 
   // Transform data for display
   const activities = data || [];
+  console.log('=== INTERNAL ACTIVITIES DEBUG ===');
   console.log('Raw API data:', data);
+  console.log('Is Loading:', isLoading);
+  console.log('Error:', error);
   console.log('Activities array:', activities);
+  console.log('Current User:', currentUser);
   
   let displayActivities = [];
   if (Array.isArray(activities) && activities.length > 0) {
@@ -259,13 +263,6 @@ export default function InternalActivities() {
     items: filteredActivities || [],
     getItemId: (activity) => activity?.id || 0,
   });
-    if (!locks || !Array.isArray(locks)) return null;
-    
-    const lock = locks.find((l: any) => 
-      l.lock.artifactType === 'internal_activity' && 
-      l.lock.artifactId === activityId
-    );
-    
   // Helper to get activity state for visual indicators
   const getActivityState = (activity: any): ArtifactState => {
     const lock = isActivityLocked(activity.id);
