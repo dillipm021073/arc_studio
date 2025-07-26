@@ -152,11 +152,21 @@ export default function InternalActivities() {
     queryKey: ["internal-activities"],
     queryFn: async () => {
       console.log('Fetching internal activities...');
-      const response = await fetch("/api/internal-activities");
+      const response = await fetch("/api/internal-activities", {
+        credentials: 'include' // Ensure cookies are sent
+      });
       console.log('Response status:', response.status);
-      if (!response.ok) {
-        throw new Error("Failed to fetch internal activities");
+      
+      if (response.status === 401) {
+        throw new Error("Authentication required. Please log in.");
       }
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`Failed to fetch internal activities: ${response.status} ${response.statusText}`);
+      }
+      
       const result = await response.json();
       console.log('API response:', result);
       return result;
@@ -601,9 +611,16 @@ export default function InternalActivities() {
     console.error('Error loading internal activities:', error);
     return (
       <div className="flex flex-col h-screen bg-gray-900 items-center justify-center">
-        <div className="text-red-500">
+        <div className="text-red-500 text-center">
           <h2 className="text-xl font-bold mb-2">Error loading internal activities</h2>
-          <p>{error.message}</p>
+          <p className="mb-4">{error.message}</p>
+          {error.message.includes('Authentication required') && (
+            <Link href="/login">
+              <Button className="bg-blue-600 hover:bg-blue-700">
+                Go to Login
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     );
