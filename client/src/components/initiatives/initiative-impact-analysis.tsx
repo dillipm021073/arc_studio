@@ -301,6 +301,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
                     />
                   </div>
                 </ScrollArea>
+              </CardContent>
             </CollapsibleContent>
           </Card>
         </Collapsible>
@@ -333,6 +334,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
                     />
                   </div>
                 </ScrollArea>
+              </CardContent>
             </CollapsibleContent>
           </Card>
         </Collapsible>
@@ -365,6 +367,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
                     />
                   </div>
                 </ScrollArea>
+              </CardContent>
             </CollapsibleContent>
           </Card>
         </Collapsible>

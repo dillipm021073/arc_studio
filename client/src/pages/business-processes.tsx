@@ -130,13 +130,23 @@ export default function BusinessProcesses() {
 
   // Fetch locks for version control
   const { data: locks } = useQuery({
-    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryKey: ['version-control-locks', 'all'],
     queryFn: async () => {
-      if (!currentInitiative) return [];
-      const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
-      return response.data;
+      try {
+        // Fetch ALL locks, not just for current initiative
+        const response = await api.get('/api/version-control/locks', {
+          params: {
+            // Don't filter by initiative - get all locks
+            t: Date.now() // Prevent caching
+          }
+        });
+        return response.data;
+      } catch (error) {
+        console.error('Failed to fetch locks:', error);
+        return [];
+      }
     },
-    enabled: !!currentInitiative && !isProductionView
+    enabled: !isProductionView
   });
 
   // Fetch current user for version control
@@ -246,7 +256,7 @@ export default function BusinessProcesses() {
       return response.data;
     },
     onSuccess: (data, bp) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       toast({
         title: "Business process checked out",
         description: `${bp.businessProcess} is now locked for editing in ${currentInitiative?.name}`
@@ -280,7 +290,7 @@ export default function BusinessProcesses() {
       return response.data;
     },
     onSuccess: (data, { bp }) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       queryClient.invalidateQueries({ queryKey: ['business-processes'] });
       toast({
         title: "Changes checked in",
@@ -307,7 +317,7 @@ export default function BusinessProcesses() {
       return response.data;
     },
     onSuccess: (data, bp) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       queryClient.invalidateQueries({ queryKey: ['/api/business-processs'] });
       toast({
         title: "Checkout cancelled",

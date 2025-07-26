@@ -154,13 +154,23 @@ export default function Interfaces() {
 
   // Fetch locks for version control
   const { data: locks } = useQuery({
-    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryKey: ['version-control-locks', 'all'],
     queryFn: async () => {
-      if (!currentInitiative) return [];
-      const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
-      return response.data;
+      try {
+        // Fetch ALL locks, not just for current initiative
+        const response = await api.get('/api/version-control/locks', {
+          params: {
+            // Don't filter by initiative - get all locks
+            t: Date.now() // Prevent caching
+          }
+        });
+        return response.data;
+      } catch (error) {
+        console.error('Failed to fetch locks:', error);
+        return [];
+      }
     },
-    enabled: !!currentInitiative && !isProductionView
+    enabled: !isProductionView
   });
 
   const { data: businessProcesses } = useQuery({
@@ -333,7 +343,7 @@ export default function Interfaces() {
       return response.data;
     },
     onSuccess: (data, iface) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       toast({
         title: "Interface checked out",
         description: `${iface.imlNumber} is now locked for editing in ${currentInitiative?.name}`
@@ -367,7 +377,7 @@ export default function Interfaces() {
       return response.data;
     },
     onSuccess: (data, { iface }) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       queryClient.invalidateQueries({ queryKey: ['/api/interfaces'] });
       toast({
         title: "Changes checked in",
@@ -394,7 +404,7 @@ export default function Interfaces() {
       return response.data;
     },
     onSuccess: (data, interface_) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       queryClient.invalidateQueries({ queryKey: ['/api/interfaces'] });
       toast({
         title: "Checkout cancelled",

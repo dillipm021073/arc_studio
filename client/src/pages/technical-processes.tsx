@@ -147,18 +147,23 @@ export default function TechnicalProcesses() {
 
   // Fetch locks for version control
   const { data: locks } = useQuery({
-    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryKey: ['version-control-locks', 'all'],
     queryFn: async () => {
-      if (!currentInitiative) return [];
       try {
-        const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
+        // Fetch ALL locks, not just for current initiative
+        const response = await api.get('/api/version-control/locks', {
+          params: {
+            // Don't filter by initiative - get all locks
+            t: Date.now() // Prevent caching
+          }
+        });
         return response.data;
       } catch (error) {
         console.error('Failed to fetch locks:', error);
         return [];
       }
     },
-    enabled: !!currentInitiative,
+    enabled: !isProductionView
   });
 
   // Fetch current user for version control
@@ -239,7 +244,7 @@ export default function TechnicalProcesses() {
       return response.data;
     },
     onSuccess: (data, process) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       toast({
         title: "Process checked out",
         description: `${process.name} is now locked for editing in ${currentInitiative?.name}`
@@ -264,7 +269,7 @@ export default function TechnicalProcesses() {
       return response.data;
     },
     onSuccess: (data, { process }) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       queryClient.invalidateQueries({ queryKey: ['/api/technical-processes'] });
       toast({
         title: "Changes checked in",
@@ -290,7 +295,7 @@ export default function TechnicalProcesses() {
       return response.data;
     },
     onSuccess: (data, process) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+      queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       queryClient.invalidateQueries({ queryKey: ['/api/technical-processs'] });
       toast({
         title: "Checkout cancelled",

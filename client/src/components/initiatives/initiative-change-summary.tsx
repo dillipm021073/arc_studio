@@ -143,41 +143,50 @@ export function InitiativeChangeSummary({ initiativeId }: InitiativeChangeSummar
               <Badge variant="secondary">{artifactGroup.changes.length} changes</Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {artifactGroup.changes.map((change: any, index: number) => (
-              <div key={index}>
-                <div className="flex items-start gap-3">
-                  {getChangeIcon(change.changeType)}
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{change.artifactName}</span>
-                      <Badge className={getChangeTypeColor(change.changeType)}>
-                        {change.changeType}
-                      </Badge>
-                      {change.version && (
-                        <Badge variant="outline">v{change.version}</Badge>
-                      )}
+          <CardContent>
+            <div className="max-h-96 overflow-y-auto pr-2 space-y-3">
+              {artifactGroup.changes.map((change: any, index: number) => (
+                <Card key={index} className="bg-gray-50 dark:bg-gray-800 border-l-4 border-l-blue-500">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-3">
+                      {getChangeIcon(change.changeType)}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-base">{change.artifactName}</span>
+                          <Badge className={getChangeTypeColor(change.changeType)}>
+                            {change.changeType}
+                          </Badge>
+                          {change.version && (
+                            <Badge variant="outline">v{change.version}</Badge>
+                          )}
+                        </div>
+                        
+                        {/* Change Description */}
+                        {change.description && (
+                          <p className="text-sm text-muted-foreground mt-1">{change.description}</p>
+                        )}
+                      </div>
                     </div>
-                    
-                    {/* Change Description */}
-                    {change.description && (
-                      <p className="text-sm text-muted-foreground">{change.description}</p>
-                    )}
-                    
+                  </CardHeader>
+                  
+                  <CardContent className="pt-0 space-y-3">
                     {/* Field Changes */}
                     {change.fieldChanges && change.fieldChanges.length > 0 && (
-                      <div className="mt-2 space-y-1 pl-4 border-l-2 border-gray-200">
-                        {change.fieldChanges.map((fieldChange: any, idx: number) => (
-                          <div key={idx}>
-                            {formatFieldChange(fieldChange.field, fieldChange.oldValue, fieldChange.newValue)}
-                          </div>
-                        ))}
+                      <div className="space-y-2">
+                        <span className="text-sm font-medium">Field Changes:</span>
+                        <div className="space-y-1 pl-4 border-l-2 border-gray-200 dark:border-gray-600">
+                          {change.fieldChanges.map((fieldChange: any, idx: number) => (
+                            <div key={idx}>
+                              {formatFieldChange(fieldChange.field, fieldChange.oldValue, fieldChange.newValue)}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                     
                     {/* Impact Information */}
                     {change.impacts && change.impacts.length > 0 && (
-                      <div className="mt-2">
+                      <div>
                         <span className="text-sm font-medium">Impacts:</span>
                         <ul className="mt-1 text-sm text-muted-foreground list-disc list-inside">
                           {change.impacts.map((impact: string, idx: number) => (
@@ -188,27 +197,24 @@ export function InitiativeChangeSummary({ initiativeId }: InitiativeChangeSummar
                     )}
                     
                     {/* Change Metadata */}
-                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2 border-t border-gray-200 dark:border-gray-600">
                       {change.changedBy && (
-                        <span>Changed by: {change.changedBy}</span>
+                        <span>Changed by: <span className="font-medium">{change.changedBy}</span></span>
                       )}
                       {change.changedAt && (
-                        <span>
-                          <Clock className="h-3 w-3 inline mr-1" />
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
                           {format(new Date(change.changedAt), 'MMM d, yyyy HH:mm')}
                         </span>
                       )}
                       {change.changeRequestId && (
-                        <span>CR #{change.changeRequestId}</span>
+                        <span className="font-medium">CR #{change.changeRequestId}</span>
                       )}
                     </div>
-                  </div>
-                </div>
-                {index < artifactGroup.changes.length - 1 && (
-                  <Separator className="my-3" />
-                )}
-              </div>
-            ))}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </CardContent>
         </Card>
       ))}
