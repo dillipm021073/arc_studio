@@ -841,16 +841,12 @@ export default function BusinessProcesses() {
             <ToggleGroup 
               type="single" 
               value={viewMode} 
-              onValueChange={(value) => value && setViewMode(value as "card" | "list" | "table" | "tree" | "hierarchy")}
+              onValueChange={(value) => value && setViewMode(value as "card" | "table" | "tree" | "hierarchy")}
               className="bg-gray-800 border-gray-700"
             >
               <ToggleGroupItem value="card" aria-label="Card view" className="data-[state=on]:bg-gray-700">
                 <Grid3x3 className="h-4 w-4 mr-2" />
                 Cards
-              </ToggleGroupItem>
-              <ToggleGroupItem value="list" aria-label="List view" className="data-[state=on]:bg-gray-700">
-                <List className="h-4 w-4 mr-2" />
-                List
               </ToggleGroupItem>
               <ToggleGroupItem value="table" aria-label="Table view" className="data-[state=on]:bg-gray-700">
                 <TableIcon className="h-4 w-4 mr-2" />
@@ -909,7 +905,7 @@ export default function BusinessProcesses() {
           </div>
         )}
 
-        {(viewMode === "card" || viewMode === "list") ? (
+        {viewMode === "card" ? (
           <ArtifactsExplorer
             artifacts={hierarchicalBPs}
             artifactType="businessProcess"
