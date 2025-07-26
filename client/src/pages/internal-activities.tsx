@@ -821,6 +821,7 @@ export default function InternalActivities() {
               artifactType="internalActivity"
               isLoading={isLoading}
               onView={setViewingActivity}
+              hideHeader={true}
               onEdit={(activity) => {
                 if (isActivityLocked(activity.id)) {
                   handleEdit(activity);

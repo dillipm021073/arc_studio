@@ -596,6 +596,7 @@ export default function TechnicalProcesses() {
             artifactType="technicalProcess"
             isLoading={isLoading}
             onView={setViewingProcess}
+            hideHeader={true}
             onEdit={(process) => {
               if (isProcessLocked(process.id)) {
                 setSelectedProcess(process);

@@ -263,7 +263,7 @@ export default function Communications() {
                   New Conversation
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-black border-gray-700">
                 <ConversationForm onSuccess={() => setIsCreateDialogOpen(false)} />
               </DialogContent>
             </Dialog>
@@ -318,7 +318,7 @@ export default function Communications() {
                 placeholder="Search conversations..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-80 pl-10 bg-gray-800 border-gray-700 text-white placeholder-gray-400"
+                className="w-80 pl-10 bg-black border-gray-700 text-white placeholder-gray-400"
               />
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="text-gray-400" size={16} />
@@ -371,7 +371,7 @@ export default function Communications() {
                   Create Conversation
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
+              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-black border-gray-700">
                 <ConversationForm onSuccess={() => setIsCreateDialogOpen(false)} />
               </DialogContent>
             </Dialog>
@@ -512,7 +512,7 @@ export default function Communications() {
 
       {/* Edit Conversation Dialog */}
       <Dialog open={!!editingConversation} onOpenChange={(open) => !open && setEditingConversation(null)}>
-        <DialogContent className="max-w-4xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl bg-black border-gray-700 max-h-[90vh] overflow-y-auto">
           {editingConversation && (
             <ConversationForm 
               conversation={editingConversation}
@@ -527,7 +527,7 @@ export default function Communications() {
 
       {/* View Conversation Details Dialog */}
       <Dialog open={!!viewingConversation} onOpenChange={(open) => !open && setViewingConversation(null)}>
-        <DialogContent className="max-w-5xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl bg-black border-gray-700 max-h-[90vh] overflow-y-auto">
           {viewingConversation && (
             <ConversationDetail conversationId={viewingConversation.id} />
           )}
@@ -536,7 +536,7 @@ export default function Communications() {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingConversation} onOpenChange={(open) => !open && setDeletingConversation(null)}>
-        <AlertDialogContent className="bg-gray-800 border-gray-700">
+        <AlertDialogContent className="bg-black border-gray-700">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">Are you sure?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">

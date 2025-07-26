@@ -45,6 +45,7 @@ interface ArtifactsExplorerProps {
   customActions?: (artifact: any) => React.ReactNode;
   showTypeSelector?: boolean;
   onTypeChange?: (type: ArtifactType) => void;
+  hideHeader?: boolean;
 }
 
 const artifactTypeConfig = {
@@ -93,6 +94,7 @@ export default function ArtifactsExplorer({
   customActions,
   showTypeSelector = false,
   onTypeChange,
+  hideHeader = false,
 }: ArtifactsExplorerProps) {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"card" | "list">("card");
@@ -101,6 +103,11 @@ export default function ArtifactsExplorer({
 
   // Filter artifacts based on search and status
   const filteredArtifacts = useMemo(() => {
+    // If header is hidden, don't apply local filters
+    if (hideHeader) {
+      return artifacts;
+    }
+    
     return artifacts.filter((artifact) => {
       // Search filter
       const searchLower = search.toLowerCase();
@@ -117,7 +124,7 @@ export default function ArtifactsExplorer({
 
       return matchesSearch && matchesStatus;
     });
-  }, [artifacts, search, statusFilter]);
+  }, [artifacts, search, statusFilter, hideHeader]);
 
   // Get unique statuses from artifacts
   const availableStatuses = useMemo(() => {
@@ -147,49 +154,51 @@ export default function ArtifactsExplorer({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          {showTypeSelector && onTypeChange ? (
-            <Tabs value={artifactType} onValueChange={(value) => onTypeChange(value as ArtifactType)}>
-              <TabsList>
-                {Object.entries(artifactTypeConfig).map(([type, config]) => {
-                  const Icon = config.icon;
-                  return (
-                    <TabsTrigger key={type} value={type} className="flex items-center gap-2">
-                      <Icon className={cn("h-4 w-4", config.color)} />
-                      {config.label}
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
-            </Tabs>
-          ) : (
-            <h2 className="text-2xl font-bold flex items-center gap-2">
-              {(() => {
-                const config = artifactTypeConfig[artifactType];
-                const Icon = config.icon;
-                return (
-                  <>
-                    <Icon className={cn("h-6 w-6", config.color)} />
-                    {config.label}
-                  </>
-                );
-              })()}
-            </h2>
-          )}
-          <ViewModeIndicator />
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">
-            {filteredArtifacts.length} of {artifacts.length}
-          </Badge>
-        </div>
-      </div>
+      {!hideHeader && (
+        <>
+          {/* Header */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4">
+              {showTypeSelector && onTypeChange ? (
+                <Tabs value={artifactType} onValueChange={(value) => onTypeChange(value as ArtifactType)}>
+                  <TabsList>
+                    {Object.entries(artifactTypeConfig).map(([type, config]) => {
+                      const Icon = config.icon;
+                      return (
+                        <TabsTrigger key={type} value={type} className="flex items-center gap-2">
+                          <Icon className={cn("h-4 w-4", config.color)} />
+                          {config.label}
+                        </TabsTrigger>
+                      );
+                    })}
+                  </TabsList>
+                </Tabs>
+              ) : (
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  {(() => {
+                    const config = artifactTypeConfig[artifactType];
+                    const Icon = config.icon;
+                    return (
+                      <>
+                        <Icon className={cn("h-6 w-6", config.color)} />
+                        {config.label}
+                      </>
+                    );
+                  })()}
+                </h2>
+              )}
+              <ViewModeIndicator />
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">
+                {filteredArtifacts.length} of {artifacts.length}
+              </Badge>
+            </div>
+          </div>
 
-      {/* Search and Filters */}
-      <div className="flex items-center gap-4 mb-4">
+          {/* Search and Filters */}
+          <div className="flex items-center gap-4 mb-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
@@ -251,7 +260,9 @@ export default function ArtifactsExplorer({
             <List className="h-4 w-4" />
           </Button>
         </div>
-      </div>
+          </div>
+        </>
+      )}
 
       {/* Content */}
       <Card className="flex-1 overflow-hidden">

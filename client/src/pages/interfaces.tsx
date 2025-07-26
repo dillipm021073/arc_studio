@@ -677,7 +677,7 @@ export default function Interfaces() {
                   New Interface
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
+              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-black border-gray-700">
                 {currentInitiative && !isProductionView ? (
                   <div className="mb-4 p-3 bg-blue-900/20 border border-blue-700 rounded">
                     <p className="text-sm text-blue-300">
@@ -718,7 +718,7 @@ export default function Interfaces() {
                   placeholder="Search interfaces..."
                   value={searchTerm}
                   onChange={(e) => updateSearchTerm(e.target.value)}
-                  className="w-80 pl-10 bg-gray-800 border-gray-700 text-white placeholder-gray-400"
+                  className="w-80 pl-10 bg-black border-gray-700 text-white placeholder-gray-400"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="text-gray-400" size={16} />
@@ -781,6 +781,7 @@ export default function Interfaces() {
           artifactType="interface"
           isLoading={isLoading}
           onView={setViewingInterface}
+          hideHeader={true}
           onEdit={(iface) => {
             if (isInterfaceLocked(iface.id)) {
               setEditingInterface(iface);
@@ -1021,7 +1022,7 @@ export default function Interfaces() {
 
       {/* Edit Interface Dialog */}
       <Dialog open={!!editingInterface} onOpenChange={(open) => !open && setEditingInterface(null)}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-black border-gray-700">
           {editingInterface && (
             <InterfaceFormEnhanced 
               initialData={editingInterface} 
@@ -1038,7 +1039,7 @@ export default function Interfaces() {
 
       {/* View Interface Details Dialog */}
       <Dialog open={!!viewingInterface} onOpenChange={(open) => !open && setViewingInterface(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-gray-800 border-gray-700">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-black border-gray-700">
           <div className="space-y-6">
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold text-white">{viewingInterface?.imlNumber}</h2>
@@ -1131,7 +1132,7 @@ export default function Interfaces() {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingInterface} onOpenChange={(open) => !open && setDeletingInterface(null)}>
-        <AlertDialogContent className="bg-gray-800 border-gray-700">
+        <AlertDialogContent className="bg-black border-gray-700">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">Are you sure?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">
@@ -1158,7 +1159,7 @@ export default function Interfaces() {
 
       {/* Duplicate and Edit Interface Dialog */}
       <Dialog open={!!duplicatingInterface} onOpenChange={(open) => !open && setDuplicatingInterface(null)}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-gray-800 border-gray-700">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto bg-black border-gray-700">
           {duplicatingInterface && (
             <InterfaceFormEnhanced 
               initialData={duplicatingInterface} 
@@ -1202,7 +1203,7 @@ export default function Interfaces() {
 
       {/* Bulk Delete Confirmation */}
       <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
-        <AlertDialogContent className="bg-gray-800 border-gray-700">
+        <AlertDialogContent className="bg-black border-gray-700">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">Delete {multiSelect.selectedCount} Interfaces?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">

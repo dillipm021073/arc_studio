@@ -964,7 +964,7 @@ export default function Applications() {
                     New Application
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-5xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-5xl bg-black border-gray-700 max-h-[90vh] overflow-y-auto">
                   {currentInitiative && !isProductionView ? (
                     <div className="mb-4 p-3 bg-blue-900/20 border border-blue-700 rounded">
                       <p className="text-sm text-blue-300">
@@ -1113,7 +1113,7 @@ export default function Applications() {
                   placeholder="Search applications..."
                   value={searchTerm}
                   onChange={(e) => updateSearchTerm(e.target.value)}
-                  className="w-80 pl-10 bg-gray-800 border-gray-700 text-white placeholder-gray-400"
+                  className="w-80 pl-10 bg-black border-gray-700 text-white placeholder-gray-400"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="text-gray-400" size={16} />
@@ -1189,7 +1189,7 @@ export default function Applications() {
                     Create Application
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-5xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
+                <DialogContent className="max-w-5xl bg-black border-gray-700 max-h-[90vh] overflow-y-auto">
                   <ApplicationForm onSuccess={() => setIsCreateDialogOpen(false)} />
                 </DialogContent>
               </Dialog>
@@ -1201,6 +1201,7 @@ export default function Applications() {
             artifactType="application"
             isLoading={isLoading}
             onView={setViewingApp}
+            hideHeader={true}
             onEdit={(app) => {
               if (isApplicationLocked(app.id)) {
                 setEditingApp(app);
@@ -1553,7 +1554,7 @@ export default function Applications() {
 
       {/* Edit Application Dialog */}
       <Dialog open={!!editingApp} onOpenChange={(open) => !open && setEditingApp(null)}>
-        <DialogContent className="max-w-5xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl bg-black border-gray-700 max-h-[90vh] overflow-y-auto">
           {editingApp && (
             <ApplicationForm 
               initialData={editingApp} 
@@ -1605,7 +1606,7 @@ export default function Applications() {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingApp} onOpenChange={(open) => !open && setDeletingApp(null)}>
-        <AlertDialogContent className="bg-gray-800 border-gray-700">
+        <AlertDialogContent className="bg-black border-gray-700">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">Are you sure?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">
@@ -1652,7 +1653,7 @@ export default function Applications() {
 
       {/* Bulk Delete Confirmation */}
       <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
-        <AlertDialogContent className="bg-gray-800 border-gray-700">
+        <AlertDialogContent className="bg-black border-gray-700">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">Delete {multiSelect.selectedCount} Applications?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">
@@ -1686,7 +1687,7 @@ export default function Applications() {
 
       {/* Bulk Duplicate Confirmation */}
       <AlertDialog open={showBulkDuplicateConfirm} onOpenChange={setShowBulkDuplicateConfirm}>
-        <AlertDialogContent className="bg-gray-800 border-gray-700">
+        <AlertDialogContent className="bg-black border-gray-700">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">Duplicate {multiSelect.selectedCount} Applications?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">
@@ -1708,7 +1709,7 @@ export default function Applications() {
 
       {/* Duplicate and Edit Application Dialog */}
       <Dialog open={!!duplicatingApp} onOpenChange={(open) => !open && setDuplicatingApp(null)}>
-        <DialogContent className="max-w-5xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl bg-black border-gray-700 max-h-[90vh] overflow-y-auto">
           {duplicatingApp && (
             <ApplicationForm 
               initialData={duplicatingApp} 

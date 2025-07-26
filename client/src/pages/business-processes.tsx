@@ -829,7 +829,7 @@ export default function BusinessProcesses() {
                 placeholder="Search business processes..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="max-w-sm bg-gray-800 border-gray-700 text-white placeholder-gray-400"
+                className="max-w-sm bg-black border-gray-700 text-white placeholder-gray-400"
               />
               <DataFilter
                 columns={filterColumns}
@@ -915,6 +915,7 @@ export default function BusinessProcesses() {
             artifactType="businessProcess"
             isLoading={isLoading}
             onView={setViewingBP}
+            hideHeader={true}
             onEdit={(bp) => {
               if (isBusinessProcessLocked(bp.id)) {
                 setEditingBP(bp);

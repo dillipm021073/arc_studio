@@ -398,7 +398,7 @@ export default function ChangeRequests() {
                   New Change Request
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl bg-gray-800 border-gray-700">
+              <DialogContent className="max-w-4xl bg-black border-gray-700">
                 <ChangeRequestFormEnhanced onSuccess={() => setIsCreateDialogOpen(false)} />
               </DialogContent>
             </Dialog>
@@ -418,7 +418,7 @@ export default function ChangeRequests() {
                   placeholder="Search change requests..."
                   value={searchTerm}
                   onChange={(e) => updateSearchTerm(e.target.value)}
-                  className="w-80 pl-10 bg-gray-800 border-gray-700 text-white placeholder-gray-400"
+                  className="w-80 pl-10 bg-black border-gray-700 text-white placeholder-gray-400"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search className="text-gray-400" size={16} />
@@ -492,7 +492,7 @@ export default function ChangeRequests() {
                   Create Change Request
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-4xl bg-gray-800 border-gray-700">
+              <DialogContent className="max-w-4xl bg-black border-gray-700">
                 <ChangeRequestFormEnhanced onSuccess={() => setIsCreateDialogOpen(false)} />
               </DialogContent>
             </Dialog>
@@ -535,7 +535,7 @@ export default function ChangeRequests() {
                   <ContextMenuTrigger asChild>
                     {rowContent}
                   </ContextMenuTrigger>
-                  <ContextMenuContent className="bg-gray-800 border-gray-700">
+                  <ContextMenuContent className="bg-black border-gray-700">
                     <ContextMenuItem 
                       onClick={() => setViewingCR(cr)}
                       className="text-gray-300 hover:bg-gray-700 focus:bg-gray-700"
@@ -625,7 +625,7 @@ export default function ChangeRequests() {
 
       {/* Edit Change Request Dialog */}
       <Dialog open={!!editingCR} onOpenChange={(open) => !open && setEditingCR(null)}>
-        <DialogContent className="max-w-5xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl bg-black border-gray-700 max-h-[90vh] overflow-y-auto">
           <ChangeRequestFormEnhanced 
             changeRequest={editingCR!} 
             onSuccess={() => {
@@ -639,7 +639,7 @@ export default function ChangeRequests() {
 
       {/* View Change Request Details Dialog */}
       <Dialog open={!!viewingCR} onOpenChange={(open) => !open && setViewingCR(null)}>
-        <DialogContent className="max-w-3xl bg-gray-800 border-gray-700 max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl bg-black border-gray-700 max-h-[80vh] overflow-y-auto">
           <div className="space-y-4">
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold text-white">{viewingCR?.crNumber}</h2>
@@ -757,7 +757,7 @@ export default function ChangeRequests() {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deletingCR} onOpenChange={(open) => !open && setDeletingCR(null)}>
-        <AlertDialogContent className="bg-gray-800 border-gray-700">
+        <AlertDialogContent className="bg-black border-gray-700">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">Are you sure?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">
@@ -783,7 +783,7 @@ export default function ChangeRequests() {
 
       {/* Duplicate and Edit Change Request Dialog */}
       <Dialog open={!!duplicatingCR} onOpenChange={(open) => !open && setDuplicatingCR(null)}>
-        <DialogContent className="max-w-5xl bg-gray-800 border-gray-700 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl bg-black border-gray-700 max-h-[90vh] overflow-y-auto">
           {duplicatingCR && (
             <ChangeRequestFormEnhanced 
               changeRequest={duplicatingCR} 
@@ -820,7 +820,7 @@ export default function ChangeRequests() {
 
       {/* Bulk Delete Confirmation */}
       <AlertDialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
-        <AlertDialogContent className="bg-gray-800 border-gray-700">
+        <AlertDialogContent className="bg-black border-gray-700">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">Delete {multiSelect.selectedCount} Change Requests?</AlertDialogTitle>
             <AlertDialogDescription className="text-gray-400">
