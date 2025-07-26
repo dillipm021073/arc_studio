@@ -304,13 +304,39 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
 versionControlRouter.get("/locks", requireAuth, async (req, res) => {
   try {
     const { initiativeId } = req.query;
+    console.log("Fetching locks with params:", { initiativeId, currentTime: new Date().toISOString() });
 
     let whereConditions = [gt(artifactLocks.lockExpiry, new Date())];
     
     if (initiativeId) {
       whereConditions.push(eq(artifactLocks.initiativeId, initiativeId as string));
     }
+    
+    // First, let's see all locks for debugging
+    const allLocksQuery = db.select({
+      lock: artifactLocks,
+      user: users
+    })
+    .from(artifactLocks)
+    .leftJoin(users, eq(users.id, artifactLocks.lockedBy));
+    
+    if (initiativeId) {
+      allLocksQuery.where(eq(artifactLocks.initiativeId, initiativeId as string));
+    }
+    
+    const allLocks = await allLocksQuery;
+    console.log("All locks in DB for initiative:", allLocks.map(l => ({
+      id: l.lock.id,
+      artifactType: l.lock.artifactType,
+      artifactId: l.lock.artifactId,
+      initiativeId: l.lock.initiativeId,
+      lockExpiry: l.lock.lockExpiry,
+      isExpired: l.lock.lockExpiry ? l.lock.lockExpiry < new Date() : 'no expiry',
+      lockedBy: l.lock.lockedBy,
+      userName: l.user?.username
+    })));
 
+    // Now apply the expiry filter
     const query = db.select({
       lock: artifactLocks,
       user: users
@@ -320,7 +346,7 @@ versionControlRouter.get("/locks", requireAuth, async (req, res) => {
     .where(and(...whereConditions));
 
     const locks = await query;
-    
+    console.log("Active locks after expiry filter:", locks.length);
 
     res.json(locks);
   } catch (error) {

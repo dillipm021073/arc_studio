@@ -129,6 +129,9 @@ interface Application {
   hasInitiativeChanges?: boolean;
   versionState?: string;
   initiativeData?: any;
+  lockedBy?: number;
+  lockedByUsername?: string;
+  lockExpiry?: string;
 }
 
 export default function Applications() {
@@ -174,13 +177,26 @@ export default function Applications() {
   }, [currentInitiative?.initiativeId, isProductionView]);
 
   const { data: applications, isLoading } = useQuery<Application[]>({
-    queryKey: ["/api/applications", currentInitiative?.initiativeId, isProductionView, artifactViewMode],
+    queryKey: ["/api/applications", currentInitiative?.initiativeId, isProductionView, artifactViewMode, refreshKey],
     queryFn: async () => {
       let url = '/api/applications';
+      const params: any = {};
+      
       // Include initiative changes in production view when showing pending or all artifacts
       if (isProductionView && currentInitiative && artifactViewMode !== 'production') {
-        url += `?includeInitiativeChanges=true&initiativeId=${currentInitiative.initiativeId}`;
+        params.includeInitiativeChanges = true;
+        params.initiativeId = currentInitiative.initiativeId;
+      } else if (!isProductionView && currentInitiative) {
+        // Also include initiative ID in non-production view to get lock information
+        params.initiativeId = currentInitiative.initiativeId;
       }
+      
+      const queryString = new URLSearchParams(params).toString();
+      if (queryString) {
+        url += `?${queryString}`;
+      }
+      
+      console.log('Fetching applications with URL:', url);
       const response = await api.get(url);
       return response.data;
     }
@@ -197,14 +213,20 @@ export default function Applications() {
 
   // Fetch locks for version control
   const { data: locks, error: locksError, refetch: refetchLocks } = useQuery({
-    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryKey: ['version-control-locks', currentInitiative?.initiativeId, refreshKey],
     queryFn: async () => {
       if (!currentInitiative) return [];
       try {
-        // Add timestamp to prevent caching
-        const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}&t=${Date.now()}`);
+        // Fetch locks for the current initiative
+        const response = await api.get('/api/version-control/locks', {
+          params: {
+            initiativeId: currentInitiative.initiativeId,
+            t: Date.now() // Prevent caching
+          }
+        });
         console.log('Locks API response:', response.data);
-        return response.data;
+        console.log('Locks API URL:', response.config.url);
+        return response.data || [];
       } catch (error) {
         console.error('Error fetching locks:', error);
         return [];
@@ -594,12 +616,34 @@ export default function Applications() {
 
   // Helper to check if an application is locked
   const isApplicationLocked = (appId: number) => {
+    // First check if the application itself has lock information
+    const app = applications?.find(a => a.id === appId);
+    if (app?.lockedBy) {
+      console.log(`isApplicationLocked(${appId}): Found lock info on application object`, {
+        lockedBy: app.lockedBy,
+        lockedByUsername: app.lockedByUsername,
+        lockExpiry: app.lockExpiry
+      });
+      return {
+        lock: {
+          artifactType: 'application',
+          artifactId: appId,
+          lockedBy: app.lockedBy,
+          lockExpiry: app.lockExpiry
+        },
+        user: {
+          username: app.lockedByUsername
+        }
+      };
+    }
+    
+    // Then check the locks array
     if (!locks) {
       console.log(`isApplicationLocked(${appId}): No locks data available`);
       return null;
     }
     
-    console.log(`isApplicationLocked(${appId}): Checking against locks:`, {
+    console.log(`isApplicationLocked(${appId}): Checking against locks array:`, {
       lockCount: locks.length,
       locks: locks.map(l => ({
         artifactType: l.lock.artifactType,
@@ -615,7 +659,7 @@ export default function Applications() {
     );
     
     if (found) {
-      console.log(`isApplicationLocked(${appId}): Found lock`, {
+      console.log(`isApplicationLocked(${appId}): Found lock in array`, {
         lock: found,
         lockedBy: found.lock.lockedBy,
         lockExpiry: found.lock.lockExpiry,

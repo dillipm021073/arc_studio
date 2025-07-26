@@ -375,7 +375,9 @@ export default function InternalActivities() {
   // Version Control mutations
   const checkoutMutation = useMutation({
     mutationFn: async (activity: any) => {
-      const response = await api.post('/api/version-control/internal-activities/' + activity.id + '/checkout', {
+      const response = await api.post('/api/version-control/checkout', {
+        artifactType: 'internal_process',
+        artifactId: activity.id,
         initiativeId: currentInitiative?.initiativeId
       });
       return response.data;
@@ -398,10 +400,12 @@ export default function InternalActivities() {
 
   const checkinMutation = useMutation({
     mutationFn: async ({ activity, data }: { activity: any; data: any }) => {
-      const response = await api.post('/api/version-control/internal-activities/' + activity.id + '/checkin', {
+      const response = await api.post('/api/version-control/checkin', {
+        artifactType: 'internal_process',
+        artifactId: activity.id,
         initiativeId: currentInitiative?.initiativeId,
-        data,
-        changeReason: `Updated ${activity.activityName} via UI`
+        changes: data,
+        changeDescription: `Updated ${activity.activityName} via UI`
       });
       return response.data;
     },
