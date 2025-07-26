@@ -151,11 +151,15 @@ export default function InternalActivities() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["internal-activities"],
     queryFn: async () => {
+      console.log('Fetching internal activities...');
       const response = await fetch("/api/internal-activities");
+      console.log('Response status:', response.status);
       if (!response.ok) {
         throw new Error("Failed to fetch internal activities");
       }
-      return response.json();
+      const result = await response.json();
+      console.log('API response:', result);
+      return result;
     },
   });
 
@@ -204,13 +208,19 @@ export default function InternalActivities() {
     }
   });
 
+  // Log query state
+  console.log('Query state:', { isLoading, error, data });
+  
   // Transform data for display
   const activities = data || [];
   console.log('Raw activities data:', activities);
+  console.log('Data type:', typeof activities, 'Is array:', Array.isArray(activities));
+  console.log('Data length:', activities.length);
   
   let displayActivities = [];
   try {
     displayActivities = activities.map((item: any) => {
+      console.log('Processing item:', item);
       if (!item) {
         console.error('Invalid activity item:', item);
         return null;
@@ -219,6 +229,7 @@ export default function InternalActivities() {
       // Handle nested structure from API
       if (item.activity) {
         // API returns { activity, application, businessProcess }
+        console.log('Found nested structure with activity:', item.activity);
         return {
           ...item.activity,
           applicationName: item.application?.name || '',
@@ -226,6 +237,7 @@ export default function InternalActivities() {
         };
       } else {
         // Handle flat structure (fallback)
+        console.log('Using flat structure for item:', item);
         const application = applications?.find(app => app.id === item.applicationId);
         const businessProcess = businessProcesses?.find(bp => bp.id === item.businessProcessId);
         
@@ -241,10 +253,14 @@ export default function InternalActivities() {
     displayActivities = [];
   }
   console.log('Display activities:', displayActivities);
+  console.log('Display activities length:', displayActivities.length);
 
   // Filter activities
   let filteredActivities = [];
   try {
+    console.log('Starting to filter activities. Display activities:', displayActivities);
+    console.log('Filters:', { searchQuery, applicationFilter, processFilter, typeFilter });
+    
     filteredActivities = displayActivities.filter((activity: InternalActivity & { applicationName: string; businessProcessName: string }) => {
       if (!activity) return false;
       
@@ -258,7 +274,9 @@ export default function InternalActivities() {
       const matchesProcess = processFilter === "all" || activity.businessProcessId?.toString() === processFilter;
       const matchesType = typeFilter === "all" || activity.activityType === typeFilter;
 
-      return matchesSearch && matchesApplication && matchesProcess && matchesType;
+      const matches = matchesSearch && matchesApplication && matchesProcess && matchesType;
+      console.log(`Activity ${activity.activityName} matches:`, matches);
+      return matches;
     }).map((activity: any) => {
       // Add lock information to each activity for ArtifactsExplorer
       const lock = isActivityLocked(activity.id);
@@ -268,6 +286,9 @@ export default function InternalActivities() {
         currentUserId: currentUser?.id || null
       };
     });
+    
+    console.log('Filtered activities:', filteredActivities);
+    console.log('Filtered activities length:', filteredActivities.length);
   } catch (err) {
     console.error('Error filtering activities:', err);
     filteredActivities = [];
@@ -393,8 +414,10 @@ export default function InternalActivities() {
       });
       return response.data;
     },
-    onSuccess: (data, activity) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
+    onSuccess: async (data, activity) => {
+      // Invalidate with the correct query key including initiative ID
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
       toast({
         title: "Activity checked out",
         description: `${activity.activityName} is now locked for editing in ${currentInitiative?.name}`
@@ -420,9 +443,9 @@ export default function InternalActivities() {
       });
       return response.data;
     },
-    onSuccess: (data, { activity }) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
-      queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
+    onSuccess: async (data, { activity }) => {
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
       toast({
         title: "Changes checked in",
         description: `${activity.activityName} has been updated in ${currentInitiative?.name}`
@@ -446,9 +469,9 @@ export default function InternalActivities() {
       });
       return response.data;
     },
-    onSuccess: (data, activity) => {
-      queryClient.invalidateQueries({ queryKey: ['version-control-locks'] });
-      queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
+    onSuccess: async (data, activity) => {
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
       toast({
         title: "Checkout cancelled",
         description: `${activity.activityName} checkout has been cancelled and changes discarded`

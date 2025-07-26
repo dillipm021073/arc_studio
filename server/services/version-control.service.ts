@@ -254,33 +254,18 @@ export class VersionControlService {
     
     // Then create new lock
     try {
-      const lockData = {
+      const [newLock] = await db.insert(artifactLocks).values({
         artifactType: type,
         artifactId,
         initiativeId,
         lockedBy: userId,
         lockExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
         lockReason: `Checked out for editing in initiative ${initiativeId}`
-      };
-      
-      console.log('Creating lock with data:', {
-        ...lockData,
-        lockExpiry: lockData.lockExpiry.toISOString()
-      });
-      
-      const [newLock] = await db.insert(artifactLocks).values(lockData).returning();
+      }).returning();
       
       if (!newLock) {
         throw new Error('Failed to create artifact lock - no lock returned');
       }
-      
-      console.log('Lock created successfully:', {
-        id: newLock.id,
-        artifactType: newLock.artifactType,
-        artifactId: newLock.artifactId,
-        initiativeId: newLock.initiativeId,
-        lockExpiry: newLock.lockExpiry
-      });
     } catch (lockError) {
       console.error('Failed to create lock:', lockError);
       throw new Error(`Failed to create artifact lock: ${lockError.message}`);
