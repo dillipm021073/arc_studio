@@ -85,6 +85,7 @@ import { MultiSelectTable } from "@/components/ui/multi-select-table";
 import { BulkActionBar } from "@/components/ui/bulk-action-bar";
 import { BulkEditDialog, type BulkEditField } from "@/components/bulk-edit-dialog";
 import { cn } from "@/lib/utils";
+import ArtifactsExplorer from "@/components/artifacts/artifacts-explorer";
 import { ViewModeIndicator } from "@/components/initiatives/view-mode-indicator";
 import { 
   getArtifactState, 
@@ -147,6 +148,7 @@ export default function Applications() {
   const [duplicatingApp, setDuplicatingApp] = useState<Application | null>(null);
   const [showImportExport, setShowImportExport] = useState(false);
   const [decommissioningApp, setDecommissioningApp] = useState<Application | null>(null);
+  const [viewMode, setViewMode] = useState<"table" | "explorer">("table");
   const [decommissionImpact, setDecommissionImpact] = useState<any>(null);
   const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -1066,6 +1068,26 @@ export default function Applications() {
                 onClearAllFilters={clearAllFilters}
               />
             </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewMode === "explorer" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("explorer")}
+                title="Card/List View"
+              >
+                <Grid3x3 className="h-4 w-4 mr-2" />
+                Explorer
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+                title="Table View"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Table
+              </Button>
+            </div>
           </div>
           {hasActiveFilters() && (
             <div className="flex items-center gap-2 text-sm text-blue-400">
@@ -1115,6 +1137,49 @@ export default function Applications() {
               </Dialog>
             )}
           </div>
+        ) : viewMode === "explorer" ? (
+          <ArtifactsExplorer
+            artifacts={filteredApplications}
+            artifactType="application"
+            isLoading={isLoading}
+            onView={setViewingApp}
+            onEdit={(app) => {
+              if (isApplicationLocked(app.id)) {
+                setEditingApp(app);
+              } else {
+                toast({
+                  title: "Application not checked out",
+                  description: "You need to check out this application before editing",
+                  variant: "destructive"
+                });
+              }
+            }}
+            onDelete={(app) => setDeletingApp(app)}
+            onCheckout={(app) => checkoutMutation.mutate(app)}
+            onCheckin={(app, changes) => checkinMutation.mutate({ app, changes })}
+            onCancelCheckout={(app) => cancelCheckoutMutation.mutate(app)}
+            customActions={(app) => (
+              <>
+                <DropdownMenuItem onClick={() => setViewingInterfacesApp(app)}>
+                  <Plug className="mr-2 h-4 w-4" />
+                  View Interfaces
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDuplicatingApp(app)}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Duplicate
+                </DropdownMenuItem>
+                {app.status === 'active' && (
+                  <DropdownMenuItem
+                    onClick={() => handleDecommission(app)}
+                    className="text-yellow-600"
+                  >
+                    <AlertTriangle className="mr-2 h-4 w-4" />
+                    Decommission
+                  </DropdownMenuItem>
+                )}
+              </>
+            )}
+          />
         ) : (
           <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700">
             <Table>
