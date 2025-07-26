@@ -218,6 +218,7 @@ export default function Applications() {
       if (!currentInitiative) return [];
       try {
         // Fetch locks for the current initiative
+        console.log('Fetching locks for initiative:', currentInitiative.initiativeId);
         const response = await api.get('/api/version-control/locks', {
           params: {
             initiativeId: currentInitiative.initiativeId,
@@ -226,6 +227,7 @@ export default function Applications() {
         });
         console.log('Locks API response:', response.data);
         console.log('Locks API URL:', response.config.url);
+        console.log('Response headers:', response.headers);
         return response.data || [];
       } catch (error) {
         console.error('Error fetching locks:', error);
@@ -494,7 +496,9 @@ export default function Applications() {
       return response.data;
     },
     onSuccess: async (data, app) => {
+      console.log('Checkout successful for app:', app.name);
       console.log('Checkout response:', data);
+      console.log('Current initiative:', currentInitiative);
       
       // If the response includes lock data, immediately update the cache
       if (data.lock) {
@@ -509,6 +513,8 @@ export default function Applications() {
             return [...filteredLocks, data.lock];
           }
         );
+      } else {
+        console.log('No lock data in response, will refetch locks');
       }
       
       // Immediately force refresh

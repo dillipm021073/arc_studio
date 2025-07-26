@@ -89,14 +89,14 @@ export function getArtifactVisuals(state: ArtifactState): ArtifactVisuals {
   switch (state.state) {
     case 'checked_out_me':
       return {
-        rowClassName: 'bg-amber-950/30 border-l-4 border-amber-500 hover:bg-amber-950/40',
+        rowClassName: 'bg-red-950/30 border-l-4 border-red-500 hover:bg-red-950/40',
         iconComponent: GitBranch,
-        iconColor: 'text-amber-400',
+        iconColor: 'text-red-400',
         badgeText: 'DRAFT',
-        badgeColor: 'bg-amber-900 text-amber-200 border-amber-600',
+        badgeColor: 'bg-red-900 text-red-200 border-red-600',
         tooltip: `Checked out by you - ready for editing`,
         statusText: 'Checked Out',
-        statusColor: 'bg-amber-600 text-amber-100'
+        statusColor: 'bg-red-600 text-red-100'
       };
 
     case 'checked_out_other':

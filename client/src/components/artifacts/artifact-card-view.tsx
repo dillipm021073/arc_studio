@@ -328,9 +328,9 @@ export default function ArtifactCardView({
                   if (artifact.artifactState === 'decommissioning') {
                     return "opacity-60 ring-2 ring-gray-500/30";
                   }
-                  // Then check lock states
+                  // Then check lock states - all locked items show red as warning
                   if (artifact.lockedBy && artifact.lockedBy !== artifact.currentUserId) return "opacity-75 ring-2 ring-red-500/50";
-                  if (artifact.lockedBy && artifact.lockedBy === artifact.currentUserId) return "ring-2 ring-green-500/50";
+                  if (artifact.lockedBy && artifact.lockedBy === artifact.currentUserId) return "ring-2 ring-red-500";
                   if (artifact.hasInitiativeChanges) return "ring-2 ring-yellow-500/30";
                   return "";
                 })()
@@ -361,11 +361,11 @@ export default function ArtifactCardView({
                   {(() => {
                     const icons = [];
                     
-                    // Show lock icon if checked out
+                    // Show lock icon if checked out - all locks show red as warning
                     if (artifact.lockedBy && artifact.lockedBy === artifact.currentUserId) {
                       icons.push(
-                        <div key="lock" className="p-1 rounded bg-green-500/20" title="Checked out by you">
-                          <Lock className="h-4 w-4 text-green-500" />
+                        <div key="lock" className="p-1 rounded bg-red-500/20" title="Checked out by you">
+                          <Lock className="h-4 w-4 text-red-500" />
                         </div>
                       );
                     } else if (artifact.lockedBy && artifact.lockedBy !== artifact.currentUserId) {

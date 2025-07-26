@@ -226,8 +226,20 @@ export class VersionControlService {
       }
     }
 
-    // Create new version
-    const nextVersionNumber = baseline.versionNumber + 1;
+    // Get the highest version number across all initiatives to avoid conflicts
+    const [maxVersionResult] = await db.select({
+      maxVersion: sql<number>`COALESCE(MAX(version_number), 0)`
+    })
+    .from(artifactVersions)
+    .where(
+      and(
+        eq(artifactVersions.artifactType, type),
+        eq(artifactVersions.artifactId, artifactId)
+      )
+    );
+
+    // Create new version with next available number
+    const nextVersionNumber = (maxVersionResult?.maxVersion || baseline.versionNumber) + 1;
     const [newVersion] = await db.insert(artifactVersions).values({
       artifactType: type,
       artifactId,
