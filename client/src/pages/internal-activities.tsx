@@ -114,12 +114,11 @@ interface BusinessProcess {
 }
 
 export default function InternalActivities() {
-  try {
-    const queryClient = useQueryClient();
-    const { toast } = useToast();
-    const { currentInitiative, isProductionView } = useInitiative();
-    const { user } = useAuth();
-    const { isAdmin } = usePermissions();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { currentInitiative, isProductionView } = useInitiative();
+  const { user } = useAuth();
+  const { isAdmin } = usePermissions();
   
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -147,23 +146,11 @@ export default function InternalActivities() {
   });
 
   // Fetch all data
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["internal-activities"],
     queryFn: async () => {
-      console.log('=== FETCHING INTERNAL ACTIVITIES ===');
-      try {
-        const response = await api.get("/api/internal-activities");
-        console.log('=== RAW API RESPONSE ===');
-        console.log('Type:', typeof response.data);
-        console.log('Is Array:', Array.isArray(response.data));
-        console.log('Length:', response.data?.length);
-        console.log('First item:', response.data?.[0]);
-        console.log('All items:', response.data);
-        return response.data;
-      } catch (err) {
-        console.error('=== API ERROR ===', err);
-        throw err;
-      }
+      const response = await api.get("/api/internal-activities");
+      return response.data;
     },
   });
 
@@ -212,92 +199,45 @@ export default function InternalActivities() {
 
   // Transform data for display
   const activities = data || [];
-  console.log('=== DATA TRANSFORMATION ===');
-  console.log('activities:', activities);
-  console.log('activities type:', typeof activities);
-  console.log('activities length:', activities.length);
   
   let displayActivities = [];
-  try {
-    console.log('=== MAPPING ACTIVITIES ===');
-    const mappedActivities = activities.map((item: any, index: number) => {
-      if (!item) {
-        return null;
-      }
-      
-      // Handle nested structure from API
-      if (item.activity) {
-        const transformed = {
+  if (Array.isArray(activities) && activities.length > 0) {
+    displayActivities = activities.map((item: any) => {
+      if (item && item.activity) {
+        return {
           ...item.activity,
           applicationName: item.application?.name || '',
           businessProcessName: item.businessProcess?.businessProcess || ''
         };
-        return transformed;
-      } else {
-        // Handle flat structure (fallback)
-        const application = applications?.find(app => app.id === item.applicationId);
-        const businessProcess = businessProcesses?.find(bp => bp.id === item.businessProcessId);
-        
-        const transformed = {
-          ...item,
-          applicationName: application?.name || '',
-          businessProcessName: businessProcess?.businessProcess || ''
-        };
-        return transformed;
       }
+      return null;
     }).filter(Boolean);
-    displayActivities = mappedActivities;
-    console.log('=== FINAL DISPLAY ACTIVITIES ===');
-    console.log('displayActivities:', displayActivities);
-    console.log('displayActivities length:', displayActivities.length);
-  } catch (err) {
-    console.error('Error transforming activities:', err);
-    displayActivities = [];
   }
 
   // Filter activities
-  let filteredActivities = [];
-  try {
-    console.log('=== FILTERING ACTIVITIES ===');
-    console.log('Filters:', { searchQuery, applicationFilter, processFilter, typeFilter });
-    console.log('Display activities to filter:', displayActivities);
+  let filteredActivities = displayActivities.filter((activity: InternalActivity & { applicationName: string; businessProcessName: string }) => {
+    if (!activity) return false;
     
-    filteredActivities = displayActivities.filter((activity: InternalActivity & { applicationName: string; businessProcessName: string }) => {
-      if (!activity) {
-        console.log('Filtering out null activity');
-        return false;
-      }
-      
-      const matchesSearch = !searchQuery || 
-        activity.activityName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (activity.description && activity.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        activity.applicationName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        activity.businessProcessName?.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const matchesApplication = applicationFilter === "all" || activity.applicationId?.toString() === applicationFilter;
-      const matchesProcess = processFilter === "all" || activity.businessProcessId?.toString() === processFilter;
-      const matchesType = typeFilter === "all" || activity.activityType === typeFilter;
+    const matchesSearch = !searchQuery || 
+      activity.activityName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (activity.description && activity.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      activity.applicationName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      activity.businessProcessName?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    const matchesApplication = applicationFilter === "all" || activity.applicationId?.toString() === applicationFilter;
+    const matchesProcess = processFilter === "all" || activity.businessProcessId?.toString() === processFilter;
+    const matchesType = typeFilter === "all" || activity.activityType === typeFilter;
 
-      const passes = matchesSearch && matchesApplication && matchesProcess && matchesType;
-      return passes;
-    }).map((activity: any) => {
-      // Add lock information to each activity for ArtifactsExplorer
-      const lock = isActivityLocked(activity.id);
-      const enhanced = {
-        ...activity,
-        lockedBy: lock?.lock?.lockedBy || null,
-        currentUserId: currentUser?.id || null
-      };
-      return enhanced;
-    });
-    
-    console.log('=== FINAL FILTERED ACTIVITIES ===');
-    console.log('filteredActivities:', filteredActivities);
-    console.log('filteredActivities length:', filteredActivities.length);
-  } catch (err) {
-    console.error('Error filtering activities:', err);
-    filteredActivities = [];
-  }
+    return matchesSearch && matchesApplication && matchesProcess && matchesType;
+  }).map((activity: any) => {
+    // Add lock information to each activity for ArtifactsExplorer
+    const lock = isActivityLocked(activity.id);
+    return {
+      ...activity,
+      lockedBy: lock?.lock?.lockedBy || null,
+      currentUserId: currentUser?.id || null
+    };
+  });
 
   // Initialize multi-select hook
   const multiSelect = useMultiSelect({
@@ -602,18 +542,8 @@ export default function InternalActivities() {
     }
   }, [duplicatingActivity]);
 
-  console.log('=== COMPONENT STATE BEFORE RENDER ===');
-  console.log('isLoading:', isLoading);
-  console.log('error:', error);
-  console.log('data:', data);
-  console.log('viewMode:', viewMode);
-  console.log('Final render counts:');
-  console.log('- activities:', activities?.length || 0);
-  console.log('- displayActivities:', displayActivities?.length || 0);
-  console.log('- filteredActivities:', filteredActivities?.length || 0);
 
   if (isLoading) {
-    console.log('=== RENDERING LOADING STATE ===');
     return (
       <div className="flex flex-col h-screen bg-gray-900 items-center justify-center">
         <div className="text-white">Loading internal activities...</div>
@@ -640,16 +570,6 @@ export default function InternalActivities() {
     );
   }
 
-  console.log('=== INTERNAL ACTIVITIES COMPONENT STATE ===');
-  console.log('- API data length:', data?.length || 0);
-  console.log('- isLoading:', isLoading);
-  console.log('- error:', error);
-  console.log('- displayActivities length:', displayActivities.length);
-  console.log('- filteredActivities length:', filteredActivities.length);
-  
-  if (!data && !isLoading && !error) {
-    console.log('WARNING: No data, not loading, no error - possible auth issue');
-  }
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">
@@ -670,31 +590,13 @@ export default function InternalActivities() {
               Manage self-referential activities within applications
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={async () => {
-                console.log('Testing API directly...');
-                try {
-                  const response = await api.get("/api/internal-activities");
-                  console.log('Direct API test success:', response.data);
-                  alert(`API returned ${response.data.length} activities`);
-                } catch (err) {
-                  console.error('Direct API test failed:', err);
-                  alert('API test failed: ' + err.message);
-                }
-              }}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              Test API
-            </Button>
-            <Button
-              onClick={() => setCreateDialogOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              New Internal Activity
-            </Button>
-          </div>
+          <Button
+            onClick={() => setCreateDialogOpen(true)}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Internal Activity
+          </Button>
         </div>
       </header>
 
@@ -1369,16 +1271,4 @@ export default function InternalActivities() {
       </Dialog>
     </div>
   );
-  } catch (error) {
-    console.error('Error in InternalActivities component:', error);
-    return (
-      <div className="flex flex-col h-screen bg-gray-900 items-center justify-center">
-        <div className="text-red-500">
-          <h2 className="text-xl font-bold mb-2">Component Error</h2>
-          <p>{error?.message || 'An unexpected error occurred'}</p>
-          <pre className="mt-4 text-xs">{error?.stack}</pre>
-        </div>
-      </div>
-    );
-  }
 }
