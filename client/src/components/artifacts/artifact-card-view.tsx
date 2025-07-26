@@ -18,6 +18,7 @@ import {
   Clock,
   FileText,
   MessageSquare,
+  Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -61,6 +62,30 @@ const artifactIcons = {
   businessProcess: GitBranch,
   internalActivity: Activity,
   technicalProcess: Cpu,
+};
+
+const getStatusColor = (status: string) => {
+  if (!status) return 'bg-orange-600 text-white';
+  switch (status.toLowerCase()) {
+    case 'new': return 'bg-purple-600 text-white';
+    case 'active': return 'bg-green-600 text-white';
+    case 'inactive': return 'bg-red-600 text-white';
+    case 'in_development': return 'bg-yellow-600 text-white';
+    case 'in_testing': return 'bg-blue-600 text-white';
+    case 'decommissioned': return 'bg-gray-600 text-white';
+    default: return 'bg-orange-600 text-white';
+  }
+};
+
+const getDeploymentColor = (deployment: string) => {
+  if (!deployment) return 'bg-orange-600 text-white';
+  switch (deployment.toLowerCase()) {
+    case 'cloud': return 'bg-blue-600 text-white';
+    case 'on-premise': return 'bg-orange-600 text-white';
+    case 'on_premise': return 'bg-orange-600 text-white';
+    case 'hybrid': return 'bg-purple-600 text-white';
+    default: return 'bg-gray-600 text-white';
+  }
 };
 
 export default function ArtifactCardView({
@@ -150,7 +175,7 @@ export default function ArtifactCardView({
     // Status badge
     if (artifact.status) {
       badges.push(
-        <Badge key="status" variant="outline" className="text-xs">
+        <Badge key="status" className={cn("text-xs", getStatusColor(artifact.status))}>
           {artifact.status.replace('_', ' ')}
         </Badge>
       );
@@ -159,9 +184,9 @@ export default function ArtifactCardView({
     // Type-specific badges
     if (artifactType === "application") {
       if (artifact.deployment) {
-        const isCloud = artifact.deployment === 'cloud';
+        const isCloud = artifact.deployment.toLowerCase() === 'cloud';
         badges.push(
-          <Badge key="deployment" variant="outline" className="text-xs">
+          <Badge key="deployment" className={cn("text-xs", getDeploymentColor(artifact.deployment))}>
             {isCloud ? <Cloud className="h-3 w-3 mr-1" /> : <HardDrive className="h-3 w-3 mr-1" />}
             {artifact.deployment}
           </Badge>
@@ -251,7 +276,18 @@ export default function ArtifactCardView({
         {artifacts.map((artifact) => (
           <ArtifactContextMenu key={artifact.id} artifact={artifact}>
             <div
-              className="group relative bg-gray-800 rounded-lg p-4 hover:bg-gray-700 cursor-pointer transition-all hover:shadow-lg"
+              className={cn(
+                "group relative rounded-lg p-4 cursor-pointer transition-all hover:shadow-lg",
+                "bg-gray-800 hover:bg-gray-700",
+                // Visual differentiation based on state
+                (() => {
+                  const state = getArtifactState(artifact);
+                  if (state.state === 'locked_by_other') return "opacity-75 ring-2 ring-red-500/50";
+                  if (state.state === 'locked_by_user') return "ring-2 ring-green-500/50";
+                  if (state.state === 'has_initiative_changes') return "ring-2 ring-yellow-500/30";
+                  return "";
+                })()
+              )}
               onDoubleClick={() => onView?.(artifact)}
             >
               {/* Header */}
@@ -274,6 +310,38 @@ export default function ArtifactCardView({
                       artifactType === "technicalProcess" && "text-cyan-500"
                     )} />
                   </div>
+                  {/* Status indicators */}
+                  {(() => {
+                    const state = getArtifactState(artifact);
+                    const icons = [];
+                    
+                    // Show lock icon if checked out
+                    if (state.state === 'locked_by_user') {
+                      icons.push(
+                        <div key="lock" className="p-1 rounded bg-green-500/20" title="Checked out by you">
+                          <Lock className="h-4 w-4 text-green-500" />
+                        </div>
+                      );
+                    } else if (state.state === 'locked_by_other') {
+                      icons.push(
+                        <div key="lock" className="p-1 rounded bg-red-500/20" title="Checked out by another user">
+                          <Lock className="h-4 w-4 text-red-500" />
+                        </div>
+                      );
+                    }
+                    
+                    // Show rocket icon for pending changes
+                    if (state.state === 'has_initiative_changes' || artifact.hasInitiativeChanges) {
+                      icons.push(
+                        <div key="rocket" className="p-1 rounded bg-yellow-500/20" title="Has pending changes">
+                          <Rocket className="h-4 w-4 text-yellow-500" />
+                        </div>
+                      );
+                    }
+                    
+                    return icons;
+                  })()}
+                  
                   <ArtifactStatusBadge 
                     state={getArtifactState(artifact)} 
                     showIcon={true}
