@@ -33,13 +33,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Clock, Loader2, Send, Copy, Save, Plus, Trash2, FolderOpen, FileText, ChevronDown, MoreVertical, Settings, Download, Upload } from 'lucide-react';
+import { Clock, Loader2, Send, Copy, Save, Plus, Trash2, FolderOpen, FileText, ChevronDown, MoreVertical, Settings, Download, Upload, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
 import { EnvironmentVariablesDialog } from './environment-variables-dialog';
 import { HeaderAutocomplete } from './header-autocomplete';
 import { formatXml, isXmlContent } from '@/lib/xml-formatter';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import './api-test-dialog-styles.css';
 
 interface ApiTestDialogProps {
@@ -135,6 +136,8 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
   // Response state
   const [response, setResponse] = useState<TestResponse | null>(null);
   const [responseTab, setResponseTab] = useState('body');
+  const [showResponse, setShowResponse] = useState(true);
+  const [showRequest, setShowRequest] = useState(true);
 
   // Load collections when dialog opens
   useEffect(() => {
@@ -850,7 +853,19 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
         <div className="flex h-[calc(90vh-100px)]">
           {/* Collections Sidebar */}
           {showCollections && (
-            <div className="w-64 border-r bg-gray-50 dark:bg-gray-900 p-4">
+            <div className="w-64 border-r bg-gray-50 dark:bg-gray-900 flex flex-col relative">
+              {/* Collapse button for collections */}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowCollections(false)}
+                className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 h-6 w-6 p-0 bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-700"
+                title="Hide collections"
+              >
+                <ChevronLeft className="h-3 w-3" />
+              </Button>
+              
+              <div className="p-4 flex-1 overflow-hidden flex flex-col">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-sm">Collections</h3>
                 <div className="flex gap-1">
@@ -975,12 +990,46 @@ export function ApiTestDialog({ open, onOpenChange, interfaceData }: ApiTestDial
                   </div>
                 )}
               </ScrollArea>
+              </div>
             </div>
           )}
           
-          {/* Request Panel */}
-          <div className="w-[45%] min-w-[500px] border-r flex flex-col">
-            <div className="p-4 flex flex-col flex-1 overflow-hidden">
+          {/* Show collections button when hidden */}
+          {!showCollections && (
+            <div className="relative">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowCollections(true)}
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-10 h-6 w-6 p-0 bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-700"
+                title="Show collections"
+              >
+                <ChevronRight className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+          
+          {/* Request and Response Panels */}
+          <PanelGroup direction="horizontal" className="flex-1 relative">
+            {/* Show request button when hidden */}
+            {!showRequest && (
+              <div className="relative mr-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowRequest(true)}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 z-10 h-6 w-6 p-0 bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-700"
+                  title="Show request panel"
+                >
+                  <ChevronRight className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+            
+            {/* Request Panel */}
+            {showRequest && (
+              <Panel defaultSize={50} minSize={30} className="flex flex-col">
+                <div className="p-4 flex flex-col flex-1 overflow-hidden">
               {/* URL Bar */}
               <div className="flex gap-2 mb-4">
                 <Select value={protocol} onValueChange={setProtocol}>
@@ -1516,11 +1565,42 @@ pm.test("Response has required fields", () => {
                   </div>
                 </TabsContent>
               </Tabs>
-            </div>
-          </div>
+              </div>
+              </Panel>
+            )}
 
-          {/* Response Panel */}
-          <div className="flex-1 min-w-[400px] flex flex-col overflow-hidden">
+            {/* Resize Handle with collapse button */}
+            {showRequest && showResponse ? (
+              <>
+                <PanelResizeHandle className="relative w-2 bg-gray-800 hover:bg-gray-600 transition-colors group">
+                  <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 group-hover:bg-blue-500 transition-colors" />
+                  {/* Collapse buttons container */}
+                  <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col gap-2">
+                    {/* Collapse request button */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowRequest(false)}
+                      className="h-6 w-6 p-0 bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-700"
+                      title="Hide request panel"
+                    >
+                      <ChevronLeft className="h-3 w-3" />
+                    </Button>
+                    {/* Collapse response button */}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowResponse(false)}
+                      className="h-6 w-6 p-0 bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-700"
+                      title="Hide response panel"
+                    >
+                      <ChevronRight className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </PanelResizeHandle>
+
+                {/* Response Panel */}
+                <Panel defaultSize={50} minSize={30} className="flex flex-col overflow-hidden">
             {response ? (
               <>
                 <div className="p-4 border-b bg-gray-50 dark:bg-gray-900">
@@ -1645,7 +1725,155 @@ pm.test("Response has required fields", () => {
                 </div>
               </div>
             )}
-          </div>
+                </Panel>
+              </>
+            ) : null}
+            
+            {/* Response panel when request is hidden */}
+            {!showRequest && showResponse && (
+              <Panel defaultSize={100} minSize={30} className="flex flex-col overflow-hidden">
+                {response ? (
+                  <>
+                    <div className="p-4 border-b bg-gray-50 dark:bg-gray-900">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <Badge variant="outline" className={cn("font-mono border-0", getStatusColor(response.status))}>
+                            {response.status} {response.statusText}
+                          </Badge>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            {response.time}ms
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {(response.size / 1024).toFixed(2)} KB
+                          </div>
+                          {(isXmlContent(response.data) || response.headers?.['content-type']?.includes('xml') || response.headers?.['content-type']?.includes('soap')) && (
+                            <Badge variant="outline" className="text-xs">
+                              XML/SOAP
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyToClipboard(formatResponseData(response.data))}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="outline">
+                            <Save className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Tabs value={responseTab} onValueChange={setResponseTab} className="flex-1">
+                      <TabsList className="grid w-full grid-cols-4">
+                        <TabsTrigger value="body">Body</TabsTrigger>
+                        <TabsTrigger value="headers">Headers</TabsTrigger>
+                        <TabsTrigger value="request">Request</TabsTrigger>
+                        <TabsTrigger value="raw">Raw</TabsTrigger>
+                      </TabsList>
+
+                      <TabsContent value="body" className="h-full p-4 overflow-hidden">
+                        <ScrollArea className="h-[calc(100%-50px)] w-full">
+                          <pre className="text-sm font-mono whitespace-pre-wrap break-all">
+                            {formatResponseData(response.data)}
+                          </pre>
+                        </ScrollArea>
+                      </TabsContent>
+
+                      <TabsContent value="headers" className="p-4">
+                        <div className="space-y-2">
+                          <h3 className="text-sm font-semibold mb-2">Response Headers</h3>
+                          {Object.entries(response.headers).map(([key, value]) => (
+                            <div key={key} className="flex">
+                              <span className="font-mono font-semibold text-sm w-1/3">{key}:</span>
+                              <span className="font-mono text-sm text-muted-foreground">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </TabsContent>
+                      
+                      <TabsContent value="request" className="p-4">
+                        <div className="space-y-4">
+                          {response.request && (
+                            <>
+                              <div>
+                                <h3 className="text-sm font-semibold mb-2">Request URL</h3>
+                                <p className="font-mono text-sm text-muted-foreground break-all">{response.request.url}</p>
+                              </div>
+                              
+                              <div>
+                                <h3 className="text-sm font-semibold mb-2">Request Method</h3>
+                                <Badge variant="outline" className="font-mono">{response.request.method}</Badge>
+                              </div>
+                              
+                              <div>
+                                <h3 className="text-sm font-semibold mb-2">Request Headers</h3>
+                                <div className="space-y-1">
+                                  {Object.entries(response.request.headers).map(([key, value]) => (
+                                    <div key={key} className="flex">
+                                      <span className="font-mono font-semibold text-sm w-1/3">{key}:</span>
+                                      <span className="font-mono text-sm text-muted-foreground break-all">{value}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              
+                              {response.request.body && (
+                                <div>
+                                  <h3 className="text-sm font-semibold mb-2">Request Body</h3>
+                                  <ScrollArea className="h-[200px]">
+                                    <pre className="text-sm font-mono whitespace-pre-wrap break-all">
+                                      {typeof response.request.body === 'string' 
+                                        ? response.request.body 
+                                        : JSON.stringify(response.request.body, null, 2)}
+                                    </pre>
+                                  </ScrollArea>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value="raw" className="h-full p-4 overflow-hidden">
+                        <ScrollArea className="h-[calc(100%-50px)] w-full">
+                          <pre className="text-sm font-mono text-muted-foreground whitespace-pre-wrap break-all">
+                            {JSON.stringify(response, null, 2)}
+                          </pre>
+                        </ScrollArea>
+                      </TabsContent>
+                    </Tabs>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    <div className="text-center">
+                      <Send className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                      <p>Send a request to see the response</p>
+                    </div>
+                  </div>
+                )}
+              </Panel>
+            )}
+            
+            {/* Show response button when hidden */}
+            {showRequest && !showResponse && (
+              <div className="relative ml-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowResponse(true)}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 z-10 h-6 w-6 p-0 bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full hover:bg-gray-300 dark:hover:bg-gray-700"
+                  title="Show response panel"
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                </Button>
+              </div>
+            )}
+          </PanelGroup>
         </div>
       </DialogContent>
     </Dialog>
