@@ -18,8 +18,12 @@ import {
   Cable,
   Building,
   BarChart3,
-  Loader2
+  Loader2,
+  Eye
 } from "lucide-react";
+import ArtifactCardView from "@/components/artifacts/artifact-card-view";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface ModifiedArtifact {
   artifactType: 'application' | 'interface' | 'business_process' | 'technical_process' | 'internal_process';
@@ -84,6 +88,8 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
   const [analysis, setAnalysis] = useState<ImpactAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewingArtifact, setViewingArtifact] = useState<any | null>(null);
+  const [viewingArtifactType, setViewingArtifactType] = useState<string>('');
   
   console.log('InitiativeImpactAnalysis rendering with initiativeId:', initiativeId);
 
@@ -281,45 +287,20 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
               </CardHeader>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {analysis.impactedApplications && analysis.impactedApplications.map((app) => (
-                    <Card key={app.id} className="border">
-                      <CardContent className="p-4">
-                        <div className="flex justify-between items-start mb-2">
-                          <h4 className="font-semibold">{app.name}</h4>
-                          <Badge variant={app.status === 'active' ? 'default' : 'secondary'}>
-                            {app.status}
-                          </Badge>
-                        </div>
-                        
-                        <p className="text-sm text-muted-foreground mb-3">
-                          {app.description}
-                        </p>
-                        
-                        <Separator className="my-3" />
-                        
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          <Badge variant="outline">{app.os}</Badge>
-                          <Badge variant="outline">{app.deployment}</Badge>
-                          {app.uptime && (
-                            <Badge variant="outline">{app.uptime}% uptime</Badge>
-                          )}
-                        </div>
-                        
-                        <div className="flex flex-wrap gap-2">
-                          {app.providesExtInterface && (
-                            <Badge variant="secondary">Provides Interfaces</Badge>
-                          )}
-                          {app.consumesExtInterfaces && (
-                            <Badge variant="secondary">Consumes Interfaces</Badge>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[400px] w-full">
+                  <div className="p-4">
+                    <ArtifactCardView
+                      artifacts={analysis.impactedApplications}
+                      artifactType="application"
+                      onView={(app) => {
+                        setViewingArtifact(app);
+                        setViewingArtifactType('application');
+                      }}
+                      isProductionView={true}
+                    />
+                  </div>
+                </ScrollArea>
             </CollapsibleContent>
           </Card>
         </Collapsible>
@@ -338,31 +319,20 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
               </CardHeader>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <CardContent className="space-y-4">
-                {analysis.impactedInterfaces && analysis.impactedInterfaces.map((iface) => (
-                  <div key={iface.id} className="flex items-start gap-3 p-4 border rounded-lg">
-                    <Cable className="h-5 w-5 mt-0.5 text-purple-600" />
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold">{iface.imlNumber}</span>
-                        <Badge variant={iface.status === 'active' ? 'default' : 'secondary'}>
-                          {iface.status}
-                        </Badge>
-                        <Badge variant="outline">{iface.interfaceType}</Badge>
-                      </div>
-                      
-                      <div className="text-sm text-muted-foreground space-y-1">
-                        <div>
-                          Provider: {iface.providerApplicationName} → Consumer: {iface.consumerApplicationName}
-                        </div>
-                        <div>
-                          Business Process: {iface.businessProcessName} | Version: {iface.version}
-                        </div>
-                      </div>
-                    </div>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[400px] w-full">
+                  <div className="p-4">
+                    <ArtifactCardView
+                      artifacts={analysis.impactedInterfaces}
+                      artifactType="interface"
+                      onView={(iface) => {
+                        setViewingArtifact(iface);
+                        setViewingArtifactType('interface');
+                      }}
+                      isProductionView={true}
+                    />
                   </div>
-                ))}
-              </CardContent>
+                </ScrollArea>
             </CollapsibleContent>
           </Card>
         </Collapsible>
@@ -381,29 +351,20 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
               </CardHeader>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {analysis.relatedBusinessProcesses && analysis.relatedBusinessProcesses.map((bp) => (
-                    <Card key={bp.id} className="border">
-                      <CardContent className="p-4">
-                        <h4 className="font-semibold mb-3">{bp.businessProcess}</h4>
-                        
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          <Badge variant="outline">{bp.lob}</Badge>
-                          <Badge variant="outline">{bp.product}</Badge>
-                        </div>
-                        
-                        <Separator className="my-3" />
-                        
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <div>Domain Owner: {bp.domainOwner}</div>
-                          <div>IT Owner: {bp.itOwner}</div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </CardContent>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[400px] w-full">
+                  <div className="p-4">
+                    <ArtifactCardView
+                      artifacts={analysis.relatedBusinessProcesses}
+                      artifactType="businessProcess"
+                      onView={(bp) => {
+                        setViewingArtifact(bp);
+                        setViewingArtifactType('businessProcess');
+                      }}
+                      isProductionView={true}
+                    />
+                  </div>
+                </ScrollArea>
             </CollapsibleContent>
           </Card>
         </Collapsible>
@@ -418,6 +379,39 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
           </AlertDescription>
         </Alert>
       )}
+
+      {/* Artifact Details Dialog */}
+      <Dialog open={!!viewingArtifact} onOpenChange={(open) => !open && setViewingArtifact(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {viewingArtifactType === 'application' && 'Application Details'}
+              {viewingArtifactType === 'interface' && 'Interface Details'}
+              {viewingArtifactType === 'businessProcess' && 'Business Process Details'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="mt-4">
+            {viewingArtifact && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-semibold mb-2">
+                    {viewingArtifactType === 'application' && viewingArtifact.name}
+                    {viewingArtifactType === 'interface' && viewingArtifact.imlNumber}
+                    {viewingArtifactType === 'businessProcess' && viewingArtifact.businessProcess}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    {viewingArtifact.description || 'No description available'}
+                  </p>
+                </div>
+                {/* Add more details based on artifact type */}
+                <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-xs">
+                  {JSON.stringify(viewingArtifact, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       </div>
     );
   } catch (renderError) {

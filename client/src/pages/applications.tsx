@@ -211,30 +211,28 @@ export default function Applications() {
     }
   });
 
-  // Fetch locks for version control
+  // Fetch locks for version control - fetch ALL locks to show items locked in other initiatives
   const { data: locks, error: locksError, refetch: refetchLocks } = useQuery({
-    queryKey: ['version-control-locks', currentInitiative?.initiativeId, refreshKey],
+    queryKey: ['version-control-locks', 'all', refreshKey],
     queryFn: async () => {
-      if (!currentInitiative) return [];
       try {
-        // Fetch locks for the current initiative
-        console.log('Fetching locks for initiative:', currentInitiative.initiativeId);
+        // Fetch ALL locks, not just for current initiative
+        // This allows us to show items locked in other initiatives
+        console.log('Fetching all locks...');
         const response = await api.get('/api/version-control/locks', {
           params: {
-            initiativeId: currentInitiative.initiativeId,
+            // Don't filter by initiative - get all locks
             t: Date.now() // Prevent caching
           }
         });
-        console.log('Locks API response:', response.data);
-        console.log('Locks API URL:', response.config.url);
-        console.log('Response headers:', response.headers);
+        console.log('All locks API response:', response.data);
         return response.data || [];
       } catch (error) {
         console.error('Error fetching locks:', error);
         return [];
       }
     },
-    enabled: !!currentInitiative && !isProductionView,
+    enabled: !isProductionView, // Fetch locks whenever not in production view
     staleTime: 0, // Always refetch when queried
     cacheTime: 0,  // Don't cache the results
     refetchOnMount: 'always',
@@ -521,7 +519,7 @@ export default function Applications() {
       setRefreshKey(prev => prev + 1);
       
       // Invalidate and refetch locks to ensure UI updates
-      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       
       // Multiple attempts to ensure locks are refreshed
       const newLocks = await refetchLocks();
@@ -575,7 +573,7 @@ export default function Applications() {
       return response.data;
     },
     onSuccess: async (data, { app }) => {
-      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/applications'] });
       await refetchLocks();
       toast({
@@ -603,7 +601,7 @@ export default function Applications() {
       return response.data;
     },
     onSuccess: async (data, app) => {
-      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       await queryClient.invalidateQueries({ queryKey: ['/api/applications'] });
       await refetchLocks();
       toast({

@@ -173,20 +173,20 @@ export default function InternalActivities() {
     },
   });
 
-  // Fetch locks for version control
+  // Fetch locks for version control - fetch ALL locks to show items locked in other initiatives
   const { data: locks } = useQuery({
-    queryKey: ['version-control-locks', currentInitiative?.initiativeId],
+    queryKey: ['version-control-locks', 'all'],
     queryFn: async () => {
-      if (!currentInitiative) return [];
       try {
-        const response = await api.get(`/api/version-control/locks?initiativeId=${currentInitiative.initiativeId}`);
+        // Fetch ALL locks, not just for current initiative
+        const response = await api.get('/api/version-control/locks');
         return response.data;
       } catch (error) {
         console.error('Failed to fetch locks:', error);
         return [];
       }
     },
-    enabled: !!currentInitiative,
+    enabled: true, // Always fetch locks
   });
 
   // Fetch current user for version control
