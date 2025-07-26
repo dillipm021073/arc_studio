@@ -115,7 +115,6 @@ interface BusinessProcess {
 
 export default function InternalActivities() {
   try {
-    console.log('InternalActivities component rendering');
     const queryClient = useQueryClient();
     const { toast } = useToast();
     const { currentInitiative, isProductionView } = useInitiative();
@@ -151,11 +150,9 @@ export default function InternalActivities() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["internal-activities"],
     queryFn: async () => {
-      console.log('Fetching internal activities...');
       const response = await fetch("/api/internal-activities", {
         credentials: 'include' // Ensure cookies are sent
       });
-      console.log('Response status:', response.status);
       
       if (response.status === 401) {
         throw new Error("Authentication required. Please log in.");
@@ -168,7 +165,6 @@ export default function InternalActivities() {
       }
       
       const result = await response.json();
-      console.log('API response:', result);
       return result;
     },
   });
@@ -218,28 +214,19 @@ export default function InternalActivities() {
     }
   });
 
-  // Log query state
-  console.log('Query state:', { isLoading, error, data });
-  
   // Transform data for display
   const activities = data || [];
-  console.log('Raw activities data:', activities);
-  console.log('Data type:', typeof activities, 'Is array:', Array.isArray(activities));
-  console.log('Data length:', activities.length);
   
   let displayActivities = [];
   try {
     displayActivities = activities.map((item: any) => {
-      console.log('Processing item:', item);
       if (!item) {
-        console.error('Invalid activity item:', item);
         return null;
       }
       
       // Handle nested structure from API
       if (item.activity) {
         // API returns { activity, application, businessProcess }
-        console.log('Found nested structure with activity:', item.activity);
         return {
           ...item.activity,
           applicationName: item.application?.name || '',
@@ -247,7 +234,6 @@ export default function InternalActivities() {
         };
       } else {
         // Handle flat structure (fallback)
-        console.log('Using flat structure for item:', item);
         const application = applications?.find(app => app.id === item.applicationId);
         const businessProcess = businessProcesses?.find(bp => bp.id === item.businessProcessId);
         
@@ -262,15 +248,10 @@ export default function InternalActivities() {
     console.error('Error transforming activities:', err);
     displayActivities = [];
   }
-  console.log('Display activities:', displayActivities);
-  console.log('Display activities length:', displayActivities.length);
 
   // Filter activities
   let filteredActivities = [];
   try {
-    console.log('Starting to filter activities. Display activities:', displayActivities);
-    console.log('Filters:', { searchQuery, applicationFilter, processFilter, typeFilter });
-    
     filteredActivities = displayActivities.filter((activity: InternalActivity & { applicationName: string; businessProcessName: string }) => {
       if (!activity) return false;
       
@@ -284,9 +265,7 @@ export default function InternalActivities() {
       const matchesProcess = processFilter === "all" || activity.businessProcessId?.toString() === processFilter;
       const matchesType = typeFilter === "all" || activity.activityType === typeFilter;
 
-      const matches = matchesSearch && matchesApplication && matchesProcess && matchesType;
-      console.log(`Activity ${activity.activityName} matches:`, matches);
-      return matches;
+      return matchesSearch && matchesApplication && matchesProcess && matchesType;
     }).map((activity: any) => {
       // Add lock information to each activity for ArtifactsExplorer
       const lock = isActivityLocked(activity.id);
@@ -296,9 +275,6 @@ export default function InternalActivities() {
         currentUserId: currentUser?.id || null
       };
     });
-    
-    console.log('Filtered activities:', filteredActivities);
-    console.log('Filtered activities length:', filteredActivities.length);
   } catch (err) {
     console.error('Error filtering activities:', err);
     filteredActivities = [];
@@ -315,7 +291,7 @@ export default function InternalActivities() {
     if (!locks || !Array.isArray(locks)) return null;
     
     const lock = locks.find((l: any) => 
-      l.lock.artifactType === 'internal_process' && 
+      l.lock.artifactType === 'internal_activity' && 
       l.lock.artifactId === activityId
     );
     
@@ -331,7 +307,7 @@ export default function InternalActivities() {
     
     return getArtifactState(
       activity.id,
-      'internal_process',
+      'internal_activity',
       lock,
       currentUser?.id,
       hasInitiativeChanges,
@@ -418,15 +394,15 @@ export default function InternalActivities() {
   const checkoutMutation = useMutation({
     mutationFn: async (activity: any) => {
       const response = await api.post('/api/version-control/checkout', {
-        artifactType: 'internal_process',
+        artifactType: 'internal_activity',
         artifactId: activity.id,
         initiativeId: currentInitiative?.initiativeId
       });
       return response.data;
     },
     onSuccess: async (data, activity) => {
-      // Invalidate with the correct query key including initiative ID
-      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      // Invalidate with the correct query key
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       await queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
       toast({
         title: "Activity checked out",
@@ -445,7 +421,7 @@ export default function InternalActivities() {
   const checkinMutation = useMutation({
     mutationFn: async ({ activity, data }: { activity: any; data: any }) => {
       const response = await api.post('/api/version-control/checkin', {
-        artifactType: 'internal_process',
+        artifactType: 'internal_activity',
         artifactId: activity.id,
         initiativeId: currentInitiative?.initiativeId,
         changes: data,
@@ -454,7 +430,7 @@ export default function InternalActivities() {
       return response.data;
     },
     onSuccess: async (data, { activity }) => {
-      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       await queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
       toast({
         title: "Changes checked in",
@@ -473,14 +449,14 @@ export default function InternalActivities() {
   const cancelCheckoutMutation = useMutation({
     mutationFn: async (activity: InternalActivity) => {
       const response = await api.post('/api/version-control/cancel-checkout', {
-        artifactType: 'internal_process',
+        artifactType: 'internal_activity',
         artifactId: activity.id,
         initiativeId: currentInitiative?.initiativeId
       });
       return response.data;
     },
     onSuccess: async (data, activity) => {
-      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', currentInitiative?.initiativeId] });
+      await queryClient.invalidateQueries({ queryKey: ['version-control-locks', 'all'] });
       await queryClient.invalidateQueries({ queryKey: ['internal-activities'] });
       toast({
         title: "Checkout cancelled",
@@ -626,12 +602,6 @@ export default function InternalActivities() {
     );
   }
 
-  console.log('Rendering with:', {
-    isLoading,
-    activitiesCount: activities.length,
-    displayActivitiesCount: displayActivities.length,
-    filteredCount: filteredActivities.length
-  });
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">
@@ -910,7 +880,7 @@ export default function InternalActivities() {
                               </TableCell>
                               <TableCell className="font-medium text-white">
                                 <ArtifactInitiativeTooltip
-                                  artifactType="internal_process"
+                                  artifactType="internal_activity"
                                   artifactId={activity.id}
                                   artifactState={activity.artifactState}
                                 >
@@ -1298,6 +1268,37 @@ export default function InternalActivities() {
             >
               <Edit className="h-4 w-4 mr-2" />
               Edit
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deletingActivity} onOpenChange={() => setDeletingActivity(null)}>
+        <DialogContent className="bg-gray-800 text-white border-gray-700">
+          <DialogHeader>
+            <DialogTitle>Delete Internal Activity</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deletingActivity?.activityName}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setDeletingActivity(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deletingActivity) {
+                  deleteMutation.mutate(deletingActivity.id);
+                  setDeletingActivity(null);
+                }
+              }}
+            >
+              Delete
             </Button>
           </div>
         </DialogContent>
