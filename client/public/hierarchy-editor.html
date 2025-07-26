@@ -16,11 +16,13 @@
         }
         .container {
             display: flex;
-            gap: 20px;
+            gap: 0;
             height: calc(100vh - 20px);
+            position: relative;
         }
         .editor {
             flex: 1;
+            min-width: 300px;
             background-color: #374151;
             border-radius: 8px;
             border: 1px solid #4b5563;
@@ -31,6 +33,7 @@
         }
         .output {
             flex: 1;
+            min-width: 300px;
             background-color: #374151;
             border-radius: 8px;
             border: 1px solid #4b5563;
@@ -290,11 +293,46 @@
         .tree-level-b { background-color: #0ea5e9; }
         .tree-level-c { background-color: #a16207; }
         .tree-level-d { background-color: #6b7280; }
+        
+        /* Resizable separator styles */
+        .resize-handle {
+            width: 10px;
+            background-color: #1f2937;
+            cursor: col-resize;
+            position: relative;
+            user-select: none;
+            flex-shrink: 0;
+        }
+        .resize-handle:hover {
+            background-color: #374151;
+        }
+        .resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 2px;
+            height: 40px;
+            background-color: #6b7280;
+            border-radius: 1px;
+        }
+        .resize-handle:hover::after {
+            background-color: #3b82f6;
+        }
+        
+        /* Copy button for tree view */
+        .tree-control-btn.copy-btn {
+            background-color: #059669;
+        }
+        .tree-control-btn.copy-btn:hover {
+            background-color: #047857;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="editor">
+        <div class="editor" id="left-pane">
             <h2>Hierarchy Editor</h2>
             <div class="top-controls">
                 <button onclick="addRootNode()">Add Root Node</button>
@@ -307,7 +345,9 @@
             </div>
         </div>
         
-        <div class="output" id="output-panel">
+        <div class="resize-handle" id="resize-handle"></div>
+        
+        <div class="output" id="right-pane">
             <h2 id="output-title">JSON Output & Save</h2>
             
             <div class="save-controls" id="save-controls">
@@ -330,6 +370,7 @@
                 <div class="tree-controls">
                     <button onclick="expandAllTree()" class="tree-control-btn">Expand All</button>
                     <button onclick="collapseAllTree()" class="tree-control-btn">Collapse All</button>
+                    <button onclick="copyTreeToClipboard()" class="tree-control-btn copy-btn">Copy to Clipboard</button>
                 </div>
                 <div class="tree-content" id="tree-content"></div>
             </div>
@@ -1179,9 +1220,114 @@
             }
         });
         
+        // Copy tree to clipboard preserving hierarchy
+        function copyTreeToClipboard() {
+            const treeContent = document.getElementById('tree-content');
+            if (!treeContent) return;
+            
+            // Build hierarchical text representation
+            const rootContainer = document.getElementById('root-container');
+            const rootNodes = rootContainer.children;
+            const hierarchyData = [];
+            
+            for (let i = 0; i < rootNodes.length; i++) {
+                hierarchyData.push(processNode(rootNodes[i]));
+            }
+            
+            // Convert to hierarchical text
+            let textContent = 'Business Process Hierarchy\n';
+            textContent += '==========================\n\n';
+            
+            const buildTextHierarchy = (nodes, indent = '') => {
+                nodes.forEach((node, index) => {
+                    const isLast = index === nodes.length - 1;
+                    const prefix = indent + (isLast ? '└── ' : '├── ');
+                    const level = node.characteristics?.level || 'A';
+                    textContent += prefix + node.name + ' [Level ' + level + ']\n';
+                    
+                    if (node.characteristics?.description) {
+                        const descPrefix = indent + (isLast ? '    ' : '│   ');
+                        textContent += descPrefix + '└── Description: ' + node.characteristics.description + '\n';
+                    }
+                    
+                    if (node.children && node.children.length > 0) {
+                        const childIndent = indent + (isLast ? '    ' : '│   ');
+                        buildTextHierarchy(node.children, childIndent);
+                    }
+                });
+            };
+            
+            buildTextHierarchy(hierarchyData);
+            
+            // Add statistics
+            const totalNodes = countNodes(hierarchyData);
+            const maxDepth = calculateMaxDepth(hierarchyData);
+            textContent += '\n==========================\n';
+            textContent += 'Total Processes: ' + totalNodes + '\n';
+            textContent += 'Maximum Depth: ' + maxDepth + ' levels\n';
+            
+            // Copy to clipboard
+            navigator.clipboard.writeText(textContent).then(() => {
+                alert('Hierarchy copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                alert('Failed to copy to clipboard');
+            });
+        }
+        
+        // Resizable panes functionality
+        function initializeResizablePanes() {
+            const container = document.querySelector('.container');
+            const leftPane = document.getElementById('left-pane');
+            const rightPane = document.getElementById('right-pane');
+            const resizeHandle = document.getElementById('resize-handle');
+            
+            let isResizing = false;
+            let startX = 0;
+            let startLeftWidth = 0;
+            let startRightWidth = 0;
+            
+            resizeHandle.addEventListener('mousedown', (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startLeftWidth = leftPane.offsetWidth;
+                startRightWidth = rightPane.offsetWidth;
+                
+                document.body.style.cursor = 'col-resize';
+                document.body.style.userSelect = 'none';
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (!isResizing) return;
+                
+                const deltaX = e.clientX - startX;
+                const newLeftWidth = startLeftWidth + deltaX;
+                const newRightWidth = startRightWidth - deltaX;
+                
+                // Set minimum widths
+                if (newLeftWidth >= 300 && newRightWidth >= 300) {
+                    leftPane.style.flex = 'none';
+                    leftPane.style.width = newLeftWidth + 'px';
+                    rightPane.style.flex = 'none';
+                    rightPane.style.width = newRightWidth + 'px';
+                }
+            });
+            
+            document.addEventListener('mouseup', () => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.cursor = '';
+                    document.body.style.userSelect = '';
+                }
+            });
+        }
+        
         // Initialize with one root node
         document.addEventListener('DOMContentLoaded', () => {
             addRootNode();
+            // Initialize resizable panes
+            initializeResizablePanes();
         });
     </script>
 </body>
