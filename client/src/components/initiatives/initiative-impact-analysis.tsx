@@ -247,27 +247,30 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
               </CardHeader>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <CardContent className="space-y-4">
-                {analysis.modifiedArtifacts && analysis.modifiedArtifacts.map((artifact, index) => (
-                  <div key={index} className="flex items-start gap-3 p-3 border rounded-lg">
-                    <div className="mt-0.5">
-                      {getArtifactTypeIcon(artifact.artifactType)}
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <div className="font-medium">
-                        {artifact.artifactType} #{artifact.artifactId}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Version: {artifact.versionNumber} | Change: {artifact.changeType}
-                      </div>
-                      {artifact.changeReason && (
-                        <div className="text-sm text-muted-foreground">
-                          Reason: {artifact.changeReason}
-                        </div>
-                      )}
-                    </div>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[400px] w-full">
+                  <div className="p-4">
+                    <ArtifactCardView
+                      artifacts={analysis.modifiedArtifacts.map(artifact => ({
+                        id: artifact.artifactId,
+                        name: `${artifact.artifactType} #${artifact.artifactId}`,
+                        description: `Version: ${artifact.versionNumber} | Change: ${artifact.changeType}${artifact.changeReason ? ` | Reason: ${artifact.changeReason}` : ''}`,
+                        status: 'modified',
+                        artifactType: artifact.artifactType,
+                        versionNumber: artifact.versionNumber,
+                        changeType: artifact.changeType,
+                        changeReason: artifact.changeReason,
+                        ...artifact.artifactData
+                      }))}
+                      artifactType="modified"
+                      onView={(artifact) => {
+                        setViewingArtifact(artifact);
+                        setViewingArtifactType('modified');
+                      }}
+                      isProductionView={true}
+                    />
                   </div>
-                ))}
+                </ScrollArea>
               </CardContent>
             </CollapsibleContent>
           </Card>
@@ -391,6 +394,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
               {viewingArtifactType === 'application' && 'Application Details'}
               {viewingArtifactType === 'interface' && 'Interface Details'}
               {viewingArtifactType === 'businessProcess' && 'Business Process Details'}
+              {viewingArtifactType === 'modified' && 'Modified Artifact Details'}
             </DialogTitle>
           </DialogHeader>
           <div className="mt-4">
@@ -401,6 +405,7 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
                     {viewingArtifactType === 'application' && viewingArtifact.name}
                     {viewingArtifactType === 'interface' && viewingArtifact.imlNumber}
                     {viewingArtifactType === 'businessProcess' && viewingArtifact.businessProcess}
+                    {viewingArtifactType === 'modified' && viewingArtifact.name}
                   </h3>
                   <p className="text-sm text-muted-foreground">
                     {viewingArtifact.description || 'No description available'}
