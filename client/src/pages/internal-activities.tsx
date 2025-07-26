@@ -150,22 +150,15 @@ export default function InternalActivities() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["internal-activities"],
     queryFn: async () => {
-      const response = await fetch("/api/internal-activities", {
-        credentials: 'include' // Ensure cookies are sent
-      });
-      
-      if (response.status === 401) {
-        throw new Error("Authentication required. Please log in.");
-      }
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Error response:', errorText);
-        throw new Error(`Failed to fetch internal activities: ${response.status} ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      return result;
+      console.log('=== FETCHING INTERNAL ACTIVITIES ===');
+      const response = await api.get("/api/internal-activities");
+      console.log('=== RAW API RESPONSE ===');
+      console.log('Type:', typeof response.data);
+      console.log('Is Array:', Array.isArray(response.data));
+      console.log('Length:', response.data?.length);
+      console.log('First item:', response.data?.[0]);
+      console.log('All items:', response.data);
+      return response.data;
     },
   });
 
@@ -216,34 +209,49 @@ export default function InternalActivities() {
 
   // Transform data for display
   const activities = data || [];
+  console.log('=== DATA TRANSFORMATION ===');
+  console.log('activities:', activities);
+  console.log('activities type:', typeof activities);
+  console.log('activities length:', activities.length);
   
   let displayActivities = [];
   try {
-    displayActivities = activities.map((item: any) => {
+    console.log('=== MAPPING ACTIVITIES ===');
+    displayActivities = activities.map((item: any, index: number) => {
+      console.log(`Processing item ${index}:`, item);
       if (!item) {
+        console.log(`Item ${index} is null/undefined`);
         return null;
       }
       
       // Handle nested structure from API
       if (item.activity) {
-        // API returns { activity, application, businessProcess }
-        return {
+        console.log(`Item ${index} has nested structure:`, item.activity);
+        const transformed = {
           ...item.activity,
           applicationName: item.application?.name || '',
           businessProcessName: item.businessProcess?.businessProcess || ''
         };
+        console.log(`Transformed item ${index}:`, transformed);
+        return transformed;
       } else {
+        console.log(`Item ${index} is flat structure:`, item);
         // Handle flat structure (fallback)
         const application = applications?.find(app => app.id === item.applicationId);
         const businessProcess = businessProcesses?.find(bp => bp.id === item.businessProcessId);
         
-        return {
+        const transformed = {
           ...item,
           applicationName: application?.name || '',
           businessProcessName: businessProcess?.businessProcess || ''
         };
+        console.log(`Transformed flat item ${index}:`, transformed);
+        return transformed;
       }
     }).filter(Boolean);
+    console.log('=== FINAL DISPLAY ACTIVITIES ===');
+    console.log('displayActivities:', displayActivities);
+    console.log('displayActivities length:', displayActivities.length);
   } catch (err) {
     console.error('Error transforming activities:', err);
     displayActivities = [];
@@ -252,8 +260,15 @@ export default function InternalActivities() {
   // Filter activities
   let filteredActivities = [];
   try {
+    console.log('=== FILTERING ACTIVITIES ===');
+    console.log('Filters:', { searchQuery, applicationFilter, processFilter, typeFilter });
+    console.log('Display activities to filter:', displayActivities);
+    
     filteredActivities = displayActivities.filter((activity: InternalActivity & { applicationName: string; businessProcessName: string }) => {
-      if (!activity) return false;
+      if (!activity) {
+        console.log('Filtering out null activity');
+        return false;
+      }
       
       const matchesSearch = !searchQuery || 
         activity.activityName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -265,16 +280,24 @@ export default function InternalActivities() {
       const matchesProcess = processFilter === "all" || activity.businessProcessId?.toString() === processFilter;
       const matchesType = typeFilter === "all" || activity.activityType === typeFilter;
 
-      return matchesSearch && matchesApplication && matchesProcess && matchesType;
+      const passes = matchesSearch && matchesApplication && matchesProcess && matchesType;
+      console.log(`Activity ${activity.activityName}: search=${matchesSearch}, app=${matchesApplication}, process=${matchesProcess}, type=${matchesType} => ${passes}`);
+      return passes;
     }).map((activity: any) => {
       // Add lock information to each activity for ArtifactsExplorer
       const lock = isActivityLocked(activity.id);
-      return {
+      const enhanced = {
         ...activity,
         lockedBy: lock?.lock?.lockedBy || null,
         currentUserId: currentUser?.id || null
       };
+      console.log(`Enhanced activity:`, enhanced);
+      return enhanced;
     });
+    
+    console.log('=== FINAL FILTERED ACTIVITIES ===');
+    console.log('filteredActivities:', filteredActivities);
+    console.log('filteredActivities length:', filteredActivities.length);
   } catch (err) {
     console.error('Error filtering activities:', err);
     filteredActivities = [];
@@ -583,6 +606,25 @@ export default function InternalActivities() {
     }
   }, [duplicatingActivity]);
 
+  console.log('=== COMPONENT STATE BEFORE RENDER ===');
+  console.log('isLoading:', isLoading);
+  console.log('error:', error);
+  console.log('data:', data);
+  console.log('viewMode:', viewMode);
+  console.log('Final render counts:');
+  console.log('- activities:', activities?.length || 0);
+  console.log('- displayActivities:', displayActivities?.length || 0);
+  console.log('- filteredActivities:', filteredActivities?.length || 0);
+
+  if (isLoading) {
+    console.log('=== RENDERING LOADING STATE ===');
+    return (
+      <div className="flex flex-col h-screen bg-gray-900 items-center justify-center">
+        <div className="text-white">Loading internal activities...</div>
+      </div>
+    );
+  }
+
   if (error) {
     console.error('Error loading internal activities:', error);
     return (
@@ -602,6 +644,7 @@ export default function InternalActivities() {
     );
   }
 
+  console.log('=== RENDERING MAIN COMPONENT ===');
 
   return (
     <div className="flex flex-col h-screen bg-gray-900">

@@ -248,58 +248,89 @@ export function InitiativeImpactAnalysis({ initiativeId }: InitiativeImpactAnaly
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className="p-0">
-                <ScrollArea className="h-[400px] w-full">
+                <div className="h-[400px] overflow-y-auto">
                   <div className="p-4">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                      {analysis.modifiedArtifacts.map((artifact, index) => (
-                        <div
-                          key={index}
-                          className="group relative rounded-lg p-3 cursor-pointer transition-all hover:shadow-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600"
-                          onDoubleClick={() => {
-                            const artifactData = {
-                              id: artifact.artifactId,
-                              name: `${artifact.artifactType} #${artifact.artifactId}`,
-                              description: `Version: ${artifact.versionNumber} | Change: ${artifact.changeType}${artifact.changeReason ? ` | Reason: ${artifact.changeReason}` : ''}`,
-                              status: 'modified',
-                              artifactType: artifact.artifactType,
-                              versionNumber: artifact.versionNumber,
-                              changeType: artifact.changeType,
-                              changeReason: artifact.changeReason,
-                              ...artifact.artifactData
-                            };
-                            setViewingArtifact(artifactData);
-                            setViewingArtifactType('modified');
-                          }}
-                        >
-                          {/* Header with icon */}
-                          <div className="flex items-center gap-2 mb-2">
-                            <div className="p-1 rounded">
-                              {getArtifactTypeIcon(artifact.artifactType)}
-                            </div>
-                            <div className="text-xs font-medium text-white truncate">
-                              {artifact.artifactType} #{artifact.artifactId}
-                            </div>
-                          </div>
-                          
-                          {/* Content */}
-                          <div className="space-y-1">
-                            <div className="text-xs text-gray-300">
-                              v{artifact.versionNumber}
-                            </div>
-                            <div className="text-xs text-blue-400 capitalize">
-                              {artifact.changeType}
-                            </div>
-                            {artifact.changeReason && (
-                              <div className="text-xs text-gray-400 truncate" title={artifact.changeReason}>
-                                {artifact.changeReason}
+                      {analysis.modifiedArtifacts.map((artifact, index) => {
+                        // Extract the actual name from artifactData
+                        const getArtifactName = () => {
+                          if (artifact.artifactType === 'application' && artifact.artifactData?.name) {
+                            return artifact.artifactData.name;
+                          } else if (artifact.artifactType === 'interface' && artifact.artifactData?.imlNumber) {
+                            return artifact.artifactData.imlNumber;
+                          } else if (artifact.artifactType === 'business_process' && artifact.artifactData?.businessProcess) {
+                            return artifact.artifactData.businessProcess;
+                          } else if (artifact.artifactType === 'technical_process' && artifact.artifactData?.name) {
+                            return artifact.artifactData.name;
+                          } else if (artifact.artifactType === 'internal_process' && artifact.artifactData?.name) {
+                            return artifact.artifactData.name;
+                          }
+                          return `#${artifact.artifactId}`;
+                        };
+
+                        const artifactName = getArtifactName();
+
+                        return (
+                          <div
+                            key={index}
+                            className="group relative rounded-lg p-3 cursor-pointer transition-all hover:shadow-lg bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-gray-600"
+                            onDoubleClick={() => {
+                              const artifactData = {
+                                id: artifact.artifactId,
+                                name: artifactName,
+                                description: `Version: ${artifact.versionNumber} | Change: ${artifact.changeType}${artifact.changeReason ? ` | Reason: ${artifact.changeReason}` : ''}`,
+                                status: 'modified',
+                                artifactType: artifact.artifactType,
+                                versionNumber: artifact.versionNumber,
+                                changeType: artifact.changeType,
+                                changeReason: artifact.changeReason,
+                                ...artifact.artifactData
+                              };
+                              setViewingArtifact(artifactData);
+                              setViewingArtifactType('modified');
+                            }}
+                            title={artifactName}
+                          >
+                            {/* Header with icon */}
+                            <div className="flex items-center gap-1 mb-2">
+                              <div className="p-1 rounded flex-shrink-0">
+                                {getArtifactTypeIcon(artifact.artifactType)}
                               </div>
-                            )}
+                              <div className="text-xs font-medium text-white truncate">
+                                {artifact.artifactType}
+                              </div>
+                            </div>
+                            
+                            {/* Name */}
+                            <div className="text-xs font-semibold text-blue-300 break-words mb-1" style={{ 
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden'
+                            }}>
+                              {artifactName}
+                            </div>
+                            
+                            {/* Content */}
+                            <div className="space-y-1">
+                              <div className="text-xs text-gray-300">
+                                v{artifact.versionNumber}
+                              </div>
+                              <div className="text-xs text-blue-400 capitalize">
+                                {artifact.changeType}
+                              </div>
+                              {artifact.changeReason && (
+                                <div className="text-xs text-gray-400 truncate" title={artifact.changeReason}>
+                                  {artifact.changeReason}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
-                </ScrollArea>
+                </div>
               </CardContent>
             </CollapsibleContent>
           </Card>
