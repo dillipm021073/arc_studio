@@ -6,8 +6,9 @@ import { setupAuth } from "./auth";
 import { activityLogger } from "./middleware/activity-logger";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Increase body size limit to 50MB for image uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
 // Logging middleware
 const LOG_LEVEL = process.env.LOG_LEVEL || 'error'; // 'all', 'error', 'none'

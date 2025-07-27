@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, bytea } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -330,7 +330,7 @@ export const interfaceBuilderAssets = pgTable("interface_builder_assets", {
   projectId: text("project_id").notNull().references(() => interfaceBuilderProjects.projectId),
   nodeId: text("node_id").notNull(),
   mimeType: text("mime_type").notNull(),
-  data: bytea("data").notNull(), // Binary data storage
+  data: text("data").notNull(), // Base64 encoded binary data
   sizeBytes: integer("size_bytes").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()

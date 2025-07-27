@@ -118,7 +118,7 @@ async function migrateInterfaceBuilderToJsonb() {
         project_id TEXT NOT NULL REFERENCES interface_builder_projects(project_id) ON DELETE CASCADE,
         node_id TEXT NOT NULL,
         mime_type TEXT NOT NULL,
-        data BYTEA NOT NULL,
+        data TEXT NOT NULL,
         size_bytes INTEGER NOT NULL,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
