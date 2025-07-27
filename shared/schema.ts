@@ -479,6 +479,19 @@ export const businessProcessHierarchyDesigns = pgTable("business_process_hierarc
   status: text("status").default("draft") // draft, published, archived
 });
 
+// Hierarchy Diagrams (saved visualizations)
+export const hierarchyDiagrams = pgTable("hierarchy_diagrams", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  businessProcessId: integer("business_process_id").references(() => businessProcesses.id),
+  viewType: text("view_type").notNull(), // tree, orgchart, mindmap
+  diagramData: text("diagram_data").notNull(), // JSON string containing nodes, edges, positions
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
 // Change Request Technical Process Impacts
 export const changeRequestTechnicalProcesses = pgTable("change_request_technical_processes", {
   id: serial("id").primaryKey(),
@@ -690,6 +703,12 @@ export const insertBusinessProcessSchema = createInsertSchema(businessProcesses)
 export const insertBusinessProcessInterfaceSchema = createInsertSchema(businessProcessInterfaces).omit({
   id: true,
   createdAt: true
+});
+
+export const insertHierarchyDiagramSchema = createInsertSchema(hierarchyDiagrams).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
 });
 
 export const insertBusinessProcessRelationshipSchema = createInsertSchema(businessProcessRelationships).omit({

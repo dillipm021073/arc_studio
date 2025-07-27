@@ -2151,6 +2151,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const { hierarchyDesignsRouter } = await import("./routes/hierarchyDesigns");
   app.use("/api/hierarchy-designs", hierarchyDesignsRouter);
 
+  // Register Hierarchy Diagrams routes
+  const { hierarchyDiagramsRouter } = await import("./routes/hierarchyDiagrams");
+  app.use("/api/hierarchy-diagrams", hierarchyDiagramsRouter);
+
   // Register Project Migration routes
   const { migrateProjectsRouter } = await import("./routes/migrate-projects");
   app.use("/api/migrate-projects", migrateProjectsRouter);

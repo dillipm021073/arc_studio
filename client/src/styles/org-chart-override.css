@@ -1,0 +1,46 @@
+/* Global ReactFlow edge overrides for Org Chart */
+.react-flow__edge-path {
+  stroke: #ffffff !important;
+  stroke-width: 2 !important;
+  fill: none !important;
+  opacity: 1 !important;
+}
+
+.react-flow__edge {
+  cursor: pointer !important;
+  pointer-events: all !important;
+}
+
+.react-flow__arrowhead {
+  fill: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Specific org chart overrides */
+.org-chart-flow .react-flow__edge-path {
+  stroke: #ffffff !important;
+  stroke-width: 2 !important;
+  opacity: 1 !important;
+}
+
+.org-chart-flow .react-flow__edge-straight {
+  stroke: #ffffff !important;
+}
+
+.org-chart-flow .react-flow__edge-default {
+  stroke: #ffffff !important;
+}
+
+/* Debug: Make all edges visible */
+.org-chart-flow svg {
+  overflow: visible !important;
+}
+
+.org-chart-flow .react-flow__edges {
+  pointer-events: all !important;
+  z-index: 1 !important;
+}
+
+.org-chart-flow .react-flow__nodes {
+  z-index: 2 !important;
+}

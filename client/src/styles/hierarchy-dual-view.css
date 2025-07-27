@@ -1,0 +1,87 @@
+/* Hierarchy Dual View Panel Styles */
+.hierarchy-dual-view-panel-handle {
+  position: relative;
+  width: 8px;
+  background-color: rgb(55 65 81); /* gray-700 */
+  transition: background-color 0.2s;
+  cursor: col-resize;
+}
+
+.hierarchy-dual-view-panel-handle:hover {
+  background-color: rgb(75 85 99); /* gray-600 */
+}
+
+.hierarchy-dual-view-panel-handle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  background-color: rgb(75 85 99); /* gray-600 */
+}
+
+.hierarchy-dual-view-panel-handle:hover::before {
+  background-color: rgb(107 114 128); /* gray-500 */
+}
+
+/* Chevron button styles */
+.panel-chevron-button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgb(55 65 81); /* gray-700 */
+  border: 1px solid rgb(75 85 99); /* gray-600 */
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.panel-chevron-button:hover {
+  background-color: rgb(75 85 99); /* gray-600 */
+  border-color: rgb(107 114 128); /* gray-500 */
+}
+
+.panel-chevron-button.left {
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.panel-chevron-button.right {
+  right: 50%;
+  transform: translate(50%, -50%);
+}
+
+/* Panel collapse animation */
+.panel-collapsed {
+  overflow: hidden;
+  transition: width 0.3s ease-in-out;
+}
+
+/* React Flow overrides for hierarchy views */
+.hierarchy-dual-view .react-flow {
+  background-color: rgb(17 24 39); /* gray-900 */
+}
+
+.hierarchy-dual-view .react-flow__controls {
+  background-color: rgb(31 41 55); /* gray-800 */
+  border: 1px solid rgb(55 65 81); /* gray-700 */
+}
+
+.hierarchy-dual-view .react-flow__controls button {
+  background-color: rgb(31 41 55); /* gray-800 */
+  border-color: rgb(55 65 81); /* gray-700 */
+  color: rgb(209 213 219); /* gray-300 */
+}
+
+.hierarchy-dual-view .react-flow__controls button:hover {
+  background-color: rgb(55 65 81); /* gray-700 */
+  border-color: rgb(75 85 99); /* gray-600 */
+}

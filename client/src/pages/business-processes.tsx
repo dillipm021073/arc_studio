@@ -44,6 +44,7 @@ import BusinessProcessForm from "@/components/business-processes/business-proces
 import ChildBusinessProcessForm from "@/components/business-processes/child-business-process-form";
 import HierarchyHtmlEditor from "@/components/business-processes/hierarchy-html-editor";
 import HierarchyDesignsExplorer from "@/components/business-processes/hierarchy-designs-explorer";
+import HierarchyDualView from "@/components/business-processes/hierarchy-dual-view";
 import BusinessProcessTreeView from "@/components/business-processes/business-process-tree-view";
 import BusinessProcessTreeViewDnd from "@/components/business-processes/business-process-tree-view-dnd";
 import { DataFilter, FilterCondition, FilterColumn, applyFilters } from "@/components/ui/data-filter";
@@ -1254,14 +1255,11 @@ export default function BusinessProcesses() {
             
             {/* Hierarchy Builder */}
             <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-4 flex-1 flex flex-col min-h-0" style={{ height: 'calc(100vh - 300px)' }}>
-              <HierarchyHtmlEditor
+              <HierarchyDualView
                 key={selectedHierarchyDesign?.id || 'new'} // Force re-render when design changes
-                initialHierarchy={selectedHierarchyDesign ? JSON.parse(selectedHierarchyDesign.hierarchyData) : undefined}
-                initialMetadata={selectedHierarchyDesign ? {
-                  name: selectedHierarchyDesign.name,
-                  description: selectedHierarchyDesign.description || "",
-                  tags: selectedHierarchyDesign.tags || ""
-                } : undefined}
+                hierarchy={selectedHierarchyDesign ? JSON.parse(selectedHierarchyDesign.hierarchyData) : []}
+                title={selectedHierarchyDesign?.name || "New Hierarchy Design"}
+                selectedDesignId={selectedHierarchyDesign?.id}
                 onSave={async (hierarchy, metadata) => {
                   // Get current user from localStorage or session
                   const currentUser = localStorage.getItem('username') || 'unknown';

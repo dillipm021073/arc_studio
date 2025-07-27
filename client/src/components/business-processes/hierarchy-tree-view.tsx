@@ -132,8 +132,8 @@ export default function HierarchyTreeView({ hierarchy, title = "Process Hierarch
   }
 
   return (
-    <Card className="w-full h-full bg-gray-800 border-gray-700 flex flex-col">
-      <CardHeader className="flex-shrink-0">
+    <Card className="w-full h-full bg-gray-800 border-gray-700 flex flex-col overflow-hidden">
+      <CardHeader className="flex-shrink-0 pb-3">
         <div className="flex items-center justify-between">
           <div>
             <CardTitle className="text-lg text-white">{title}</CardTitle>
@@ -164,8 +164,34 @@ export default function HierarchyTreeView({ hierarchy, title = "Process Hierarch
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-0 flex-1 flex flex-col min-h-0">
-        <div className="border border-gray-700 rounded-lg bg-gray-900 flex-1 overflow-auto p-2">
+      <CardContent className="flex-1 overflow-hidden p-4 pt-0">
+        <style>{`
+          .tree-view-scroll::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+          }
+          .tree-view-scroll::-webkit-scrollbar-track {
+            background: #374151;
+            border-radius: 5px;
+          }
+          .tree-view-scroll::-webkit-scrollbar-thumb {
+            background: #6B7280;
+            border-radius: 5px;
+          }
+          .tree-view-scroll::-webkit-scrollbar-thumb:hover {
+            background: #9CA3AF;
+          }
+          .tree-view-scroll::-webkit-scrollbar-corner {
+            background: #374151;
+          }
+        `}</style>
+        <div 
+          className="border border-gray-700 rounded-lg bg-gray-900 h-full overflow-auto p-2 tree-view-scroll"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#6B7280 #374151'
+          }}
+        >
           {hierarchy.map(node => renderNode(node))}
         </div>
       </CardContent>
