@@ -23,7 +23,8 @@
     "db:cleanup-today": "tsx server/cleanup-today.ts",
     "db:cleanup-today-cascade": "tsx server/cleanup-today-cascade.ts",
     "db:cleanup-today-comprehensive": "tsx server/cleanup-today-comprehensive.ts",
-    "db:cleanup-today-final": "tsx server/cleanup-today-final.ts"
+    "db:cleanup-today-final": "tsx server/cleanup-today-final.ts",
+    "db:migrate:jsonb": "tsx server/migrations/migrate-interface-builder-to-jsonb.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.54.0",

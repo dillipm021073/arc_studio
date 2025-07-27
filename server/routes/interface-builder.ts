@@ -121,9 +121,9 @@ router.post("/projects", async (req, res) => {
         description: description || null,
         category: category || "custom",
         folderPath: folderPath || "/",
-        nodes: JSON.stringify(nodes || []),
-        edges: JSON.stringify(edges || []),
-        metadata: JSON.stringify(metadata || {}),
+        nodes: nodes || [],
+        edges: edges || [],
+        metadata: metadata || {},
         author: currentUser.username,
         isTeamProject: isTeamProject || false
       })
@@ -206,9 +206,9 @@ router.put("/projects/:id", async (req, res) => {
       name,
       description,
       category: category || "custom",
-      nodes: JSON.stringify(cleanNodes),
-      edges: JSON.stringify(cleanEdges),
-      metadata: JSON.stringify(metadata || {}),
+      nodes: cleanNodes,
+      edges: cleanEdges,
+      metadata: metadata || {},
       updatedAt: new Date()
     };
     

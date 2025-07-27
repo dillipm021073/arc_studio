@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, decimal, jsonb, varchar, bytea } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -313,12 +313,25 @@ export const interfaceBuilderProjects = pgTable("interface_builder_projects", {
   description: text("description"),
   category: text("category").notNull(), // microservices, enterprise, data-pipeline, frontend-backend, iot-edge, legacy-integration
   folderPath: text("folder_path").default("/"), // Folder path for organization (e.g., "/folder/subfolder/")
-  nodes: text("nodes").notNull(), // JSON string of React Flow nodes
-  edges: text("edges").notNull(), // JSON string of React Flow edges
-  metadata: text("metadata"), // JSON string of project metadata
+  nodes: jsonb("nodes").notNull(), // JSONB for better storage of React Flow nodes with images
+  edges: jsonb("edges").notNull(), // JSONB for React Flow edges
+  metadata: jsonb("metadata"), // JSONB for project metadata
   version: text("version").notNull().default("1.0"),
   author: text("author").notNull(),
   isTeamProject: boolean("is_team_project").notNull().default(false), // Whether this is a team project visible to all users
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow()
+});
+
+// Interface Builder Assets for storing large binary data
+export const interfaceBuilderAssets = pgTable("interface_builder_assets", {
+  id: serial("id").primaryKey(),
+  assetId: text("asset_id").notNull().unique(),
+  projectId: text("project_id").notNull().references(() => interfaceBuilderProjects.projectId),
+  nodeId: text("node_id").notNull(),
+  mimeType: text("mime_type").notNull(),
+  data: bytea("data").notNull(), // Binary data storage
+  sizeBytes: integer("size_bytes").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow()
 });
