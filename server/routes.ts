@@ -382,7 +382,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Interfaces (IML) routes
   app.get("/api/interfaces", async (req, res) => {
     try {
-      const interfaces = await storage.getAllInterfaces();
+      const { providerApplicationId, consumerApplicationId } = req.query;
+      
+      let interfaces = await storage.getAllInterfaces();
+      
+      // Filter by provider application if specified
+      if (providerApplicationId) {
+        const providerId = parseInt(providerApplicationId as string);
+        interfaces = interfaces.filter(iface => iface.providerApplicationId === providerId);
+      }
+      
+      // Filter by consumer application if specified
+      if (consumerApplicationId) {
+        const consumerId = parseInt(consumerApplicationId as string);
+        interfaces = interfaces.filter(iface => iface.consumerApplicationId === consumerId);
+      }
+      
       res.json(interfaces);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch interfaces" });

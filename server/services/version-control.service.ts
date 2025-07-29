@@ -612,9 +612,19 @@ export class VersionControlService {
       })
       .where(eq(initiatives.initiativeId, initiativeId));
 
-    // Release all locks
+    // Release all locks for this initiative
     await db.delete(artifactLocks)
       .where(eq(artifactLocks.initiativeId, initiativeId));
+
+    // Clean up all non-baseline versions for this initiative
+    // This ensures a clean state after deployment
+    await db.delete(artifactVersions)
+      .where(
+        and(
+          eq(artifactVersions.initiativeId, initiativeId),
+          eq(artifactVersions.isBaseline, false)
+        )
+      );
   }
 
   /**

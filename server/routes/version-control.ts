@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db";
-import { artifactLocks, artifactVersions, initiativeParticipants, users } from "@db/schema";
+import { artifactLocks, artifactVersions, initiativeParticipants, users, initiatives } from "@db/schema";
 import { eq, and, or, gt, sql } from "drizzle-orm";
 import { VersionControlService, ArtifactType } from "../services/version-control.service";
 import { CheckoutImpactService } from "../services/checkout-impact.service";
@@ -146,6 +146,32 @@ versionControlRouter.post("/checkin", requireAuth, async (req, res) => {
     );
 
     if (!currentVersion) {
+      // Check if there's a version in a different initiative
+      const [otherVersion] = await db.select({
+        version: artifactVersions,
+        initiative: initiatives
+      })
+        .from(artifactVersions)
+        .leftJoin(initiatives, eq(initiatives.initiativeId, artifactVersions.initiativeId))
+        .where(
+          and(
+            eq(artifactVersions.artifactType, artifactType),
+            eq(artifactVersions.artifactId, artifactId),
+            eq(artifactVersions.isBaseline, false)
+          )
+        );
+
+      if (otherVersion && otherVersion.version) {
+        return res.status(404).json({ 
+          error: `This artifact is checked out in a different initiative: "${otherVersion.initiative?.name || otherVersion.version.initiativeId}". You can only checkin from the initiative where it was checked out.`,
+          details: {
+            currentInitiative: initiativeId,
+            checkedOutInInitiative: otherVersion.version.initiativeId,
+            checkedOutInInitiativeName: otherVersion.initiative?.name
+          }
+        });
+      }
+
       return res.status(404).json({ error: "No checked out version found" });
     }
 
@@ -197,6 +223,12 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
     const userId = req.user!.id;
     const userRole = req.user!.role;
     
+    console.log('Cancel checkout request:', {
+      body: req.body,
+      userId,
+      userRole
+    });
+    
     // Make artifactId optional for cancel checkout
     const cancelSchema = z.object({
       artifactType: z.enum(['application', 'interface', 'business_process', 'internal_process', 'technical_process']),
@@ -221,6 +253,12 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
     }
 
     // Check if user has the lock OR if user is admin
+    console.log('Looking for lock with:', {
+      artifactType,
+      artifactId,
+      initiativeId
+    });
+    
     const [existingLock] = await db.select()
       .from(artifactLocks)
       .where(
@@ -231,7 +269,34 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
         )
       );
 
+    console.log('Found lock:', existingLock);
+
     if (!existingLock) {
+      // Check if there's a lock in a different initiative
+      const [otherLock] = await db.select({
+        lock: artifactLocks,
+        initiative: initiatives
+      })
+        .from(artifactLocks)
+        .leftJoin(initiatives, eq(initiatives.initiativeId, artifactLocks.initiativeId))
+        .where(
+          and(
+            eq(artifactLocks.artifactType, artifactType),
+            eq(artifactLocks.artifactId, artifactId)
+          )
+        );
+
+      if (otherLock && otherLock.lock) {
+        return res.status(404).json({ 
+          error: `This artifact is checked out in a different initiative: "${otherLock.initiative?.name || otherLock.lock.initiativeId}". You can only cancel checkout from the initiative where it was checked out.`,
+          details: {
+            currentInitiative: initiativeId,
+            lockedInInitiative: otherLock.lock.initiativeId,
+            lockedInInitiativeName: otherLock.initiative?.name
+          }
+        });
+      }
+
       return res.status(404).json({ error: "No checkout found for this artifact in the initiative" });
     }
 
@@ -275,6 +340,17 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
           eq(artifactVersions.artifactId, artifactId),
           eq(artifactVersions.initiativeId, initiativeId),
           eq(artifactVersions.isBaseline, false)
+        )
+      );
+
+    // Also clean up any other locks for the same artifact/initiative combination
+    // This handles edge cases where multiple locks might exist
+    await db.delete(artifactLocks)
+      .where(
+        and(
+          eq(artifactLocks.artifactType, artifactType),
+          eq(artifactLocks.artifactId, artifactId),
+          eq(artifactLocks.initiativeId, initiativeId)
         )
       );
 
@@ -814,5 +890,55 @@ versionControlRouter.delete("/admin/locks/:lockId", requireAdmin, async (req, re
   } catch (error) {
     console.error("Error in admin lock release:", error);
     res.status(500).json({ error: "Failed to release lock" });
+  }
+});
+
+// Clean up stale locks and versions
+versionControlRouter.post("/cleanup-stale-locks", requireAuth, async (req, res) => {
+  try {
+    const { artifactType, artifactId } = req.body;
+    
+    // Clean up expired locks
+    const expiredLocks = await db.delete(artifactLocks)
+      .where(
+        and(
+          artifactType ? eq(artifactLocks.artifactType, artifactType) : sql`1=1`,
+          artifactId ? eq(artifactLocks.artifactId, artifactId) : sql`1=1`,
+          gt(sql`NOW()`, artifactLocks.lockExpiry)
+        )
+      )
+      .returning();
+
+    // Clean up orphaned versions (non-baseline versions without active initiatives)
+    const activeInitiatives = await db.select({ initiativeId: initiatives.initiativeId })
+      .from(initiatives)
+      .where(eq(initiatives.status, 'active'));
+    
+    const activeInitiativeIds = activeInitiatives.map(i => i.initiativeId);
+
+    let orphanedVersions = 0;
+    if (activeInitiativeIds.length > 0) {
+      const deleted = await db.delete(artifactVersions)
+        .where(
+          and(
+            artifactType ? eq(artifactVersions.artifactType, artifactType) : sql`1=1`,
+            artifactId ? eq(artifactVersions.artifactId, artifactId) : sql`1=1`,
+            eq(artifactVersions.isBaseline, false),
+            sql`${artifactVersions.initiativeId} NOT IN (${sql.join(activeInitiativeIds.map(id => sql`${id}`), sql`, `)})`
+          )
+        )
+        .returning();
+      orphanedVersions = deleted.length;
+    }
+
+    res.json({
+      success: true,
+      expiredLocksRemoved: expiredLocks.length,
+      orphanedVersionsRemoved: orphanedVersions,
+      message: `Cleanup completed: ${expiredLocks.length} expired locks and ${orphanedVersions} orphaned versions removed`
+    });
+  } catch (error) {
+    console.error("Error cleaning up stale locks:", error);
+    res.status(500).json({ error: "Failed to clean up stale locks" });
   }
 });
