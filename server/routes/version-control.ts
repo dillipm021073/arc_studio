@@ -227,12 +227,6 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
     const userId = req.user!.id;
     const userRole = req.user!.role;
     
-    console.log('Cancel checkout request:', {
-      body: req.body,
-      userId,
-      userRole
-    });
-    
     // Make artifactId optional for cancel checkout
     const cancelSchema = z.object({
       artifactType: z.enum(['application', 'interface', 'business_process', 'internal_process', 'internal_activity', 'technical_process']).transform(val => 
@@ -259,12 +253,6 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
     }
 
     // Check if user has the lock OR if user is admin
-    console.log('Looking for lock with:', {
-      artifactType,
-      artifactId,
-      initiativeId
-    });
-    
     const [existingLock] = await db.select()
       .from(artifactLocks)
       .where(
@@ -274,8 +262,6 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
           eq(artifactLocks.initiativeId, initiativeId)
         )
       );
-
-    console.log('Found lock:', existingLock);
 
     if (!existingLock) {
       // Check if there's a lock in a different initiative
