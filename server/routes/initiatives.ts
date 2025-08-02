@@ -1013,8 +1013,13 @@ initiativesRouter.get("/:id/impact-analysis", requireAuth, async (req, res) => {
 // Get initiatives and CRs for a specific artifact
 initiativesRouter.get("/artifact/:artifactType/:artifactId", requireAuth, async (req, res) => {
   try {
-    const { artifactType, artifactId } = req.params;
+    let { artifactType, artifactId } = req.params;
     const artifactIdNum = parseInt(artifactId);
+    
+    // Transform internal_activity to internal_process for backend consistency
+    if (artifactType === 'internal_activity') {
+      artifactType = 'internal_process';
+    }
 
     // Get initiatives in two ways:
     // 1. Initiatives that have versions of this artifact
@@ -1166,8 +1171,7 @@ initiativesRouter.get("/artifact/:artifactType/:artifactId", requireAuth, async 
     .where(
       and(
         eq(artifactLocks.artifactType, artifactType),
-        eq(artifactLocks.artifactId, artifactIdNum),
-        sql`${artifactLocks.lockExpiry} IS NULL OR ${artifactLocks.lockExpiry} > NOW()`
+        eq(artifactLocks.artifactId, artifactIdNum)
       )
     );
 

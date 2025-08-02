@@ -202,7 +202,7 @@ export default function InternalActivities() {
     if (!locks || !Array.isArray(locks)) return null;
     
     const lock = locks.find((l: any) => 
-      l.lock.artifactType === 'internal_activity' && 
+      (l.lock.artifactType === 'internal_activity' || l.lock.artifactType === 'internal_process') && 
       l.lock.artifactId === activityId
     );
     
