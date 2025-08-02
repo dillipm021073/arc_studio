@@ -170,6 +170,39 @@ export class VersionControlService {
     // Check if already checked out in this initiative
     const existingVersion = await this.getInitiativeVersion(type, artifactId, initiativeId);
     if (existingVersion) {
+      console.log(`[Checkout] Found existing version for ${type} #${artifactId} in initiative ${initiativeId}`);
+      
+      // Check if there's a corresponding lock
+      const [existingLockForVersion] = await db.select()
+        .from(artifactLocks)
+        .where(
+          and(
+            eq(artifactLocks.artifactType, type),
+            eq(artifactLocks.artifactId, artifactId),
+            eq(artifactLocks.initiativeId, initiativeId)
+          )
+        );
+      
+      if (!existingLockForVersion) {
+        console.log(`[Checkout] No valid lock found for existing version, creating one...`);
+        
+        // Create a lock for the existing version
+        try {
+          const lockData = {
+            artifactType: type,
+            artifactId,
+            initiativeId,
+            lockedBy: userId,
+            lockReason: `Re-established lock for existing version in initiative ${initiativeId}`
+          };
+          
+          const [newLock] = await db.insert(artifactLocks).values(lockData).returning();
+          console.log(`[Checkout] Lock created for existing version:`, newLock);
+        } catch (lockError: any) {
+          console.error('[Checkout] Failed to create lock for existing version:', lockError);
+        }
+      }
+      
       return existingVersion;
     }
 
@@ -183,11 +216,7 @@ export class VersionControlService {
       .where(
         and(
           eq(artifactLocks.artifactType, type),
-          eq(artifactLocks.artifactId, artifactId),
-          or(
-            isNull(artifactLocks.lockExpiry),
-            gt(artifactLocks.lockExpiry, new Date())
-          )
+          eq(artifactLocks.artifactId, artifactId)
         )
       );
 
@@ -253,6 +282,7 @@ export class VersionControlService {
 
     // Create or update lock
     // First delete any existing locks for this artifact (in ANY initiative to prevent conflicts)
+    console.log(`[Checkout] Deleting existing locks for ${type} #${artifactId}`);
     const deletedLocks = await db.delete(artifactLocks)
       .where(
         and(
@@ -262,24 +292,55 @@ export class VersionControlService {
         )
       )
       .returning();
+    console.log(`[Checkout] Deleted ${deletedLocks.length} existing locks`);
       
     
     // Then create new lock
     try {
-      const [newLock] = await db.insert(artifactLocks).values({
+      const lockData = {
         artifactType: type,
         artifactId,
         initiativeId,
         lockedBy: userId,
-        lockExpiry: new Date(Date.now() + 24 * 60 * 60 * 1000),
         lockReason: `Checked out for editing in initiative ${initiativeId}`
-      }).returning();
+      };
+      console.log(`[Checkout] Creating new lock:`, lockData);
+      
+      const [newLock] = await db.insert(artifactLocks).values(lockData).returning();
       
       if (!newLock) {
         throw new Error('Failed to create artifact lock - no lock returned');
       }
-    } catch (lockError) {
-      console.error('Failed to create lock:', lockError);
+      
+      console.log(`[Checkout] Lock created successfully:`, newLock);
+      
+      // Verify lock was created
+      const [verifyLock] = await db.select()
+        .from(artifactLocks)
+        .where(
+          and(
+            eq(artifactLocks.artifactType, type),
+            eq(artifactLocks.artifactId, artifactId),
+            eq(artifactLocks.initiativeId, initiativeId)
+          )
+        );
+      console.log(`[Checkout] Lock verification:`, verifyLock ? 'Found' : 'NOT FOUND');
+      
+    } catch (lockError: any) {
+      console.error('[Checkout] Failed to create lock:', lockError);
+      console.error('[Checkout] Lock error details:', {
+        name: lockError.name,
+        message: lockError.message,
+        code: lockError.code,
+        detail: lockError.detail,
+        constraint: lockError.constraint_name
+      });
+      
+      // If lock creation fails, we should delete the version we just created
+      console.log('[Checkout] Rolling back version creation due to lock failure');
+      await db.delete(artifactVersions)
+        .where(eq(artifactVersions.id, newVersion.id));
+      
       throw new Error(`Failed to create artifact lock: ${lockError.message}`);
     }
     

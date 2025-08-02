@@ -381,7 +381,7 @@ versionControlRouter.get("/locks", requireAuth, async (req, res) => {
   try {
     const { initiativeId } = req.query;
     
-    let whereConditions = [gt(artifactLocks.lockExpiry, new Date())];
+    let whereConditions = [];
     
     if (initiativeId) {
       whereConditions.push(eq(artifactLocks.initiativeId, initiativeId as string));
@@ -393,7 +393,7 @@ versionControlRouter.get("/locks", requireAuth, async (req, res) => {
     })
     .from(artifactLocks)
     .leftJoin(users, eq(users.id, artifactLocks.lockedBy))
-    .where(and(...whereConditions));
+    .where(whereConditions.length > 0 ? and(...whereConditions) : undefined);
 
     const locks = await query;
     

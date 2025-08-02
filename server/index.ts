@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { setupAuth } from "./auth";
 import { activityLogger } from "./middleware/activity-logger";
+import { LockCleanupService } from "./services/lock-cleanup.service";
 
 const app = express();
 // Increase body size limit to 50MB for image uploads
@@ -85,5 +86,19 @@ app.use(activityLogger);
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Disabled: Lock cleanup service - locks should persist until manually released
+    // LockCleanupService.startCleanupService();
+    // log("Lock cleanup service started");
+  });
+  
+  // Graceful shutdown
+  process.on('SIGINT', () => {
+    log("Shutting down gracefully...");
+    // LockCleanupService.stopCleanupService();
+    server.close(() => {
+      log("Server closed");
+      process.exit(0);
+    });
   });
 })();
