@@ -12,14 +12,18 @@ export const versionControlRouter = Router();
 
 // Checkout schema
 const checkoutSchema = z.object({
-  artifactType: z.enum(['application', 'interface', 'business_process', 'internal_process', 'technical_process']),
+  artifactType: z.enum(['application', 'interface', 'business_process', 'internal_process', 'internal_activity', 'technical_process']).transform(val => 
+    val === 'internal_activity' ? 'internal_process' : val
+  ),
   artifactId: z.number(),
   initiativeId: z.string()
 });
 
 // Checkin schema  
 const checkinSchema = z.object({
-  artifactType: z.enum(['application', 'interface', 'business_process', 'internal_process', 'technical_process']),
+  artifactType: z.enum(['application', 'interface', 'business_process', 'internal_process', 'internal_activity', 'technical_process']).transform(val => 
+    val === 'internal_activity' ? 'internal_process' : val
+  ),
   artifactId: z.number(),
   initiativeId: z.string(),
   changes: z.record(z.any()),
@@ -231,7 +235,9 @@ versionControlRouter.post("/cancel-checkout", requireAuth, async (req, res) => {
     
     // Make artifactId optional for cancel checkout
     const cancelSchema = z.object({
-      artifactType: z.enum(['application', 'interface', 'business_process', 'internal_process', 'technical_process']),
+      artifactType: z.enum(['application', 'interface', 'business_process', 'internal_process', 'internal_activity', 'technical_process']).transform(val => 
+        val === 'internal_activity' ? 'internal_process' : val
+      ),
       artifactId: z.number().optional(),
       initiativeId: z.string()
     });
